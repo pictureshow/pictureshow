@@ -4843,6 +4843,22 @@
       ]
     },
     {
+      "id": "live-presentation.recordings-empty-without-recording-permission",
+      "operation": "empty-state",
+      "input": {
+        "tab": "Recordings",
+        "manage": false,
+        "includeAction": true,
+        "includeBody": true
+      },
+      "expected": [
+        "No recordings yet",
+        "Go to channels",
+        "Channels",
+        "Recording isn't turned on for your account. Ask your server administrator."
+      ]
+    },
+    {
       "id": "live-presentation.channel-logo-missing",
       "operation": "channel-monogram",
       "input": {

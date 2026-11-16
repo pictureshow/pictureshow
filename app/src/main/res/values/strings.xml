@@ -64,7 +64,15 @@
     <string name="sync_shuffle">Shuffle</string>
     <string name="sync_queue">Group queue</string>
     <string name="sync_empty_next_step">Play something from your library for everyone.</string>
-    <string name="sync_queue_empty">Choose a movie, episode or song to start the group queue.</string>
+    <string name="sync_queue_empty">Play a movie, episode or song while you\'re in this group, and it starts for everyone.</string>
+    <string name="login_public_users">Who\'s signing in?</string>
+    <string name="login_show_all_users">Show all %1$d users</string>
+    <string name="login_signing_in_as">Signing in as %1$s</string>
+    <string name="login_not_you">Not you?</string>
+    <string name="download_notification_note">Pictureshow will ask to show download progress in notifications.</string>
+    <string name="remote_intro">Control Pictureshow on a TV from this device. The TV needs to be on and signed in to this server.</string>
+    <string name="sync_play_with">Play with %1$s</string>
+    <string name="sync_groups_unreachable">Couldn\'t reach the server, so groups can\'t be shown. Refresh to try again.</string>
     <string name="sync_loading">Loading…</string>
     <string name="sync_title_unavailable">Title unavailable</string>
     <string name="sync_now_playing">Now playing</string>
@@ -176,4 +184,30 @@
     <string name="qc_approve_offline">Pictureshow can\'t reach your server right now. Check your connection and try again.</string>
     <string name="qc_approve_sign_in">Your sign-in on this device has ended. Sign in again, then approve the code.</string>
     <string name="qc_approve_failed">The server couldn\'t approve the code. Try again in a moment.</string>
+    <!-- AUTH-16 profile PIN -->
+    <string name="pin_enter_for">Enter the PIN for %1$s</string>
+    <string name="pin_lock_subtitle">This viewer has a PIN on this device.</string>
+    <string name="pin_wrong">That PIN didn\'t match. Try again.</string>
+    <string name="pin_wait">Too many tries. Try again in %1$d s.</string>
+    <string name="pin_rule">A PIN is %1$d to %2$d digits.</string>
+    <string name="pin_mismatch">Those PINs didn\'t match. Type the new PIN again.</string>
+    <string name="pin_entered">%1$d digits entered</string>
+    <string name="pin_delete">Delete last digit</string>
+    <string name="pin_ok">OK</string>
+    <string name="pin_cancel">Cancel</string>
+    <string name="pin_use_password">Forgot the PIN? Sign in with the password</string>
+    <string name="pin_switch_viewer">Switch user</string>
+    <string name="pin_new_title">Choose a PIN</string>
+    <string name="pin_confirm_title">Type the PIN again</string>
+    <string name="pin_new_subtitle">%2$d to %3$d digits. Pictureshow asks for it before anyone opens %1$s on this device.</string>
+    <string name="pin_settings_title">Profile PIN</string>
+    <string name="pin_settings_off">Off. Anyone using this device can open %1$s.</string>
+    <string name="pin_settings_on">On. Asked when switching to %1$s.</string>
+    <string name="pin_set">Set a PIN</string>
+    <string name="pin_change">Change PIN</string>
+    <string name="pin_remove">Turn off PIN</string>
+    <string name="pin_ask_on_open">Ask when Pictureshow opens</string>
+    <string name="pin_ask_on_open_on">On: the PIN is asked every time Pictureshow starts on %1$s.</string>
+    <string name="pin_ask_on_open_off">Off: asked only when someone switches to %1$s.</string>
+    <string name="pin_note">The PIN stays on this device. Ratings, libraries and viewing hours are set for each user on your Jellyfin server.</string>
 </resources>

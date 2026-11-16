@@ -9422,6 +9422,343 @@
         "approved": null
       },
       "expected": "FAILED"
+    },
+    {
+      "id": "profile-pin-valid-four-digits",
+      "operation": "profile-pin-valid",
+      "input": {
+        "pin": "1234"
+      },
+      "expected": true
+    },
+    {
+      "id": "profile-pin-valid-eight-digits",
+      "operation": "profile-pin-valid",
+      "input": {
+        "pin": "12345678"
+      },
+      "expected": true
+    },
+    {
+      "id": "profile-pin-valid-too-short",
+      "operation": "profile-pin-valid",
+      "input": {
+        "pin": "123"
+      },
+      "expected": false
+    },
+    {
+      "id": "profile-pin-valid-too-long",
+      "operation": "profile-pin-valid",
+      "input": {
+        "pin": "123456789"
+      },
+      "expected": false
+    },
+    {
+      "id": "profile-pin-valid-letter",
+      "operation": "profile-pin-valid",
+      "input": {
+        "pin": "12a4"
+      },
+      "expected": false
+    },
+    {
+      "id": "profile-pin-valid-space",
+      "operation": "profile-pin-valid",
+      "input": {
+        "pin": "12 34"
+      },
+      "expected": false
+    },
+    {
+      "id": "profile-pin-valid-non-ascii-digits",
+      "operation": "profile-pin-valid",
+      "input": {
+        "pin": "١٢٣٤"
+      },
+      "expected": false
+    },
+    {
+      "id": "profile-pin-valid-empty",
+      "operation": "profile-pin-valid",
+      "input": {
+        "pin": ""
+      },
+      "expected": false
+    },
+    {
+      "id": "profile-pin-needed-no-pin-switch",
+      "operation": "profile-pin-needed",
+      "input": {
+        "hasPin": false,
+        "askOnStart": true,
+        "reason": "SWITCH",
+        "unlocked": false
+      },
+      "expected": false
+    },
+    {
+      "id": "profile-pin-needed-no-pin-start",
+      "operation": "profile-pin-needed",
+      "input": {
+        "hasPin": false,
+        "askOnStart": true,
+        "reason": "START",
+        "unlocked": false
+      },
+      "expected": false
+    },
+    {
+      "id": "profile-pin-needed-switch-always-asks",
+      "operation": "profile-pin-needed",
+      "input": {
+        "hasPin": true,
+        "askOnStart": true,
+        "reason": "SWITCH",
+        "unlocked": false
+      },
+      "expected": true
+    },
+    {
+      "id": "profile-pin-needed-switch-asks-even-if-unlocked",
+      "operation": "profile-pin-needed",
+      "input": {
+        "hasPin": true,
+        "askOnStart": false,
+        "reason": "SWITCH",
+        "unlocked": true
+      },
+      "expected": true
+    },
+    {
+      "id": "profile-pin-needed-start-asks",
+      "operation": "profile-pin-needed",
+      "input": {
+        "hasPin": true,
+        "askOnStart": true,
+        "reason": "START",
+        "unlocked": false
+      },
+      "expected": true
+    },
+    {
+      "id": "profile-pin-needed-start-off",
+      "operation": "profile-pin-needed",
+      "input": {
+        "hasPin": true,
+        "askOnStart": false,
+        "reason": "START",
+        "unlocked": false
+      },
+      "expected": false
+    },
+    {
+      "id": "profile-pin-needed-start-already-unlocked",
+      "operation": "profile-pin-needed",
+      "input": {
+        "hasPin": true,
+        "askOnStart": true,
+        "reason": "START",
+        "unlocked": true
+      },
+      "expected": false
+    },
+    {
+      "id": "profile-pin-attempt-first-wrong",
+      "operation": "profile-pin-attempt",
+      "input": {
+        "failures": 0,
+        "blockedUntil": 0,
+        "now": 1000,
+        "correct": false
+      },
+      "expected": {
+        "failures": 1,
+        "blockedUntil": 0,
+        "cooldownMs": 0
+      }
+    },
+    {
+      "id": "profile-pin-attempt-fifth-wrong-waits",
+      "operation": "profile-pin-attempt",
+      "input": {
+        "failures": 4,
+        "blockedUntil": 0,
+        "now": 1000,
+        "correct": false
+      },
+      "expected": {
+        "failures": 0,
+        "blockedUntil": 31000,
+        "cooldownMs": 30000
+      }
+    },
+    {
+      "id": "profile-pin-attempt-right-clears",
+      "operation": "profile-pin-attempt",
+      "input": {
+        "failures": 3,
+        "blockedUntil": 0,
+        "now": 1000,
+        "correct": true
+      },
+      "expected": {
+        "failures": 0,
+        "blockedUntil": 0,
+        "cooldownMs": 0
+      }
+    },
+    {
+      "id": "profile-pin-attempt-during-wait-not-counted",
+      "operation": "profile-pin-attempt",
+      "input": {
+        "failures": 0,
+        "blockedUntil": 31000,
+        "now": 11000,
+        "correct": true
+      },
+      "expected": {
+        "failures": 0,
+        "blockedUntil": 31000,
+        "cooldownMs": 20000
+      }
+    },
+    {
+      "id": "profile-pin-attempt-after-wait-checked",
+      "operation": "profile-pin-attempt",
+      "input": {
+        "failures": 0,
+        "blockedUntil": 31000,
+        "now": 31000,
+        "correct": true
+      },
+      "expected": {
+        "failures": 0,
+        "blockedUntil": 0,
+        "cooldownMs": 0
+      }
+    },
+    {
+      "id": "profile-pin-attempt-clock-backwards-capped",
+      "operation": "profile-pin-attempt",
+      "input": {
+        "failures": 0,
+        "blockedUntil": 31000,
+        "now": -500000,
+        "correct": false
+      },
+      "expected": {
+        "failures": 0,
+        "blockedUntil": 31000,
+        "cooldownMs": 30000
+      }
+    },
+    {
+      "id": "access-refusal-sign-in",
+      "operation": "access-refusal",
+      "input": {
+        "signIn": true
+      },
+      "expected": "The server turned this account away. It may be outside its allowed viewing hours, or turned off. Ask your server administrator."
+    },
+    {
+      "id": "access-refusal-in-session",
+      "operation": "access-refusal",
+      "input": {
+        "signIn": false
+      },
+      "expected": "The server didn't allow this for your account. If it has viewing hours, this may be outside them. Ask your server administrator."
+    },
+    {
+      "id": "sync-group-list-loading",
+      "operation": "sync-group-list",
+      "input": {
+        "accessAllowed": true,
+        "policy": "CreateAndJoinGroups",
+        "busy": true,
+        "failed": false,
+        "count": 0
+      },
+      "expected": {
+        "state": "LOADING",
+        "canCreate": true
+      }
+    },
+    {
+      "id": "sync-group-list-failed-is-not-empty",
+      "operation": "sync-group-list",
+      "input": {
+        "accessAllowed": true,
+        "policy": "CreateAndJoinGroups",
+        "busy": false,
+        "failed": true,
+        "count": 0
+      },
+      "expected": {
+        "state": "FAILED",
+        "canCreate": false
+      }
+    },
+    {
+      "id": "sync-group-list-empty",
+      "operation": "sync-group-list",
+      "input": {
+        "accessAllowed": true,
+        "policy": "CreateAndJoinGroups",
+        "busy": false,
+        "failed": false,
+        "count": 0
+      },
+      "expected": {
+        "state": "EMPTY",
+        "canCreate": true
+      }
+    },
+    {
+      "id": "sync-group-list-groups",
+      "operation": "sync-group-list",
+      "input": {
+        "accessAllowed": true,
+        "policy": "CreateAndJoinGroups",
+        "busy": false,
+        "failed": false,
+        "count": 2
+      },
+      "expected": {
+        "state": "GROUPS",
+        "canCreate": true
+      }
+    },
+    {
+      "id": "sync-group-list-join-only",
+      "operation": "sync-group-list",
+      "input": {
+        "accessAllowed": true,
+        "policy": "JoinGroups",
+        "busy": false,
+        "failed": false,
+        "count": 0
+      },
+      "expected": {
+        "state": "EMPTY",
+        "canCreate": false
+      }
+    },
+    {
+      "id": "sync-group-list-no-access",
+      "operation": "sync-group-list",
+      "input": {
+        "accessAllowed": false,
+        "policy": "None",
+        "busy": false,
+        "failed": false,
+        "count": 0
+      },
+      "expected": {
+        "state": "HIDDEN",
+        "canCreate": false
+      }
     }
-  ]
+]
 }

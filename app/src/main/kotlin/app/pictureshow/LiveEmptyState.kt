@@ -110,6 +110,15 @@ internal fun liveEmptyPresentation(
             )
         }
     }
+    if (tab == "Recordings" && state.recordings.isEmpty() && state.policy?.manage == false) {
+        // P-12: "record a program from the guide" is a dead end for an account that can't record.
+        return LiveEmptyPresentation(
+            "tv",
+            "No recordings yet",
+            "Recording isn't turned on for your account. Ask your server administrator.",
+            LiveEmptyAction.Channels
+        )
+    }
     if (tab == "Recordings" && state.recordings.isEmpty()) {
         return LiveEmptyPresentation(
             "tv",

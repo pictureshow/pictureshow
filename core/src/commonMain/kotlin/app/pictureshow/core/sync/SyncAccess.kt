@@ -22,3 +22,26 @@ fun syncAccessPresentation(policy: String, known: Boolean, busy: Boolean, failed
     }
     return SyncAccessPresentation(notice, canJoin, confirmed && policy == "CreateAndJoinGroups", !busy)
 }
+
+enum class SyncGroupListState { LOADING, FAILED, EMPTY, GROUPS, HIDDEN }
+
+/**
+ * SYN-01 / phone review P-2: a group list that failed to load never says "no groups", and nobody can start a group
+ * until a refresh has actually reached the server. While a list loads the create form stays in place (its button
+ * waits on the load), so focus and a half-typed name don't jump. Vector `sync-group-list`.
+ */
+data class SyncGroupList(val state: SyncGroupListState, val canCreate: Boolean)
+
+fun syncGroupList(accessAllowed: Boolean, policy: String, busy: Boolean, failed: Boolean, count: Int): SyncGroupList {
+    val state = when {
+        !accessAllowed -> SyncGroupListState.HIDDEN
+        busy -> SyncGroupListState.LOADING
+        failed -> SyncGroupListState.FAILED
+        count == 0 -> SyncGroupListState.EMPTY
+        else -> SyncGroupListState.GROUPS
+    }
+    return SyncGroupList(
+        state,
+        policy == "CreateAndJoinGroups" && state != SyncGroupListState.FAILED && state != SyncGroupListState.HIDDEN
+    )
+}

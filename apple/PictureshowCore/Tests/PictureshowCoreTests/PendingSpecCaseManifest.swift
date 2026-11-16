@@ -10,7 +10,7 @@ enum PendingSpecCaseManifest {
         let reason: String
     }
     static let suites: [String: Suite] = [
-        "application": Suite(count: 95, reason: "Additional main contracts lack an Apple executor; existing active contracts in this suite continue to execute."),
+        "application": Suite(count: 124, reason: "Additional main contracts lack an Apple executor; existing active contracts in this suite continue to execute."),
         "cast-capability": Suite(count: 1, reason: "Audio reload capability awaits the Apple sender port."),
         "cast-handoff": Suite(count: 2, reason: "System commands and receiver intent reconciliation await the Apple sender port."),
         "cast-queue": Suite(count: 11, reason: "DMR queue identity and audio reload contracts await the Apple sender port."),
@@ -20,7 +20,7 @@ enum PendingSpecCaseManifest {
         "frame-rate-match": Suite(count: 6, reason: "Display-mode policy and native display qualification are not ported to Apple."),
         "live-dvr": Suite(count: 22, reason: "Newly merged main policy or presentation contracts are not ported to Apple; native acceptance remains owed."),
         "live-guide": Suite(count: 25, reason: "Newly merged main policy or presentation contracts are not ported to Apple; native acceptance remains owed."),
-        "live-presentation": Suite(count: 366, reason: "Newly merged main policy or presentation contracts are not ported to Apple; native acceptance remains owed."),
+        "live-presentation": Suite(count: 367, reason: "Newly merged main policy or presentation contracts are not ported to Apple; native acceptance remains owed."),
         "live-source": Suite(count: 11, reason: "Newly merged main policy or presentation contracts are not ported to Apple; native acceptance remains owed."),
         "playback-formats": Suite(count: 30, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
         "playback-info-reasons": Suite(count: 12, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
@@ -476,6 +476,7 @@ enum PendingSpecCaseManifest {
         live-presentation.guide-empty-favorites-recovers-in-place|live-presentation/empty-state
         live-presentation.guide-empty-navigates-to-channels|live-presentation/empty-state
         live-presentation.management-denied-navigates-to-channels|live-presentation/empty-state
+        live-presentation.recordings-empty-without-recording-permission|live-presentation/empty-state
         live-presentation.channel-logo-missing|live-presentation/channel-monogram
         live-presentation.channel-logo-loading|live-presentation/channel-monogram
         live-presentation.channel-logo-error|live-presentation/channel-monogram
@@ -1493,6 +1494,35 @@ enum PendingSpecCaseManifest {
         quick-connect-approval-token-refused|application/quick-connect-approval-result
         quick-connect-approval-server-error|application/quick-connect-approval-result
         quick-connect-approval-unreadable-body|application/quick-connect-approval-result
+        profile-pin-valid-four-digits|application/profile-pin-valid
+        profile-pin-valid-eight-digits|application/profile-pin-valid
+        profile-pin-valid-too-short|application/profile-pin-valid
+        profile-pin-valid-too-long|application/profile-pin-valid
+        profile-pin-valid-letter|application/profile-pin-valid
+        profile-pin-valid-space|application/profile-pin-valid
+        profile-pin-valid-non-ascii-digits|application/profile-pin-valid
+        profile-pin-valid-empty|application/profile-pin-valid
+        profile-pin-needed-no-pin-switch|application/profile-pin-needed
+        profile-pin-needed-no-pin-start|application/profile-pin-needed
+        profile-pin-needed-switch-always-asks|application/profile-pin-needed
+        profile-pin-needed-switch-asks-even-if-unlocked|application/profile-pin-needed
+        profile-pin-needed-start-asks|application/profile-pin-needed
+        profile-pin-needed-start-off|application/profile-pin-needed
+        profile-pin-needed-start-already-unlocked|application/profile-pin-needed
+        profile-pin-attempt-first-wrong|application/profile-pin-attempt
+        profile-pin-attempt-fifth-wrong-waits|application/profile-pin-attempt
+        profile-pin-attempt-right-clears|application/profile-pin-attempt
+        profile-pin-attempt-during-wait-not-counted|application/profile-pin-attempt
+        profile-pin-attempt-after-wait-checked|application/profile-pin-attempt
+        profile-pin-attempt-clock-backwards-capped|application/profile-pin-attempt
+        access-refusal-sign-in|application/access-refusal
+        access-refusal-in-session|application/access-refusal
+        sync-group-list-loading|application/sync-group-list
+        sync-group-list-failed-is-not-empty|application/sync-group-list
+        sync-group-list-empty|application/sync-group-list
+        sync-group-list-groups|application/sync-group-list
+        sync-group-list-join-only|application/sync-group-list
+        sync-group-list-no-access|application/sync-group-list
         """
         return Dictionary(uniqueKeysWithValues: rows.split(separator: "\n").map {
             let pair = $0.split(separator: "|", maxSplits: 1)

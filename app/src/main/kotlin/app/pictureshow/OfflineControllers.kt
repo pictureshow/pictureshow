@@ -323,6 +323,18 @@ private const val OFFLINE_NOTIFICATION_ASKED = "notifications-asked"
 /** Asked once. Downloads run either way, and a "no" isn't a question to repeat at every download. */
 internal fun offlineAskForNotifications(granted: Boolean, alreadyAsked: Boolean) = !granted && !alreadyAsked
 
+/** P-17: whether the first Download will bring up the notification question, so the page can say so first. */
+@Composable
+internal fun rememberOfflineNotificationWillAsk(): Boolean {
+    val context = LocalContext.current
+    return remember(context) {
+        Build.VERSION.SDK_INT >= 33 && offlineAskForNotifications(
+            context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED,
+            context.getSharedPreferences(OFFLINE_NOTIFICATION_PREFS, Context.MODE_PRIVATE).getBoolean(OFFLINE_NOTIFICATION_ASKED, false)
+        )
+    }
+}
+
 @Composable
 internal fun rememberOfflineNotificationAsk(): () -> Unit {
     val context = LocalContext.current

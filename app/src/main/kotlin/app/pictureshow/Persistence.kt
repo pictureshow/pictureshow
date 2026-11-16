@@ -33,3 +33,16 @@ class DeviceIdentityStore(private val preferences: DataStore<Preferences>) {
         val DEVICE_ID = stringPreferencesKey("device_id")
     }
 }
+
+/** Profile PINs (AUTH-16): salted hashes and the wait after wrong guesses, never a PIN. */
+class ProfileLockPersistence(private val preferences: DataStore<Preferences>) : TextPersistence {
+    override suspend fun read(): String? = preferences.data.first()[LOCKS]
+
+    override suspend fun write(value: String) {
+        preferences.edit { it[LOCKS] = value }
+    }
+
+    private companion object {
+        val LOCKS = stringPreferencesKey("profile_locks_v1")
+    }
+}

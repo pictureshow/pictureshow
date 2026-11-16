@@ -304,6 +304,7 @@ internal fun OfflineDownloadTouchScreen(
 ) {
     val controller = rememberOfflinePreview(account, itemId, seriesId, seasonId, title)
     val askForNotifications = rememberOfflineNotificationAsk()
+    val willAskForNotifications = rememberOfflineNotificationWillAsk()
     OfflineTouchPage("Download $title", onBack) {
         when (val state = controller.state) {
             OfflinePreviewState.Loading -> Text("Checking what can be downloaded…")
@@ -320,7 +321,19 @@ internal fun OfflineDownloadTouchScreen(
                         )
                         Column {
                             Text(offlinePresetLabel(choice.preset))
-                            if (!choice.available) Text(offlinePresetUnavailable(choice.reason), style = MaterialTheme.typography.bodySmall)
+                            if (!choice.available) {
+                                Text(offlinePresetUnavailable(choice.reason), style = MaterialTheme.typography.bodySmall)
+                            } else {
+                                // P-17: each quality shows its size, so the choice isn't blind.
+                                offlineChoiceSize(choice)?.let {
+                                    Text(
+                                        it,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.testTag("download:size:${choice.preset}")
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -378,6 +391,13 @@ internal fun OfflineDownloadTouchScreen(
                 TouchCheck("Can use mobile data for this", controller.cellular, "download:cellular") {
                     controller.cellular =
                         !controller.cellular
+                }
+                if (willAskForNotifications) {
+                    Text(
+                        androidx.compose.ui.res.stringResource(R.string.download_notification_note),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.testTag("download:notification-note")
+                    )
                 }
                 TouchAction(
                     "Download",

@@ -120,6 +120,45 @@ class ApplicationParityVectorsTest {
                             )
                         )
                     }
+                    "profile-pin-valid" -> JsonPrimitive(validProfilePin(input.getValue("pin").jsonPrimitive.content))
+                    "profile-pin-needed" -> JsonPrimitive(
+                        profilePinNeeded(
+                            if (input.getValue("hasPin").jsonPrimitive.boolean) {
+                                ProfileLock("hash", askOnStart = input.getValue("askOnStart").jsonPrimitive.boolean)
+                            } else {
+                                null
+                            },
+                            ProfileUnlockReason.valueOf(input.getValue("reason").jsonPrimitive.content),
+                            input.getValue("unlocked").jsonPrimitive.boolean
+                        )
+                    )
+                    "profile-pin-attempt" -> {
+                        val now = input.getValue("now").jsonPrimitive.long
+                        val next = profilePinAttempt(
+                            ProfileLock(
+                                "hash",
+                                failures = input.getValue("failures").jsonPrimitive.int,
+                                blockedUntil = input.getValue("blockedUntil").jsonPrimitive.long
+                            ),
+                            now,
+                            input.getValue("correct").jsonPrimitive.boolean
+                        )
+                        JsonObject(
+                            mapOf(
+                                "failures" to JsonPrimitive(next.failures),
+                                "blockedUntil" to JsonPrimitive(next.blockedUntil),
+                                "cooldownMs" to JsonPrimitive(profilePinCooldown(next, now))
+                            )
+                        )
+                    }
+                    "access-refusal" -> JsonPrimitive(accessRefusal(input.getValue("signIn").jsonPrimitive.boolean).message)
+                    "sync-group-list" -> app.pictureshow.core.sync.syncGroupList(
+                        input.getValue("accessAllowed").jsonPrimitive.boolean,
+                        input.getValue("policy").jsonPrimitive.content,
+                        input.getValue("busy").jsonPrimitive.boolean,
+                        input.getValue("failed").jsonPrimitive.boolean,
+                        input.getValue("count").jsonPrimitive.int
+                    ).let { JsonObject(mapOf("state" to JsonPrimitive(it.state.name), "canCreate" to JsonPrimitive(it.canCreate))) }
                     "quick-connect-approval-result" -> JsonPrimitive(
                         quickConnectApprovalResult(
                             input.getValue("status").jsonPrimitive.int,

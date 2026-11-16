@@ -321,6 +321,7 @@ class JellyfinClient(private val client: HttpClient, private val identity: Clien
                 } else {
                     statusFailure(response.status.value)
                 }
+                403 -> ClientResult.Failure(accessRefusal(signIn = path == "Users/AuthenticateByName"))
                 else -> statusFailure(response.status.value)
             }
         } ?: failure(ErrorKind.NETWORK, "The server took too long to respond. Check your connection and try again.")
@@ -369,3 +370,19 @@ private fun probeErrorPriority(kind: ErrorKind): Int = when (kind) {
     ErrorKind.SERVER -> 1
     else -> 0
 }
+
+/**
+ * Jellyfin answers 403 with the same "Error processing request." body for a disabled account, for one outside its
+ * access schedule (parental viewing hours), and for an item or feature the account isn't allowed (OBSERVED on demo
+ * Jellyfin 12, 2026-11-16). The body can't tell them apart, so the copy names the likely causes without guessing one,
+ * and never says the password was wrong (AUTH-17, vector `access-refusal`).
+ */
+fun accessRefusal(signIn: Boolean): ClientError = ClientError(
+    ErrorKind.SERVER,
+    if (signIn) {
+        "The server turned this account away. It may be outside its allowed viewing hours, or turned off. Ask your server administrator."
+    } else {
+        "The server didn't allow this for your account. If it has viewing hours, this may be outside them. Ask your server administrator."
+    },
+    403
+)

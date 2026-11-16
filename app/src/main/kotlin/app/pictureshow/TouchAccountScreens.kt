@@ -3,6 +3,15 @@
  */
 package app.pictureshow
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.text.KeyboardActions
@@ -88,7 +97,7 @@ internal fun TouchServers(
             },
             Modifier.semantics { liveRegion = LiveRegionMode.Polite }
         )
-        TouchAction("Search again", enabled = !state.scanning, onClick = onScan)
+        TouchSecondaryAction("Search again", enabled = !state.scanning, onClick = onScan)
         if (snapshot.accounts.isNotEmpty() ||
             snapshot.rememberedServers.isNotEmpty()
         ) {
@@ -97,6 +106,7 @@ internal fun TouchServers(
     }
 }
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 internal fun TouchLogin(
     state: LoginState,
@@ -116,9 +126,49 @@ internal fun TouchLogin(
         keyboard?.hide()
         onSignIn()
     }
+    // P-21 (AUTH-04, as web W-14): public users as chips first; picking one names who is signing in.
+    var showAllUsers by rememberSaveable { mutableStateOf(false) }
+    // Only a tapped chip counts: typing a name that happens to match a public user mustn't swap the field away.
+    var pickedName by rememberSaveable { mutableStateOf<String?>(null) }
+    val picked = state.users.firstOrNull { it.name == pickedName && it.name == state.username }
+    val passwordFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+    var focusPassword by remember { mutableStateOf(0) }
+    LaunchedEffect(focusPassword) { if (focusPassword > 0) runCatching { passwordFocus.requestFocus() } }
     TouchPage("Sign in to $serverLabel", onBack) {
         if (sessionEnded) TouchMessage("Your session ended. Sign in again.")
-        OutlinedTextField(
+        if (state.users.isNotEmpty() && picked == null) {
+            Text(stringResource(R.string.login_public_users), style = MaterialTheme.typography.titleMedium)
+            val shown = if (showAllUsers) state.users else state.users.take(TOUCH_LOGIN_USER_CHIPS)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                shown.forEach { user ->
+                    FilledTonalButton(
+                        onClick = {
+                            pickedName = user.name
+                            onUsername(user.name)
+                            focusPassword++
+                        },
+                        enabled = !state.busy,
+                        modifier = Modifier.heightIn(min = 48.dp).testTag("touch:user:${user.name}")
+                    ) { Text(user.name, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                }
+                if (!showAllUsers && state.users.size > TOUCH_LOGIN_USER_CHIPS) {
+                    TextButton(onClick = { showAllUsers = true }, modifier = Modifier.heightIn(min = 48.dp).testTag("touch:users-all")) {
+                        Text(stringResource(R.string.login_show_all_users, state.users.size))
+                    }
+                }
+            }
+        }
+        if (picked != null) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.testTag("touch:signing-in-as")) {
+                Text(stringResource(R.string.login_signing_in_as, picked.name), modifier = Modifier.weight(1f, fill = false))
+                TextButton(onClick = {
+                    pickedName = null
+                    onUsername("")
+                }, enabled = !state.busy, modifier = Modifier.heightIn(min = 48.dp)) {
+                    Text(stringResource(R.string.login_not_you))
+                }
+            }
+        } else OutlinedTextField(
             value = state.username,
             onValueChange = onUsername,
             label = { Text("Username") },
@@ -142,19 +192,17 @@ internal fun TouchLogin(
                     Text(if (reveal) "Hide" else "Show")
                 }
             },
-            modifier = Modifier.fillMaxWidth().testTag("touch:password")
+            modifier = Modifier.fillMaxWidth().focusRequester(passwordFocus).testTag("touch:password")
         )
         TouchAction(if (state.busy) "Signing in…" else "Sign in", enabled = !state.busy) { submit() }
         TouchMessage(state.error)
         TouchMessage(state.notice)
         if (state.loading) Text("Loading sign-in options…")
         if (state.quickConnect) TouchAction("Use Quick Connect", enabled = !state.busy, onClick = onQuickConnect)
-        if (state.users.isNotEmpty()) {
-            Text("Public users", style = MaterialTheme.typography.titleLarge)
-            state.users.forEach { user -> TouchAction(user.name, enabled = !state.busy) { onUsername(user.name) } }
-        }
     }
 }
+
+private const val TOUCH_LOGIN_USER_CHIPS = 8
 
 @Composable
 internal fun TouchQuickConnect(

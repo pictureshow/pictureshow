@@ -444,6 +444,10 @@ internal fun Pictureshow(
         }
         return
     }
+    // AUTH-16: a viewer with a PIN opens nothing until it's typed. "Use the password" leaves the viewer and opens
+    // its sign-in once the account bootstrap below has installed the chooser.
+    var pendingPassword by remember { mutableStateOf<app.pictureshow.core.Account?>(null) }
+    if (profileLockGate(state.snapshot, accounts, tv = true) { pendingPassword = it }) return
     // Navigation restores its own stack. Save the identity that installed it too: the first
     // composition after recreation is not an account change. Do not put credentials in saved state.
     var landingApplied by rememberSaveable(state.snapshot.currentKey) { mutableStateOf(false) }
@@ -461,6 +465,10 @@ internal fun Pictureshow(
         nav.navigate(destination) {
             popUpTo(nav.graph.id) { inclusive = true }
             launchSingleTop = true
+        }
+        pendingPassword?.takeIf { key == null }?.let {
+            pendingPassword = null
+            nav.navigate(serverRoute("login", it.server) + "&username=${Uri.encode(it.user.name)}")
         }
     }
     // Account bootstrap above installs the normal graph first. An entry never waits for a future login.
@@ -664,6 +672,28 @@ internal fun Pictureshow(
             }
         }
         composable("accounts") { entry ->
+            val pinStore = remember { org.koin.mp.KoinPlatform.getKoinOrNull()?.getOrNull<app.pictureshow.core.ProfileLockStore>() }
+            var pinFor by remember { mutableStateOf<app.pictureshow.core.Account?>(null) }
+            val accountsVm: AccountsViewModel = koinViewModel()
+            pinFor?.takeIf { pinStore != null }?.let { target ->
+                ProfilePinDialog(
+                    pinStore!!,
+                    target.key,
+                    target.user.name,
+                    tv = true,
+                    onUnlocked = {
+                        pinFor = null
+                        accountsVm.select(target.key)
+                    },
+                    onPassword = {
+                        pinFor = null
+                        nav.navigate(serverRoute("login", target.server) + "&username=${Uri.encode(target.user.name)}") {
+                            launchSingleTop = true
+                        }
+                    },
+                    onCancel = { pinFor = null }
+                )
+            }
             val vm: AccountsViewModel = koinViewModel()
             val screen by vm.state.collectAsStateWithLifecycle()
             SignInCompletion(screen.selected, entry.id, nav, state.snapshot, installedKey, installedExpired, accounts)
@@ -782,6 +812,9 @@ internal fun Pictureshow(
                                         nav.navigate(serverRoute("login", account.server) + "&username=${Uri.encode(account.user.name)}") {
                                             launchSingleTop = true
                                         }
+                                    } else if (profilePinOnSwitch(pinStore, account.key, state.snapshot.currentKey)) {
+                                        returnFocus = account.key
+                                        pinFor = account
                                     } else {
                                         vm.select(account.key)
                                     }
