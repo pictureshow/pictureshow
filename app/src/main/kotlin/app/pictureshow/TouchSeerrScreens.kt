@@ -358,10 +358,11 @@ private fun TouchSeerrTitle(vm: SeerrViewModel, account: Account, onBack: () -> 
                     enabled = !state.sending,
                     onClick = vm::request
                 )
-            } else {
+            } else if (!state.sent) {
                 Text(stringResource(R.string.seerr_already_have))
             }
-            selectable.isEmpty() -> Text(stringResource(R.string.seerr_nothing_left))
+            // Right after our own request the confirmation below says it; "already requested" would repeat it.
+            selectable.isEmpty() -> if (!state.sent) Text(stringResource(R.string.seerr_nothing_left))
             else -> {
                 val count = state.chosen.count { it in selectable }
                 Text(stringResource(R.string.seerr_choose_seasons), color = MaterialTheme.colorScheme.onSurfaceVariant)

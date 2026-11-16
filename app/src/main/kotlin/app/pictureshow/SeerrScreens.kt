@@ -22,12 +22,15 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -107,7 +110,22 @@ private fun SeerrTvHub(vm: SeerrViewModel, account: Account, onOpen: (String, In
             "mine" -> vm.loadRequests()
         }
     }
-    LaunchedEffect(Unit) { tabFocus.getValue(tab).requestFocus() }
+    // Back from a title returns to the card that opened it, when that card is still on screen; otherwise the tabs.
+    var opened by rememberSaveable { mutableStateOf<String?>(null) }
+    val returnFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        if (opened != null) {
+            repeat(10) {
+                if (runCatching { returnFocus.requestFocus() }.isSuccess) return@LaunchedEffect
+                withFrameNanos { }
+            }
+        }
+        tabFocus.getValue(tab).requestFocus()
+    }
+    val open: (String, Int) -> Unit = { type, id ->
+        opened = "$type-$id"
+        onOpen(type, id)
+    }
     Box(Modifier.fillMaxSize().background(CatalogBackground).padding(horizontal = 48.dp, vertical = 32.dp)) {
         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Text(
@@ -134,14 +152,20 @@ private fun SeerrTvHub(vm: SeerrViewModel, account: Account, onOpen: (String, In
                     }
                 }
             }
-            when (tab) {
-                "discover" -> SeerrTvDiscover(state, account, vm, onOpen)
-                "search" -> SeerrTvSearch(state, account, vm, onOpen)
-                else -> SeerrTvMine(state, account, vm, onOpen)
+            CompositionLocalProvider(LocalSeerrReturn provides SeerrReturn(opened, returnFocus)) {
+                when (tab) {
+                    "discover" -> SeerrTvDiscover(state, account, vm, open)
+                    "search" -> SeerrTvSearch(state, account, vm, open)
+                    else -> SeerrTvMine(state, account, vm, open)
+                }
             }
         }
     }
 }
+
+private class SeerrReturn(val key: String?, val focus: FocusRequester)
+
+private val LocalSeerrReturn = staticCompositionLocalOf<SeerrReturn?> { null }
 
 private fun seerrTabLabel(tab: String) = when (tab) {
     "discover" -> R.string.seerr_tab_discover
@@ -236,12 +260,14 @@ private fun SeerrTvShelf(
         Text(title, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })
         LazyRow(contentPadding = PaddingValues(16.dp), horizontalArrangement = Arrangement.spacedBy(18.dp)) {
             itemsIndexed(titles, key = { _, it -> "${it.mediaType}-${it.id}" }) { index, item ->
+                val back = LocalSeerrReturn.current?.takeIf { it.key == "${item.mediaType}-${item.id}" }
                 CatalogCard(
                     seerrCardItem(item),
                     account,
                     wide = false,
                     onClick = { onOpen(item) },
                     modifier = Modifier.testTag("seerr:$tag:${item.mediaType}-${item.id}")
+                        .then(if (back != null) Modifier.focusRequester(back.focus) else Modifier)
                         .staysInRow(index == 0, index == titles.lastIndex),
                     subtitle = line(item),
                     announceSubtitle = true,
@@ -294,11 +320,12 @@ private fun SeerrTvTitle(vm: SeerrViewModel, account: Account, onBack: () -> Uni
                         enabled = !state.sending,
                         onClick = vm::request
                     )
-                } else {
+                } else if (!state.sent) {
                     StatusLine(stringResource(R.string.seerr_already_have))
                 }
             }
-            selectable.isEmpty() -> StatusLine(stringResource(R.string.seerr_nothing_left))
+            // Right after our own request the confirmation below says it; "already requested" would repeat it.
+            selectable.isEmpty() -> if (!state.sent) StatusLine(stringResource(R.string.seerr_nothing_left))
             else -> {
                 val count = state.chosen.count { it in selectable }
                 Action(
