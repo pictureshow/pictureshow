@@ -45,8 +45,12 @@ internal object PlaybackMedia {
     /** Network interceptors run again for redirect hops; default request properties cannot enforce origin.
      * [nativeHlsMedia] is false for playlists and external subtitles, which may wait for encoder startup.
      */
-    fun httpFactory(server: Server, decision: PlayDecision, nativeHlsMedia: Boolean = true): OkHttpDataSource.Factory {
-        val client = transport.newBuilder()
+    fun httpFactory(server: Server, decision: PlayDecision, nativeHlsMedia: Boolean = true): OkHttpDataSource.Factory =
+        OkHttpDataSource.Factory(httpClient(server, decision, nativeHlsMedia))
+
+    /** The scoped client behind [httpFactory]; the mpv loopback proxy uses it directly (PLAY-60). */
+    fun httpClient(server: Server, decision: PlayDecision, nativeHlsMedia: Boolean = true): OkHttpClient {
+        return transport.newBuilder()
             .apply {
                 if (nativeHlsMedia &&
                     decision.method == PlayMethod.Transcode &&
@@ -77,7 +81,6 @@ internal object PlaybackMedia {
                 chain.proceed(request.build())
             }
             .build()
-        return OkHttpDataSource.Factory(client)
     }
 
     /** Child playlists may carry legacy ApiKey parameters too; sanitize at the final request boundary. */

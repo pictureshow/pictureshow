@@ -318,6 +318,15 @@ position/current/pause and supported tracks, strips unsupported selections only 
 requires a valid authoritative same-server/viewer queue and replaces the phone snapshot; missing snapshot requests
 refresh, wrong partition rejects. Adapters must explain unavailable before confirmation and perform transport I/O.
 
+### playback-engine
+
+Operation `engine` (PLAY-60). Input: `choice` (Automatic, Mpv), `mpvAvailable`, `live`, `offline`, `syncPlay`, `audio`,
+the platform player's answer (`platformMethod`, `platformReasons`, TranscodeReason names, case-insensitive) and mpv's
+answer `mpvMethod` (null when never asked). Expected: `engine` (Media3 or Mpv) and `askedMpv`, whether a PlaybackInfo
+request carried mpv's profile. An explicit mpv choice asks with mpv first and never asks the platform profile; Automatic
+asks mpv only when the platform answer converts for mpv-solvable reasons only, and keeps mpv only if mpv's answer
+doesn't convert.
+
 ### playback-mode
 
 Operation `mode`. Defaults: ownerKind local, media video, explicitAudio false, group/requestedRoute null, leaving false, effect

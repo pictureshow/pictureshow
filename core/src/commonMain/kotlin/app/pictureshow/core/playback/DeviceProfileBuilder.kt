@@ -33,6 +33,62 @@ object DeviceProfileBuilder {
         )
     }
 
+    /**
+     * PLAY-60: the profile for mpv. FFmpeg demuxes every container the server names and decodes every audio and
+     * subtitle format in software, so those are unrestricted. Video keeps the platform profile's hardware codecs with
+     * all their guards (level, size, bit depth, HDR range: the display's and decoder's limits are mpv's too), plus the
+     * older codecs FFmpeg decodes in software at up to 1080p. Transcoding stays the platform's HLS profile.
+     */
+    fun buildMpv(detected: DeviceCapabilities): DeviceProfile {
+        val base = build(detected)
+        val hardware = base.directPlayProfiles.flatMap { it.videoCodec.orEmpty().split(',') }.filter(String::isNotBlank).toSet()
+        // FFmpeg decodes these in software whatever their profile, so the device decoder's profile limits for them
+        // don't bind mpv (it falls back to software when MediaCodec refuses); only the 1080p guard does.
+        val software = MPV_SOFTWARE_VIDEO
+        val softwareGuard = run {
+            listOf(
+                CodecProfile(
+                    type = CodecType.Video,
+                    codec = software.joinToString(","),
+                    conditions = listOf(
+                        lessThanEqual(ProfileConditionValue.Width, FULL_HD_WIDTH.toString()),
+                        lessThanEqual(ProfileConditionValue.Height, FULL_HD_HEIGHT.toString())
+                    )
+                )
+            )
+        }
+        return base.copy(
+            directPlayProfiles = listOf(
+                DirectPlayProfile(
+                    container = MPV_CONTAINERS,
+                    videoCodec = (hardware.sorted() + software.filter { it !in hardware }).joinToString(","),
+                    audioCodec = "",
+                    type = DlnaProfileType.Video
+                )
+            ),
+            codecProfiles = base.codecProfiles.filter { profile ->
+                profile.type == CodecType.Video &&
+                    !(profile.codec.orEmpty().split(',').filter(String::isNotBlank).let { it.isNotEmpty() && it.all { codec -> codec in software } })
+            } + softwareGuard,
+            subtitleProfiles = mpvSubtitleProfiles(detected.settings.tuning.subtitleBurnIn)
+        )
+    }
+
+    private fun mpvSubtitleProfiles(policy: SubtitleBurnIn): List<SubtitleProfile> {
+        val image = listOf("pgssub", "dvdsub", "dvbsub")
+        if (policy == SubtitleBurnIn.Always) {
+            return (MPV_TEXT_SUBTITLES + image).map { SubtitleProfile(format = it, method = SubtitleDeliveryMethod.Encode) }
+        }
+        val embedded = (MPV_TEXT_SUBTITLES + image).map { SubtitleProfile(format = it, method = SubtitleDeliveryMethod.Embed) }
+        val external = MPV_TEXT_SUBTITLES.map { SubtitleProfile(format = it, method = SubtitleDeliveryMethod.External) }
+        // HLS can't carry image subtitles, so a transcode burns them in, as for the platform player.
+        val burnIn = image.map { SubtitleProfile(format = it, method = SubtitleDeliveryMethod.Encode) }
+        return when (policy) {
+            SubtitleBurnIn.ImageOnly -> embedded.filter { it.format !in image } + external + burnIn
+            else -> embedded + external + burnIn
+        }
+    }
+
     /** An empty platform profile list is missing information, never permission to accept every profile. */
     private fun withConservativeProfile(decoder: VideoDecoder): VideoDecoder = when {
         decoder.profiles.isNotEmpty() -> decoder
@@ -553,6 +609,13 @@ object DeviceProfileBuilder {
 
     private fun number(value: Double): String = if (value % 1.0 == 0.0) value.toLong().toString() else value.toString()
 
+    private const val FULL_HD_HEIGHT = 1080
+    private const val MPV_CONTAINERS = "mkv,webm,mp4,m4v,mov,ts,mpegts,m2ts,mts,avi,mpeg,mpg,vob,flv,asf,wmv,ogg,ogv,3gp,3g2,wtv,dvr-ms,rm,rmvb"
+    private val MPV_SOFTWARE_VIDEO = listOf(
+        "mpeg1video", "mpeg2video", "mpeg4", "msmpeg4v1", "msmpeg4v2", "msmpeg4v3", "h263", "vc1", "wmv1", "wmv2", "wmv3", "theora"
+    )
+    private val MPV_TEXT_SUBTITLES =
+        listOf("srt", "subrip", "ass", "ssa", "vtt", "webvtt", "ttml", "mov_text", "microdvd", "sub", "smi", "sami", "mpl2")
     private const val TS_EAC3_CHANNELS = 6
     private const val PCM_CHANNELS = 8
 }

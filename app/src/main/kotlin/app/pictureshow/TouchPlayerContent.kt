@@ -823,6 +823,27 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState, video
                                     )
                                 }
                             }
+                            if (host.engineSwitchable) {
+                                val next = if (host.engineChoice == app.pictureshow.core.playback.PlaybackEngineChoice.Mpv) {
+                                    app.pictureshow.core.playback.PlaybackEngineChoice.Automatic
+                                } else {
+                                    app.pictureshow.core.playback.PlaybackEngineChoice.Mpv
+                                }
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            androidx.compose.ui.res.stringResource(
+                                                if (next == app.pictureshow.core.playback.PlaybackEngineChoice.Mpv) R.string.engine_switch_mpv else R.string.engine_switch_automatic
+                                            )
+                                        )
+                                    },
+                                    modifier = Modifier.testTag("touch:engine"),
+                                    onClick = {
+                                        moreOpen = false
+                                        host.chooseEngine(next)
+                                    }
+                                )
+                            }
                             DropdownMenuItem(
                                 text = { Text("Stop") },
                                 modifier = Modifier.testTag("touch:stop"),

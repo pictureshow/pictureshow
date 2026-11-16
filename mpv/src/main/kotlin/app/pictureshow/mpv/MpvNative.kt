@@ -71,7 +71,9 @@ object MpvNative {
         loaded ?: try {
             System.loadLibrary("pictureshow_mpv")
             true
-        } catch (_: UnsatisfiedLinkError) {
+        } catch (error: UnsatisfiedLinkError) {
+            // Names a missing library or symbol, never a server or file of the viewer's.
+            android.util.Log.w("PictureshowMpv", "libmpv unavailable: ${error.message}")
             false
         } catch (_: SecurityException) {
             false

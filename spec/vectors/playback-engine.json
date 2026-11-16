@@ -1,0 +1,397 @@
+{
+  "schemaVersion": 1,
+  "suite": "playback-engine",
+  "cases": [
+    {
+      "id": "playback-engine.automatic-direct-play-stays-platform",
+      "operation": "engine",
+      "input": {
+        "choice": "Automatic",
+        "mpvAvailable": true,
+        "live": false,
+        "offline": false,
+        "syncPlay": false,
+        "audio": false,
+        "platformMethod": "DirectPlay",
+        "platformReasons": [],
+        "mpvMethod": null
+      },
+      "expected": {
+        "engine": "Media3",
+        "askedMpv": false
+      }
+    },
+    {
+      "id": "playback-engine.automatic-container-conversion-uses-mpv",
+      "operation": "engine",
+      "input": {
+        "choice": "Automatic",
+        "mpvAvailable": true,
+        "live": false,
+        "offline": false,
+        "syncPlay": false,
+        "audio": false,
+        "platformMethod": "Transcode",
+        "platformReasons": [
+          "ContainerNotSupported"
+        ],
+        "mpvMethod": "DirectPlay"
+      },
+      "expected": {
+        "engine": "Mpv",
+        "askedMpv": true
+      }
+    },
+    {
+      "id": "playback-engine.automatic-audio-codec-conversion-uses-mpv",
+      "operation": "engine",
+      "input": {
+        "choice": "Automatic",
+        "mpvAvailable": true,
+        "live": false,
+        "offline": false,
+        "syncPlay": false,
+        "audio": false,
+        "platformMethod": "Transcode",
+        "platformReasons": [
+          "AudioCodecNotSupported"
+        ],
+        "mpvMethod": "DirectStream"
+      },
+      "expected": {
+        "engine": "Mpv",
+        "askedMpv": true
+      }
+    },
+    {
+      "id": "playback-engine.automatic-subtitle-codec-conversion-uses-mpv",
+      "operation": "engine",
+      "input": {
+        "choice": "Automatic",
+        "mpvAvailable": true,
+        "live": false,
+        "offline": false,
+        "syncPlay": false,
+        "audio": false,
+        "platformMethod": "Transcode",
+        "platformReasons": [
+          "SubtitleCodecNotSupported",
+          "ContainerNotSupported"
+        ],
+        "mpvMethod": "DirectPlay"
+      },
+      "expected": {
+        "engine": "Mpv",
+        "askedMpv": true
+      }
+    },
+    {
+      "id": "playback-engine.automatic-reason-case-ignored",
+      "operation": "engine",
+      "input": {
+        "choice": "Automatic",
+        "mpvAvailable": true,
+        "live": false,
+        "offline": false,
+        "syncPlay": false,
+        "audio": false,
+        "platformMethod": "Transcode",
+        "platformReasons": [
+          "videocodecnotsupported"
+        ],
+        "mpvMethod": "DirectPlay"
+      },
+      "expected": {
+        "engine": "Mpv",
+        "askedMpv": true
+      }
+    },
+    {
+      "id": "playback-engine.automatic-bitrate-stays-platform",
+      "operation": "engine",
+      "input": {
+        "choice": "Automatic",
+        "mpvAvailable": true,
+        "live": false,
+        "offline": false,
+        "syncPlay": false,
+        "audio": false,
+        "platformMethod": "Transcode",
+        "platformReasons": [
+          "ContainerBitrateExceedsLimit"
+        ],
+        "mpvMethod": null
+      },
+      "expected": {
+        "engine": "Media3",
+        "askedMpv": false
+      }
+    },
+    {
+      "id": "playback-engine.automatic-mixed-reasons-stay-platform",
+      "operation": "engine",
+      "input": {
+        "choice": "Automatic",
+        "mpvAvailable": true,
+        "live": false,
+        "offline": false,
+        "syncPlay": false,
+        "audio": false,
+        "platformMethod": "Transcode",
+        "platformReasons": [
+          "AudioCodecNotSupported",
+          "VideoRangeTypeNotSupported"
+        ],
+        "mpvMethod": null
+      },
+      "expected": {
+        "engine": "Media3",
+        "askedMpv": false
+      }
+    },
+    {
+      "id": "playback-engine.automatic-level-stays-platform",
+      "operation": "engine",
+      "input": {
+        "choice": "Automatic",
+        "mpvAvailable": true,
+        "live": false,
+        "offline": false,
+        "syncPlay": false,
+        "audio": false,
+        "platformMethod": "Transcode",
+        "platformReasons": [
+          "VideoLevelNotSupported"
+        ],
+        "mpvMethod": null
+      },
+      "expected": {
+        "engine": "Media3",
+        "askedMpv": false
+      }
+    },
+    {
+      "id": "playback-engine.automatic-no-reasons-stays-platform",
+      "operation": "engine",
+      "input": {
+        "choice": "Automatic",
+        "mpvAvailable": true,
+        "live": false,
+        "offline": false,
+        "syncPlay": false,
+        "audio": false,
+        "platformMethod": "Transcode",
+        "platformReasons": [],
+        "mpvMethod": null
+      },
+      "expected": {
+        "engine": "Media3",
+        "askedMpv": false
+      }
+    },
+    {
+      "id": "playback-engine.automatic-mpv-still-converts-stays-platform",
+      "operation": "engine",
+      "input": {
+        "choice": "Automatic",
+        "mpvAvailable": true,
+        "live": false,
+        "offline": false,
+        "syncPlay": false,
+        "audio": false,
+        "platformMethod": "Transcode",
+        "platformReasons": [
+          "ContainerNotSupported"
+        ],
+        "mpvMethod": "Transcode"
+      },
+      "expected": {
+        "engine": "Media3",
+        "askedMpv": true
+      }
+    },
+    {
+      "id": "playback-engine.automatic-mpv-unavailable-stays-platform",
+      "operation": "engine",
+      "input": {
+        "choice": "Automatic",
+        "mpvAvailable": false,
+        "live": false,
+        "offline": false,
+        "syncPlay": false,
+        "audio": false,
+        "platformMethod": "Transcode",
+        "platformReasons": [
+          "ContainerNotSupported"
+        ],
+        "mpvMethod": null
+      },
+      "expected": {
+        "engine": "Media3",
+        "askedMpv": false
+      }
+    },
+    {
+      "id": "playback-engine.automatic-live-stays-platform",
+      "operation": "engine",
+      "input": {
+        "choice": "Automatic",
+        "mpvAvailable": true,
+        "live": true,
+        "offline": false,
+        "syncPlay": false,
+        "audio": false,
+        "platformMethod": "Transcode",
+        "platformReasons": [
+          "ContainerNotSupported"
+        ],
+        "mpvMethod": null
+      },
+      "expected": {
+        "engine": "Media3",
+        "askedMpv": false
+      }
+    },
+    {
+      "id": "playback-engine.automatic-offline-stays-platform",
+      "operation": "engine",
+      "input": {
+        "choice": "Automatic",
+        "mpvAvailable": true,
+        "live": false,
+        "offline": true,
+        "syncPlay": false,
+        "audio": false,
+        "platformMethod": "Transcode",
+        "platformReasons": [
+          "ContainerNotSupported"
+        ],
+        "mpvMethod": null
+      },
+      "expected": {
+        "engine": "Media3",
+        "askedMpv": false
+      }
+    },
+    {
+      "id": "playback-engine.automatic-syncplay-stays-platform",
+      "operation": "engine",
+      "input": {
+        "choice": "Automatic",
+        "mpvAvailable": true,
+        "live": false,
+        "offline": false,
+        "syncPlay": true,
+        "audio": false,
+        "platformMethod": "Transcode",
+        "platformReasons": [
+          "ContainerNotSupported"
+        ],
+        "mpvMethod": null
+      },
+      "expected": {
+        "engine": "Media3",
+        "askedMpv": false
+      }
+    },
+    {
+      "id": "playback-engine.automatic-music-stays-platform",
+      "operation": "engine",
+      "input": {
+        "choice": "Automatic",
+        "mpvAvailable": true,
+        "live": false,
+        "offline": false,
+        "syncPlay": false,
+        "audio": true,
+        "platformMethod": "Transcode",
+        "platformReasons": [
+          "AudioCodecNotSupported"
+        ],
+        "mpvMethod": null
+      },
+      "expected": {
+        "engine": "Media3",
+        "askedMpv": false
+      }
+    },
+    {
+      "id": "playback-engine.mpv-direct-play-uses-mpv",
+      "operation": "engine",
+      "input": {
+        "choice": "Mpv",
+        "mpvAvailable": true,
+        "live": false,
+        "offline": false,
+        "syncPlay": false,
+        "audio": false,
+        "platformMethod": "DirectPlay",
+        "platformReasons": [],
+        "mpvMethod": "DirectPlay"
+      },
+      "expected": {
+        "engine": "Mpv",
+        "askedMpv": true
+      }
+    },
+    {
+      "id": "playback-engine.mpv-converting-still-uses-mpv",
+      "operation": "engine",
+      "input": {
+        "choice": "Mpv",
+        "mpvAvailable": true,
+        "live": false,
+        "offline": false,
+        "syncPlay": false,
+        "audio": false,
+        "platformMethod": "Transcode",
+        "platformReasons": [
+          "ContainerBitrateExceedsLimit"
+        ],
+        "mpvMethod": "Transcode"
+      },
+      "expected": {
+        "engine": "Mpv",
+        "askedMpv": true
+      }
+    },
+    {
+      "id": "playback-engine.mpv-unavailable-uses-platform",
+      "operation": "engine",
+      "input": {
+        "choice": "Mpv",
+        "mpvAvailable": false,
+        "live": false,
+        "offline": false,
+        "syncPlay": false,
+        "audio": false,
+        "platformMethod": "DirectPlay",
+        "platformReasons": [],
+        "mpvMethod": null
+      },
+      "expected": {
+        "engine": "Media3",
+        "askedMpv": false
+      }
+    },
+    {
+      "id": "playback-engine.mpv-live-uses-platform",
+      "operation": "engine",
+      "input": {
+        "choice": "Mpv",
+        "mpvAvailable": true,
+        "live": true,
+        "offline": false,
+        "syncPlay": false,
+        "audio": false,
+        "platformMethod": "DirectStream",
+        "platformReasons": [],
+        "mpvMethod": null
+      },
+      "expected": {
+        "engine": "Media3",
+        "askedMpv": false
+      }
+    }
+  ]
+}

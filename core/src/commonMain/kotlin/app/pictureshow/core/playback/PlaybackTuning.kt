@@ -48,7 +48,9 @@ data class PlaybackTuning(
     val matchFrameRate: Boolean = false,
     /** PLAY-30: seconds the next-episode card counts during the credits; 0 never starts the next episode by itself. */
     val nextEpisodeCountdownSeconds: Int = 10,
-    val stillWatching: StillWatching = StillWatching.ThreeEpisodes
+    val stillWatching: StillWatching = StillWatching.ThreeEpisodes,
+    /** PLAY-60: which player opens streamed video. */
+    val engine: PlaybackEngineChoice = PlaybackEngineChoice.Automatic
 ) {
     /** Reject malformed persisted values individually, preserving other accepted preferences. */
     fun normalized() = copy(

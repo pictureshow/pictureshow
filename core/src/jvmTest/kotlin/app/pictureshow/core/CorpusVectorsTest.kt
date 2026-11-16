@@ -34,6 +34,7 @@ class CorpusVectorsTest {
                     "playback",
                     "profiles",
                     "frame-rate-match",
+                    "playback-engine",
                     "playback-settings-layout",
                     "playback-settings",
                     "playback-start",

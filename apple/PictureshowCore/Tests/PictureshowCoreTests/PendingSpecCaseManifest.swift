@@ -18,6 +18,7 @@ enum PendingSpecCaseManifest {
         "application": Suite(count: 62, reason: "Additional main contracts lack an Apple executor; existing active contracts in this suite continue to execute."),
         "catalog-return": Suite(count: 10, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
         "frame-rate-match": Suite(count: 6, reason: "Display-mode policy and native display qualification are not ported to Apple."),
+        "playback-engine": Suite(count: 19, reason: "PLAY-60 chooses between two Android engines; Apple has one player, so this is owed only if it gains a second."),
         "home-browse": Suite(count: 174, reason: "Newly merged main policy or presentation contracts are not ported to Apple; native acceptance remains owed."),
         "live-dvr": Suite(count: 22, reason: "Newly merged main policy or presentation contracts are not ported to Apple; native acceptance remains owed."),
         "live-guide": Suite(count: 25, reason: "Newly merged main policy or presentation contracts are not ported to Apple; native acceptance remains owed."),
@@ -716,6 +717,25 @@ enum PendingSpecCaseManifest {
         frame-rate-match.native-fractional|frame-rate-match/frame-rate-mode
         frame-rate-match.preserve-hdr|frame-rate-match/frame-rate-mode
         frame-rate-match.same-resolution|frame-rate-match/frame-rate-mode
+        playback-engine.automatic-audio-codec-conversion-uses-mpv|playback-engine/engine
+        playback-engine.automatic-bitrate-stays-platform|playback-engine/engine
+        playback-engine.automatic-container-conversion-uses-mpv|playback-engine/engine
+        playback-engine.automatic-direct-play-stays-platform|playback-engine/engine
+        playback-engine.automatic-level-stays-platform|playback-engine/engine
+        playback-engine.automatic-live-stays-platform|playback-engine/engine
+        playback-engine.automatic-mixed-reasons-stay-platform|playback-engine/engine
+        playback-engine.automatic-mpv-still-converts-stays-platform|playback-engine/engine
+        playback-engine.automatic-mpv-unavailable-stays-platform|playback-engine/engine
+        playback-engine.automatic-music-stays-platform|playback-engine/engine
+        playback-engine.automatic-no-reasons-stays-platform|playback-engine/engine
+        playback-engine.automatic-offline-stays-platform|playback-engine/engine
+        playback-engine.automatic-reason-case-ignored|playback-engine/engine
+        playback-engine.automatic-subtitle-codec-conversion-uses-mpv|playback-engine/engine
+        playback-engine.automatic-syncplay-stays-platform|playback-engine/engine
+        playback-engine.mpv-converting-still-uses-mpv|playback-engine/engine
+        playback-engine.mpv-direct-play-uses-mpv|playback-engine/engine
+        playback-engine.mpv-live-uses-platform|playback-engine/engine
+        playback-engine.mpv-unavailable-uses-platform|playback-engine/engine
         offline-budget.cap-below-used-keeps-bytes-and-reports|offline-budget/budget
         offline-budget.cap-cleared-keeps-reservations-and-denies-new|offline-budget/budget
         offline-budget.cap-cut-order-is-the-callers|offline-budget/budget
