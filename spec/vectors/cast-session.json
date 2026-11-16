@@ -3134,6 +3134,71 @@
           }
         }
       ]
+    },
+    {
+      "id": "cast-session.pending-audio-load-retains-previous-confirmed-binding",
+      "operation": "reattach",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "server": "s",
+            "viewer": "v",
+            "mediaSession": "7",
+            "playerState": "playing",
+            "customData": {
+              "nonce": "n1",
+              "generation": "4",
+              "entry": "0:i"
+            },
+            "contentUrl": "http://x/Videos/i/stream?static=true&ApiKey=t",
+            "route": "r",
+            "record": {
+              "nonce": "n2",
+              "server": "s",
+              "viewer": "v",
+              "route": "r",
+              "device": "cast-d",
+              "session": "cast-3",
+              "generation": "4",
+              "items": [
+                {
+                  "entry": "0:i",
+                  "itemId": "i",
+                  "mediaSourceId": "m",
+                  "playSessionId": "new-play-session",
+                  "method": "Transcode",
+                  "url": "http://x/Videos/i/stream"
+                }
+              ],
+              "previous": {
+                "nonce": "n1",
+                "server": "s",
+                "viewer": "v",
+                "route": "r",
+                "device": "cast-d",
+                "session": "cast-3",
+                "generation": "4",
+                "items": [
+                  {
+                    "entry": "0:i",
+                    "itemId": "i",
+                    "mediaSourceId": "m",
+                    "playSessionId": "p",
+                    "method": "Transcode",
+                    "url": "http://x/Videos/i/stream"
+                  }
+                ]
+              }
+            }
+          },
+          "expected": {
+            "decision": "adopt",
+            "generation": "4",
+            "entry": "0:i"
+          }
+        }
+      ]
     }
   ]
 }

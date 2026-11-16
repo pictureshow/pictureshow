@@ -113,6 +113,35 @@ private class FakeLink(private val log: MutableList<String>) : CastLink {
         onResult(true)
     }
 
+    override fun setVolume(volume: Double, onResult: (Boolean) -> Unit) {
+        log += "volume:$volume"
+        onResult(true)
+    }
+    override fun setMuted(muted: Boolean, onResult: (Boolean) -> Unit) {
+        log += "mute:$muted"
+        onResult(true)
+    }
+    override fun queueJump(entry: String, onResult: (Boolean) -> Unit) {
+        log += "jump:$entry"
+        onResult(true)
+    }
+    override fun setRepeat(mode: String, onResult: (Boolean) -> Unit) {
+        log += "repeat:$mode"
+        onResult(true)
+    }
+    override fun reorder(entries: List<String>, onResult: (Boolean) -> Unit) {
+        log += "order:$entries"
+        onResult(true)
+    }
+
+    override fun remove(entries: List<String>, onResult: (Boolean) -> Unit) {
+        log += "remove:$entries"
+        onResult(true)
+    }
+    override fun insert(items: List<CastLoadItem>, before: String?, onResult: (Boolean) -> Unit) {
+        log += "insert:${items.size}:$before"
+        onResult(true)
+    }
     override fun requestStatus() {
         log += "status"
     }
@@ -163,6 +192,9 @@ private class FakeEnvironment(private val log: MutableList<String>) : CastEnviro
 
 private class FakeGateway(private val log: MutableList<String>) : CastMediaGateway {
     var outcome: ClientResult<PlayOutcome>? = null
+    var followingItems: List<CastPlayItem> = emptyList()
+    val requests = mutableListOf<CastPlayRequest>()
+    override suspend fun following(account: Account, item: CastPlayItem) = followingItems
     val reports = mutableListOf<String>()
     val callers = mutableListOf<String>()
     val items = mutableListOf<String>()
@@ -191,6 +223,7 @@ private class FakeGateway(private val log: MutableList<String>) : CastMediaGatew
 
     override suspend fun prepare(account: Account, itemId: String, request: CastPlayRequest, startMs: Long): ClientResult<PlayOutcome> {
         log += "prepare:$startMs"
+        requests += request
         callers += account.accessToken
         return outcome ?: ClientResult.Success(PlayOutcome.Play(decision(itemId)))
     }
@@ -215,7 +248,9 @@ private class FakeGateway(private val log: MutableList<String>) : CastMediaGatew
         reports += "stopped:${report.positionTicks}"
     }
 
+    var encodingGate: CompletableDeferred<Unit>? = null
     override suspend fun stopEncoding(account: Account, playSessionId: String) {
+        encodingGate?.await()
         log += "encoding"
         reports += "encoding:$playSessionId"
     }
@@ -345,7 +380,7 @@ class CastSenderHostTest {
                 put("generation", it.toString())
                 link.request?.items?.firstOrNull()?.customData?.get("nonce")?.let { nonce -> put("nonce", nonce) }
             }
-            put("entry", ENTRY)
+            put("entry", link.request?.items?.firstOrNull()?.customData?.get("entry") ?: ENTRY)
             putAll(extra)
         },
         commands = listOf("play", "pause", "seek", "stop")
@@ -367,6 +402,375 @@ class CastSenderHostTest {
         handoff(host, paused = paused)
         link.sink!!.onStatus(status(if (paused) "paused" else "playing", generation = host.generation()))
         runCurrent()
+    }
+
+    @Test fun deviceVolumeUsesCapabilityClampsAndNeverTouchesTheLocalOutput() = runTest {
+        val host = host()
+        casting(host)
+        host.setVolume(0.7)
+        host.setMuted(true)
+        assertFalse(log.any { it.startsWith("volume:") || it.startsWith("mute:") })
+        assertEquals("receiver-fixed-volume", host.state.value.controls!!.volumeReason)
+        link.sink!!.onStatus(
+            status("playing", generation = host.generation()).copy(commands = listOf("play", "pause", "stop", "volume"), volume = 0.4)
+        )
+        host.setVolume(1.7)
+        host.setVolume(-0.2)
+        host.setVolume(Double.NaN)
+        host.setMuted(true)
+        assertEquals(listOf("volume:1.0", "volume:0.0", "mute:true"), log.filter { it.startsWith("volume:") || it.startsWith("mute:") })
+        host.disconnect()
+        log.clear()
+        host.setVolume(0.3)
+        assertFalse(log.any { it.startsWith("volume:") })
+    }
+
+    @Test fun anEpisodeLoadsItsSuccessorWithNoForeignSourceOrTrackIndex() = runTest {
+        gateway.followingItems = listOf(CastPlayItem("next", "Next episode"))
+        val host = host()
+        host.openChooser(CastPlayRequest(listOf(CastPlayItem(ITEM, "Episode")), mediaSourceId = "source-one", audioStreamIndex = 2))
+        runCurrent()
+        host.pick(ROUTE)
+        link.sink!!.onConnected("Living room")
+        runCurrent()
+        assertEquals(2, link.request!!.items.size)
+        assertEquals(listOf("0:item-1", "1:next"), environment.viewing!!.items.map { it.entry })
+        assertEquals("source-one", gateway.requests.first().mediaSourceId)
+        assertNull(gateway.requests.last().mediaSourceId)
+        assertNull(gateway.requests.last().audioStreamIndex)
+    }
+
+    @Test fun queueTransitionChangesReportsTitleAndPlayHereIdentityTogether() = runTest {
+        gateway.followingItems = listOf(CastPlayItem("next", "Next episode"))
+        val host = host()
+        casting(host)
+        gateway.reports.clear()
+        gateway.items.clear()
+        val next = link.request!!.items[1]
+        link.sink!!.onStatus(
+            status(
+                "playing",
+                positionMs = 25,
+                generation = host.generation()
+            ).copy(customData = next.customData, contentUrl = next.url, queue = listOf("0:item-1", "1:next"))
+        )
+        runCurrent()
+        assertEquals(listOf(ITEM, "next"), gateway.items)
+        assertEquals(listOf("stopped:50000000", "encoding:play-session", "start:250000"), gateway.reports)
+        assertEquals("Next episode", host.state.value.title)
+        assertEquals("1:next", host.state.value.cast!!.owner.intent.entry)
+        host.playHere()
+        link.sink!!.onStatus(CastStatus(idleReason = "cancelled"))
+        runCurrent()
+        assertEquals("next", host.state.value.localStart!!.itemId)
+        assertEquals(25, host.state.value.localStart!!.positionMs)
+    }
+
+    @Test fun duplicateSongsKeepTheirQueueEntriesAndReceiverOrder() = runTest {
+        val host = host()
+        host.openChooser(
+            CastPlayRequest(
+                listOf(
+                    CastPlayItem(ITEM, "Song", music = true, entry = "song-a"),
+                    CastPlayItem(ITEM, "Song again", music = true, entry = "song-b")
+                ),
+                startIndex = 1,
+                repeat = "all",
+                shuffled = true
+            )
+        )
+        runCurrent()
+        host.pick(ROUTE)
+        link.sink!!.onConnected("Living room")
+        runCurrent()
+        val loaded = link.request!!
+        assertEquals(1, loaded.startIndex)
+        assertEquals("all", loaded.repeat)
+        assertTrue(loaded.items.all { it.music })
+        val second = loaded.items[1]
+        link.sink!!.onStatus(
+            status(
+                "playing",
+                positionMs = 0,
+                generation = host.generation()
+            ).copy(customData = second.customData, contentUrl = second.url, queue = listOf("song-b", "song-a"), repeat = "all")
+        )
+        runCurrent()
+        assertEquals(listOf("song-b", "song-a"), host.state.value.queue.map { it.entry })
+        assertEquals("Song again", host.state.value.title)
+        log.clear()
+        host.next()
+        host.setRepeat("one")
+        assertTrue("jump:song-a" in log)
+        assertTrue("repeat:one" in log)
+    }
+
+    @Test fun anUnknownSubtitleCannotBecomeSelectedOrReachTheSdk() = runTest {
+        val host = host()
+        casting(host)
+        log.clear()
+        host.setSubtitle(900)
+        assertFalse(log.any { it.startsWith("tracks:") })
+        assertFalse(host.state.value.controls!!.tracks.any { it.id == 900 && it.selected })
+    }
+
+    @Test fun audioReloadKeepsObservedPausePositionAndSelectedSubtitleUntilConfirmed() = runTest {
+        val original = decision(ITEM)
+        fun audioDecision(index: Int, method: PlayMethod) = PlayDecision(
+            ITEM,
+            original.mediaSource.copy(
+                defaultAudioStreamIndex = index,
+                mediaStreams = original.mediaSource.mediaStreams + listOf(
+                    MediaStream(type = MediaStreamType.Audio, index = 1, displayTitle = "English"),
+                    MediaStream(type = MediaStreamType.Audio, index = 2, displayTitle = "French")
+                )
+            ),
+            method,
+            "http://server.example/jf/Videos/item-1/stream?AudioStreamIndex=$index",
+            emptyMap(),
+            "audio-$index"
+        )
+        gateway.outcome = ClientResult.Success(PlayOutcome.Play(audioDecision(1, PlayMethod.DirectPlay)))
+        val host = host()
+        casting(host, paused = true)
+        link.sink!!.onStatus(
+            status(
+                "paused",
+                positionMs = 87_000,
+                generation = host.generation()
+            ).copy(activeTracks = listOf(4), commands = listOf("play", "pause", "seek", "stop", "tracks"))
+        )
+        gateway.outcome = ClientResult.Success(PlayOutcome.Play(audioDecision(2, PlayMethod.Transcode)))
+        host.setAudio(-3)
+        runCurrent()
+        val reload = link.request!!
+        assertEquals(87_000, reload.startMs)
+        assertFalse(reload.autoplay)
+        assertEquals(listOf(4L), reload.items.single().activeTracks)
+        assertEquals(2, gateway.requests.last().audioStreamIndex)
+        assertTrue(host.state.value.changingTrack)
+        log.clear()
+        host.remove(listOf(ENTRY))
+        host.move(ENTRY, 0)
+        host.append(listOf(CastPlayItem("other", "Other")), false)
+        host.setShuffle(true)
+        host.setRepeat("all")
+        host.jump(ENTRY)
+        runCurrent()
+        assertFalse(
+            log.any {
+                it.startsWith("remove:") ||
+                    it.startsWith("order:") ||
+                    it.startsWith("insert:") ||
+                    it.startsWith("jump:") ||
+                    it.startsWith("repeat:")
+            }
+        )
+        assertFalse(host.state.value.controls!!.tracks.first { it.id == -3 }.selected)
+        link.sink!!.onStatus(
+            status(
+                "paused",
+                87_000,
+                host.generation()
+            ).copy(
+                customData = reload.items.single().customData,
+                contentUrl = reload.items.single().url,
+                activeTracks = listOf(4),
+                commands = listOf("play", "pause", "seek", "stop", "tracks")
+            )
+        )
+        runCurrent()
+        assertFalse(host.state.value.changingTrack)
+        assertTrue(host.state.value.controls!!.tracks.first { it.id == -3 }.selected)
+        assertTrue(host.state.value.controls!!.tracks.first { it.id == 4 }.selected)
+    }
+
+    @Test fun disconnectWhileSavingAudioReloadDoesNotIssueALoadOrLeaveControlsLocked() = runTest {
+        val original = decision(ITEM)
+        fun source(index: Int, method: PlayMethod) = PlayDecision(
+            ITEM,
+            original.mediaSource.copy(
+                defaultAudioStreamIndex = index,
+                mediaStreams = listOf(
+                    MediaStream(type = MediaStreamType.Audio, index = 1),
+                    MediaStream(type = MediaStreamType.Audio, index = 2)
+                )
+            ),
+            method,
+            "http://server.example/jf/Videos/item-1/stream?AudioStreamIndex=$index",
+            emptyMap(),
+            "audio-$index"
+        )
+        gateway.outcome = ClientResult.Success(PlayOutcome.Play(source(1, PlayMethod.DirectPlay)))
+        val host = host()
+        casting(host)
+        val oldNonce = environment.viewing!!.nonce
+        val held = CompletableDeferred<Unit>()
+        environment.saveGate = held
+        gateway.outcome = ClientResult.Success(PlayOutcome.Play(source(2, PlayMethod.Transcode)))
+        log.clear()
+        host.setAudio(-3)
+        runCurrent()
+        assertTrue(host.state.value.changingTrack)
+        host.disconnect()
+        held.complete(Unit)
+        runCurrent()
+        assertFalse("load" in log)
+        assertFalse(host.state.value.changingTrack)
+        assertEquals(oldNonce, environment.viewing!!.nonce)
+        assertNull(environment.viewing!!.previous)
+    }
+
+    @Test fun aRefusedAudioNegotiationNeverSelectsTheRequestedTrack() = runTest {
+        val original = decision(ITEM)
+        gateway.outcome = ClientResult.Success(
+            PlayOutcome.Play(
+                PlayDecision(
+                    ITEM,
+                    original.mediaSource.copy(
+                        defaultAudioStreamIndex = 1,
+                        mediaStreams = listOf(
+                            MediaStream(type = MediaStreamType.Audio, index = 1),
+                            MediaStream(type = MediaStreamType.Audio, index = 2)
+                        )
+                    ),
+                    original.method,
+                    original.url,
+                    original.headers,
+                    original.playSessionId
+                )
+            )
+        )
+        val host = host()
+        casting(host)
+        host.setAudio(-3)
+        runCurrent()
+        assertFalse(host.state.value.changingTrack)
+        assertNotNull(host.state.value.trackError)
+        assertFalse(host.state.value.controls!!.tracks.first { it.id == -3 }.selected)
+    }
+
+    @Test fun aReceiverPauseAndAnAppPauseBothUpdateDesiredReturnIntent() = runTest {
+        val host = host()
+        casting(host)
+        host.pause()
+        assertTrue(host.state.value.cast!!.owner.intent.paused)
+        link.sink!!.onStatus(status("paused", generation = host.generation()))
+        host.play()
+        assertFalse(host.state.value.cast!!.owner.intent.paused)
+        link.sink!!.onStatus(status("playing", generation = host.generation()))
+        link.sink!!.onStatus(status("paused", generation = host.generation()))
+        assertTrue(host.state.value.cast!!.owner.intent.paused)
+    }
+
+    @Test fun twoRapidAdvancesCannotReportAnOlderItemAfterTheNewest() = runTest {
+        val host = host()
+        host.openChooser(CastPlayRequest(listOf(CastPlayItem(ITEM, "One"), CastPlayItem("two", "Two"), CastPlayItem("three", "Three"))))
+        runCurrent()
+        host.pick(ROUTE)
+        link.sink!!.onConnected("Living room")
+        runCurrent()
+        fun observe(index: Int) {
+            val item = link.request!!.items[index]
+            link.sink!!.onStatus(
+                status("playing", positionMs = 25, generation = host.generation()).copy(customData = item.customData, contentUrl = item.url)
+            )
+        }
+        observe(0)
+        runCurrent()
+        gateway.items.clear()
+        gateway.reports.clear()
+        val held = CompletableDeferred<Unit>()
+        gateway.encodingGate = held
+        observe(1)
+        runCurrent()
+        observe(2)
+        runCurrent()
+        assertEquals(listOf(ITEM), gateway.items)
+        held.complete(Unit)
+        runCurrent()
+        assertEquals(listOf(ITEM, "two", "two", "three"), gateway.items)
+        assertEquals("three", host.state.value.queue.first { it.entry == host.state.value.cast!!.observed!!.entry }.itemId)
+    }
+
+    @Test fun aRejectedAudioLoadKeepsTheConfirmedTrackAndDurableBinding() = runTest {
+        val original = decision(ITEM)
+        fun source(index: Int, method: PlayMethod) = PlayDecision(
+            ITEM,
+            original.mediaSource.copy(
+                defaultAudioStreamIndex = index,
+                mediaStreams = listOf(
+                    MediaStream(type = MediaStreamType.Audio, index = 1),
+                    MediaStream(type = MediaStreamType.Audio, index = 2)
+                )
+            ),
+            method,
+            "http://server.example/jf/Videos/item-1/stream?AudioStreamIndex=$index",
+            emptyMap(),
+            "audio-$index"
+        )
+        gateway.outcome = ClientResult.Success(PlayOutcome.Play(source(1, PlayMethod.DirectPlay)))
+        val host = host()
+        casting(host)
+        val originalNonce = environment.viewing!!.nonce
+        gateway.outcome = ClientResult.Success(PlayOutcome.Play(source(2, PlayMethod.Transcode)))
+        link.loadResult = false
+        host.setAudio(-3)
+        runCurrent()
+        host.onProgress(6_000)
+        assertEquals(originalNonce, environment.viewing!!.nonce)
+        assertTrue(host.state.value.controls!!.tracks.first { it.id == -2 }.selected)
+        assertFalse(host.state.value.controls!!.tracks.first { it.id == -3 }.selected)
+        assertFalse(host.state.value.changingTrack)
+    }
+
+    @Test fun reloadStopsThePreviousPlaySessionAndNeverTheNewOne() = runTest {
+        val original = decision(ITEM)
+        fun source(index: Int, method: PlayMethod) = PlayDecision(
+            ITEM,
+            original.mediaSource.copy(
+                defaultAudioStreamIndex = index,
+                mediaStreams = listOf(
+                    MediaStream(type = MediaStreamType.Audio, index = 1),
+                    MediaStream(type = MediaStreamType.Audio, index = 2)
+                )
+            ),
+            method,
+            "http://server.example/jf/Videos/item-1/stream?AudioStreamIndex=$index",
+            emptyMap(),
+            "audio-$index"
+        )
+        gateway.outcome = ClientResult.Success(PlayOutcome.Play(source(1, PlayMethod.DirectPlay)))
+        val host = host()
+        casting(host)
+        gateway.reports.clear()
+        gateway.outcome = ClientResult.Success(PlayOutcome.Play(source(2, PlayMethod.Transcode)))
+        host.setAudio(-3)
+        runCurrent()
+        assertNotNull(environment.viewing!!.previous)
+        val loaded = link.request!!.items.single()
+        link.sink!!.onStatus(
+            status("playing", generation = host.generation()).copy(customData = loaded.customData, contentUrl = loaded.url)
+        )
+        runCurrent()
+        assertTrue("encoding:audio-1" in gateway.reports)
+        assertFalse("encoding:audio-2" in gateway.reports)
+        assertNull(environment.viewing!!.previous)
+    }
+
+    @Test fun queueEditsReachTheReceiverAndDoNotInventObservedOrder() = runTest {
+        gateway.followingItems = listOf(CastPlayItem("next", "Next"))
+        val host = host()
+        casting(host)
+        log.clear()
+        host.remove(listOf("1:next"))
+        host.move("1:next", 0)
+        host.append(listOf(CastPlayItem("extra", "Extra", music = true)), next = true)
+        runCurrent()
+        assertTrue("remove:[1:next]" in log)
+        assertTrue("order:[1:next, 0:item-1]" in log)
+        assertTrue("insert:1:1:next" in log)
+        assertEquals(listOf("0:item-1", "1:next"), host.state.value.queue.map { it.entry })
     }
 
     private fun liveDecision(): PlayDecision {
@@ -506,7 +910,7 @@ class CastSenderHostTest {
         val host = host()
         handoff(host, startMs = 5_000)
         host.resumeHere()
-        assertEquals(CastLocalStart(ITEM, 5_000, false, 1), host.state.value.localStart)
+        assertEquals(CastLocalStart(ITEM, 5_000, false, 1), host.state.value.localStart?.copy(items = emptyList(), entry = null))
         host.localStartHandled(1)
         assertNull(host.state.value.localStart)
     }
@@ -2502,5 +2906,144 @@ class CastSenderHostTest {
             assertFalse(it in castPickRefusalMessage(it, "Den"))
         }
         assertEquals("Finished playing on Den.", castNoticeMessage("receiver-finished", "Den"))
+    }
+}
+
+@org.junit.runner.RunWith(org.robolectric.RobolectricTestRunner::class)
+@org.robolectric.annotation.Config(sdk = [30], application = android.app.Application::class)
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+@OptIn(ExperimentalCoroutinesApi::class)
+class CastSystemSessionTest {
+    @Test fun musicUiProjectsReceiverOccurrenceAndItsControlsNeverStartALocalDecoder() = runTest {
+        val context = org.robolectric.RuntimeEnvironment.getApplication<android.app.Application>()
+        java.io.File(context.filesDir, "music").deleteRecursively()
+        val persistence = object : app.pictureshow.core.TextPersistence {
+            var value: String? = null
+            override suspend fun read() = value
+            override suspend fun write(value: String) {
+                this.value = value
+            }
+        }
+        val accounts = app.pictureshow.core.AccountStore(persistence)
+        accounts.remember(ACCOUNT)
+        val musicGateway = object : MusicGateway {
+            override suspend fun negotiate(account: Account, media: String, ceiling: Int): ClientResult<PlayOutcome> =
+                error("local negotiation")
+            override suspend fun start(account: Account, info: app.pictureshow.core.playback.PlaybackProgressInfo) = error("local start")
+            override suspend fun progress(account: Account, info: app.pictureshow.core.playback.PlaybackProgressInfo) = Unit
+            override suspend fun stopped(account: Account, info: app.pictureshow.core.playback.PlaybackStopInfo) = Unit
+            override suspend fun check(account: Account, media: List<String>) = ClientResult.Success(media)
+            override suspend fun items(account: Account, media: List<String>) =
+                ClientResult.Success(emptyList<app.pictureshow.core.MediaItem>())
+        }
+        val music = MusicHost(
+            context, backgroundScope, accounts,
+            MusicStore(context, kotlinx.coroutines.test.StandardTestDispatcher(testScheduler)), musicGateway,
+            preferences = { app.pictureshow.core.playback.PlaybackPreferences() }, remoteAttached = { null }, remoteTarget = { null },
+            newPlayer = { error("local decoder") }, startService = {}, metered = { false }
+        )
+        val log = mutableListOf<String>()
+        val environment = FakeEnvironment(log)
+        val sender = CastSenderHost(backgroundScope, environment, FakeGateway(log)) { currentTime }
+        sender.bind(ACCOUNT)
+        music.bindCast(sender)
+        runCurrent()
+        sender.openChooser(
+            CastPlayRequest(
+                listOf(
+                    CastPlayItem(ITEM, "Song", music = true, entry = "a"),
+                    CastPlayItem(ITEM, "Song", music = true, entry = "b")
+                ),
+                startIndex = 1,
+                repeat = "all"
+            )
+        )
+        runCurrent()
+        sender.pick(ROUTE)
+        environment.built.sink!!.onConnected("Room")
+        runCurrent()
+        val loaded = environment.built.request!!.items[1]
+        sender.onStatus(
+            CastStatus(
+                mediaSession = 7,
+                playerState = "playing",
+                positionMs = 9_000,
+                customData = loaded.customData,
+                contentUrl = loaded.url,
+                queue = listOf("b", "a"),
+                repeat = "all",
+                commands = listOf("play", "pause", "seek", "stop")
+            )
+        )
+        runCurrent()
+        assertEquals("b", music.state.value.queue!!.current)
+        assertEquals("Song", music.state.value.current!!.track.title)
+        assertEquals(9_000, music.positionMs())
+        log.clear()
+        music.pause()
+        music.seekTo(12_000)
+        music.next()
+        music.remove("a")
+        music.setRepeat("one")
+        runCurrent()
+        assertTrue("pause" in log)
+        assertTrue("seek:12000" in log)
+        assertTrue("jump:a" in log)
+        assertTrue("remove:[a]" in log)
+        assertTrue("repeat:one" in log)
+        music.openCastChooser()
+        assertEquals(0, sender.chooserRequest!!.startIndex)
+        assertEquals(listOf("b", "a"), sender.chooserRequest!!.items.map { it.entry })
+    }
+
+    @Test fun systemPauseSeekVolumeAndStopTakeTheSameHostPath() = runTest {
+        val log = mutableListOf<String>()
+        val environment = FakeEnvironment(log)
+        val host = CastSenderHost(backgroundScope, environment, FakeGateway(log)) { currentTime }
+        host.bind(ACCOUNT)
+        host.openChooser(
+            CastPlayRequest(
+                listOf(
+                    CastPlayItem(ITEM, "Song", imageUrl = "https://example.test/art.jpg", music = true, artist = "Artist", album = "Album")
+                )
+            )
+        )
+        runCurrent()
+        host.pick(ROUTE)
+        environment.built.sink!!.onConnected("Room")
+        runCurrent()
+        val loaded = environment.built.request!!.items.single()
+        val observed = CastStatus(
+            mediaSession = 7,
+            playerState = "playing",
+            positionMs = 5_000,
+            durationMs = 60_000,
+            contentUrl = loaded.url,
+            customData = loaded.customData,
+            commands = listOf("play", "pause", "seek", "stop", "volume"),
+            volume = 0.5
+        )
+        host.onStatus(observed)
+        runCurrent()
+        val player = CastSessionPlayer(host)
+        assertEquals(androidx.media3.common.DeviceInfo.PLAYBACK_TYPE_REMOTE, player.deviceInfo.playbackType)
+        assertEquals("Song", player.mediaMetadata.title)
+        assertEquals("Artist", player.mediaMetadata.artist)
+        assertNotNull(player.mediaMetadata.artworkUri)
+        player.pause()
+        assertTrue("pause" in log)
+        assertTrue(host.state.value.cast!!.owner.intent.paused)
+        host.onStatus(observed.copy(playerState = "paused"))
+        player.refresh()
+        player.seekTo(10_000)
+        assertTrue("seek:10000" in log)
+        player.setDeviceVolume(70, 0)
+        player.setDeviceMuted(true, 0)
+        assertTrue("volume:0.7" in log)
+        assertTrue("mute:true" in log)
+        player.stop()
+        assertTrue("stop" in log)
+        assertEquals("returning", host.state.value.cast!!.owner.phase)
+        player.release()
     }
 }

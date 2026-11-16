@@ -8,11 +8,18 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsNotSelected
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.printToString
 import app.pictureshow.core.control.CastState
 import app.pictureshow.core.control.OwnerState
 import app.pictureshow.core.control.ViewingIdentity
@@ -25,6 +32,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
+@org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [30], application = Application::class, qualifiers = "w400dp-h800dp-port-xhdpi")
 class TouchCastScreenTest {
@@ -33,6 +41,69 @@ class TouchCastScreenTest {
     private val viewing = CastState(
         OwnerState(ViewingIdentity("s", "v", "route", "c", 2, "cast"), ViewingIdentity("s", "v", "phone", "p", 1), phase = "disconnected")
     )
+
+    private fun controlsUi(volume: Boolean): CastUi {
+        val observed = app.pictureshow.core.control.CastObservation(
+            mediaSession = 7,
+            generation = 2,
+            playerState = "playing",
+            ticks = 870000000,
+            durationTicks = 6000000000,
+            entry = "a",
+            commands = listOf("play", "pause", "seek", "stop", "tracks") + if (volume) listOf("volume") else emptyList()
+        )
+        val state = viewing.copy(owner = viewing.owner.copy(phase = "active"), link = "connected", observed = observed)
+        val controls = app.pictureshow.core.control.castControls(
+            app.pictureshow.core.control.CastControlsInput(
+                commands = observed.commands,
+                durationTicks = observed.durationTicks,
+                tracks = listOf(
+                    app.pictureshow.core.control.CastTrack(-2, "audio", "English"),
+                    app.pictureshow.core.control.CastTrack(-3, "audio", "Unavailable", available = false),
+                    app.pictureshow.core.control.CastTrack(4, "subtitle", "English subtitles")
+                ),
+                activeTracks = listOf(-2, -3, 4)
+            )
+        )
+        return CastUi(cast = state, deviceName = "Living room", title = "An episode", controls = controls, volume = 0.45)
+    }
+
+    private fun capture(name: String) {
+        compose.waitForIdle()
+        val bitmap = compose.onRoot().captureToImage().asAndroidBitmap()
+        val scale = 900.0 / maxOf(bitmap.width, bitmap.height)
+        val small = android.graphics.Bitmap.createScaledBitmap(
+            bitmap,
+            (bitmap.width * scale).toInt(),
+            (bitmap.height * scale).toInt(),
+            true
+        )
+        val folder = java.io.File("build/reports/cast-ui").apply { mkdirs() }
+        java.io.File(folder, "$name.jpg").outputStream().use { small.compress(android.graphics.Bitmap.CompressFormat.JPEG, 55, it) }
+        java.io.File(folder, "$name.txt").writeText(compose.onRoot().printToString())
+    }
+
+    @Test fun volumeUnavailableIsDisabledWithReasonAndUnavailableAudioIsNeverSelected() {
+        compose.setContent { MaterialTheme { TouchCastScreen(controlsUi(false), inertCastSender(), {}) } }
+        compose.onNodeWithTag("cast:volume-slider").assertIsNotEnabled()
+        compose.onNodeWithTag("cast:mute").assertIsNotEnabled()
+        compose.onNodeWithTag("cast:volume-reason").assertIsDisplayed()
+        capture("phone-fixed-volume")
+        compose.onNodeWithTag("cast:track:-3").performScrollTo().assertIsNotEnabled().assertIsNotSelected()
+        capture("phone-tracks")
+    }
+
+    @Test fun castDeviceVolumeLayout() {
+        compose.setContent { MaterialTheme { TouchCastScreen(controlsUi(true), inertCastSender(), {}) } }
+        capture("phone-volume")
+    }
+
+    @Test
+    @Config(qualifiers = "w840dp-h800dp-land-hdpi")
+    fun tabletCastControlsLayout() {
+        compose.setContent { MaterialTheme { TouchCastScreen(controlsUi(true), inertCastSender(), {}) } }
+        capture("tablet-volume")
+    }
 
     /** Stop, Close and Forget all end with no viewing. "Nothing is casting" was a dead end the viewer had to back out of. */
     @Test fun endingTheViewingGoesBackToWhereItBegan() {
@@ -119,9 +190,9 @@ class TouchCastScreenTest {
     }
 
     // Recheck D3: only a Pictureshow TV can take a queue today, so with Cast playing the chooser could only say "None found".
-    @Test fun theTvQueueIsOfferedUnlessCastHoldsTheViewingAndNoTvIsAttached() {
+    @Test fun castDoesNotHideDiscoveryOfAnotherPictureshowTv() {
         assertEquals(true, offersTvQueue(CastUi(), tvAttached = false))
-        assertEquals(false, offersTvQueue(CastUi(cast = viewing), tvAttached = false))
+        assertEquals(true, offersTvQueue(CastUi(cast = viewing), tvAttached = false))
         assertEquals(true, offersTvQueue(CastUi(cast = viewing), tvAttached = true))
         val local = viewing.copy(owner = viewing.owner.copy(owner = viewing.owner.local))
         assertEquals(true, offersTvQueue(CastUi(cast = local), tvAttached = false))

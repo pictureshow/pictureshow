@@ -1,0 +1,272 @@
+{
+  "schemaVersion": 1,
+  "suite": "cast-queue",
+  "cases": [
+    {
+      "id": "cast-queue.duplicate-media-keeps-entry-identity",
+      "operation": "cast-queue",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "entries": [
+              "a",
+              "b",
+              "c"
+            ],
+            "media": [
+              "song",
+              "song",
+              "next"
+            ],
+            "current": "b"
+          },
+          "expected": {
+            "order": [
+              "a",
+              "b",
+              "c"
+            ],
+            "item": "song",
+            "next": "c",
+            "previous": "a",
+            "repeat": "off",
+            "reason": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-queue.receiver-order-wins-on-reattach",
+      "operation": "cast-queue",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "entries": [
+              "a",
+              "b",
+              "c"
+            ],
+            "media": [
+              "one",
+              "two",
+              "three"
+            ],
+            "current": "a",
+            "receiverOrder": [
+              "c",
+              "a",
+              "b"
+            ],
+            "repeat": "all"
+          },
+          "expected": {
+            "order": [
+              "c",
+              "a",
+              "b"
+            ],
+            "item": "one",
+            "next": "b",
+            "previous": "c",
+            "repeat": "all",
+            "reason": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-queue.natural-end-wraps-only-repeat-all",
+      "operation": "cast-queue",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "entries": [
+              "a",
+              "b"
+            ],
+            "media": [
+              "one",
+              "two"
+            ],
+            "current": "b",
+            "repeat": "all"
+          },
+          "expected": {
+            "item": "two",
+            "next": "a"
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-queue.repeat-one-is-a-receiver-mode-not-a-second-advance",
+      "operation": "cast-queue",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "entries": [
+              "a",
+              "b"
+            ],
+            "media": [
+              "one",
+              "two"
+            ],
+            "current": "b",
+            "repeat": "one"
+          },
+          "expected": {
+            "item": "two",
+            "next": null,
+            "repeat": "one"
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-queue.foreign-order-cannot-invent-media",
+      "operation": "cast-queue",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "entries": [
+              "a",
+              "b"
+            ],
+            "media": [
+              "one",
+              "two"
+            ],
+            "current": "a",
+            "receiverOrder": [
+              "a",
+              "foreign"
+            ]
+          },
+          "expected": {
+            "order": [
+              "a",
+              "b"
+            ],
+            "item": "one",
+            "reason": "foreign-queue"
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-queue.missing-entry-never-falls-back-to-first-item",
+      "operation": "cast-queue",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "entries": [
+              "a",
+              "b"
+            ],
+            "media": [
+              "one",
+              "two"
+            ],
+            "current": "foreign"
+          },
+          "expected": {
+            "item": null,
+            "next": null,
+            "previous": null,
+            "reason": "unknown-entry"
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-queue.paused-audio-reload-keeps-observed-moment",
+      "operation": "track-reload",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "ticks": "870000000",
+            "paused": true,
+            "available": true,
+            "durationTicks": "900000000"
+          },
+          "expected": {
+            "allowed": true,
+            "ticks": "870000000",
+            "paused": true,
+            "action": "renegotiate-and-load"
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-queue.unavailable-audio-cannot-load",
+      "operation": "track-reload",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "ticks": "870000000",
+            "paused": false,
+            "available": false
+          },
+          "expected": {
+            "allowed": false,
+            "action": "unavailable"
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-queue.audio-reload-clamps-to-duration",
+      "operation": "track-reload",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "ticks": "990",
+            "paused": false,
+            "available": true,
+            "durationTicks": "500"
+          },
+          "expected": {
+            "ticks": "500",
+            "paused": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-queue.music-uses-receiver-audio-profile",
+      "operation": "profile-music",
+      "state": {},
+      "steps": [
+        {
+          "event": {},
+          "expected": {
+            "DirectPlayProfiles": [
+              {
+                "Container": "mp4,m4v",
+                "AudioCodec": "aac,mp3",
+                "VideoCodec": "h264",
+                "Type": "Video"
+              },
+              {
+                "Container": "mp3,m4a,aac,mp4",
+                "AudioCodec": "aac,mp3",
+                "Type": "Audio"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

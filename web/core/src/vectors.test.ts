@@ -60,6 +60,7 @@ const spec =
     fileURLToPath(new URL("../../../spec", import.meta.url));
 // Frozen by the Android reference and owed by this runner: visible as todos, never as passes.
 const pendingPortSuites = new Set([
+    "cast-queue",
     // AUTH-10 retained-card sign-out: desktop/core implementation; web runtime port owed.
     "account-sign-out",
     // Search presentation (CAT-14..16 desktop contract); web search runs its own CAT-14a cases.

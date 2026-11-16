@@ -10704,6 +10704,181 @@
           }
         }
       ]
+    },
+    {
+      "id": "cast-handoff.system-pause-updates-intent-through-app-command",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "cast",
+            "session": "c",
+            "generation": "2",
+            "kind": "cast"
+          },
+          "phase": "active",
+          "generation": "2",
+          "intent": {
+            "entry": "a",
+            "ticks": "100",
+            "paused": false,
+            "queue": [
+              "a",
+              "b"
+            ]
+          }
+        },
+        "link": "connected",
+        "mediaSession": "7",
+        "observed": {
+          "mediaSession": "7",
+          "generation": "2",
+          "entry": "a",
+          "ticks": "100",
+          "playerState": "playing",
+          "commands": [
+            "play",
+            "pause",
+            "seek",
+            "stop"
+          ]
+        },
+        "commands": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "cast",
+            "session": "c",
+            "generation": "2",
+            "kind": "cast"
+          },
+          "observed": {
+            "entry": "a",
+            "ticks": "100",
+            "paused": false
+          }
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "command",
+            "value": "pause",
+            "id": "1",
+            "nowMs": "100"
+          },
+          "expected": {
+            "effect": "send-command",
+            "owner": {
+              "intent": {
+                "paused": true
+              }
+            },
+            "commands": {
+              "pending": {
+                "operation": "pause"
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-handoff.receiver-queue-and-pause-update-return-intent",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "cast",
+            "session": "c",
+            "generation": "2",
+            "kind": "cast"
+          },
+          "phase": "active",
+          "generation": "2",
+          "intent": {
+            "entry": "a",
+            "ticks": "100",
+            "paused": false,
+            "queue": [
+              "a",
+              "b"
+            ]
+          }
+        },
+        "link": "connected",
+        "mediaSession": "7",
+        "observed": {
+          "mediaSession": "7",
+          "generation": "2",
+          "entry": "a",
+          "ticks": "100",
+          "playerState": "playing",
+          "commands": [
+            "play",
+            "pause",
+            "seek",
+            "stop"
+          ]
+        },
+        "commands": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "cast",
+            "session": "c",
+            "generation": "2",
+            "kind": "cast"
+          },
+          "observed": {
+            "entry": "a",
+            "ticks": "100",
+            "paused": false
+          }
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "observe",
+            "nowMs": "100",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "entry": "b",
+              "ticks": "25",
+              "playerState": "paused",
+              "queue": [
+                "a",
+                "b"
+              ],
+              "commands": [
+                "play",
+                "pause",
+                "seek",
+                "stop"
+              ]
+            }
+          },
+          "expected": {
+            "owner": {
+              "intent": {
+                "entry": "b",
+                "ticks": "25",
+                "paused": true
+              }
+            },
+            "observed": {
+              "entry": "b",
+              "ticks": "25"
+            }
+          }
+        }
+      ]
     }
   ]
 }

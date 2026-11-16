@@ -22,12 +22,22 @@ internal class CastLoadItem(
     val live: Boolean,
     val tracks: List<CastLoadTrack>,
     /** What ties this media to its viewing: generation and identifiers only, never a credential. */
-    val customData: Map<String, String>
+    val customData: Map<String, String>,
+    val music: Boolean = false,
+    val artist: String? = null,
+    val album: String? = null,
+    val activeTracks: List<Long> = emptyList()
 ) {
     override fun toString() = "CastLoadItem(title=$title, tracks=${tracks.size})"
 }
 
-internal class CastLoadRequest(val items: List<CastLoadItem>, val startIndex: Int, val startMs: Long, val autoplay: Boolean)
+internal class CastLoadRequest(
+    val items: List<CastLoadItem>,
+    val startIndex: Int,
+    val startMs: Long,
+    val autoplay: Boolean,
+    val repeat: String = "off"
+)
 
 /** What the receiver said, with nothing added. mediaSession < 0 means it holds no media. */
 internal data class CastStatus(
@@ -44,7 +54,10 @@ internal data class CastStatus(
     val customData: Map<String, String> = emptyMap(),
     val activeTracks: List<Int> = emptyList(),
     val queue: List<String> = emptyList(),
-    val commands: List<String> = emptyList()
+    val commands: List<String> = emptyList(),
+    val volume: Double? = null,
+    val muted: Boolean = false,
+    val repeat: String = "off"
 ) {
     override fun toString() =
         "CastStatus(mediaSession=$mediaSession, playerState=$playerState, idleReason=$idleReason, positionMs=$positionMs)"
@@ -109,6 +122,13 @@ internal interface CastLink {
     fun seek(positionMs: Long, onResult: (Boolean) -> Unit)
     fun stop(onResult: (Boolean) -> Unit)
     fun setActiveTracks(ids: List<Long>, onResult: (Boolean) -> Unit)
+    fun setVolume(volume: Double, onResult: (Boolean) -> Unit) = onResult(false)
+    fun setMuted(muted: Boolean, onResult: (Boolean) -> Unit) = onResult(false)
+    fun queueJump(entry: String, onResult: (Boolean) -> Unit) = onResult(false)
+    fun setRepeat(mode: String, onResult: (Boolean) -> Unit) = onResult(false)
+    fun reorder(entries: List<String>, onResult: (Boolean) -> Unit) = onResult(false)
+    fun remove(entries: List<String>, onResult: (Boolean) -> Unit) = onResult(false)
+    fun insert(items: List<CastLoadItem>, before: String?, onResult: (Boolean) -> Unit) = onResult(false)
     fun requestStatus()
 
     /** Where the receiver is by now, worked out from its last status and the time since. Null with no media to ask about. */

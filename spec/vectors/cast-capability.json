@@ -829,6 +829,59 @@
           }
         }
       ]
+    },
+    {
+      "id": "cast-capability.audio-reload-does-not-need-text-edit-command",
+      "operation": "controls",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "commands": [
+              "play",
+              "pause",
+              "stop"
+            ],
+            "durationTicks": "1000",
+            "tracks": [
+              {
+                "id": -2,
+                "type": "audio",
+                "label": "English"
+              },
+              {
+                "id": -3,
+                "type": "audio",
+                "label": "Unavailable",
+                "available": false
+              }
+            ],
+            "activeTracks": [
+              -3
+            ]
+          },
+          "expected": {
+            "volume": false,
+            "volumeReason": "receiver-fixed-volume",
+            "tracks": [
+              {
+                "id": -2,
+                "type": "audio",
+                "label": "English",
+                "selectable": true,
+                "selected": false
+              },
+              {
+                "id": -3,
+                "type": "audio",
+                "label": "Unavailable",
+                "selectable": false,
+                "selected": false
+              }
+            ]
+          }
+        }
+      ]
     }
   ]
 }

@@ -730,7 +730,12 @@ internal fun TouchMusicNow(host: MusicHost, onBack: () -> Unit) {
     ) {
         item(key = "now") {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Box(Modifier.fillMaxWidth()) { TouchBack(onBack) }
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.weight(1f)) { TouchBack(onBack) }
+                    TextButton(onClick = host::openCastChooser, modifier = Modifier.heightIn(min = 48.dp).testTag("music:play-on")) {
+                        Text(androidx.compose.ui.res.stringResource(R.string.cast_play_on))
+                    }
+                }
                 AsyncImage(
                     model = row.track.artUrl,
                     contentDescription = null,

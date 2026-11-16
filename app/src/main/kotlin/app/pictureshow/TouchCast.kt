@@ -30,6 +30,8 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -46,8 +48,10 @@ import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
@@ -439,7 +443,8 @@ internal fun castSwitchState(capability: CastCapability, stored: Boolean): Boole
 }
 
 /** Only a Pictureshow TV takes a queue today, so Cast holding this viewing leaves nothing to send one to unless a TV is attached. */
-internal fun offersTvQueue(ui: CastUi, tvAttached: Boolean): Boolean = tvAttached || ui.cast?.owner?.owner?.kind != "cast"
+@Suppress("UNUSED_PARAMETER")
+internal fun offersTvQueue(ui: CastUi, tvAttached: Boolean): Boolean = true
 
 /** Stays in reach while browsing. It shows what the receiver reports and opens the controls. */
 @Composable
@@ -568,6 +573,7 @@ internal fun TouchCastScreen(ui: CastUi, host: CastSenderHost, onBack: () -> Uni
                 }
             }
         }
+        if (ui.queueError) Text(stringResource(R.string.cast_queue_failed))
         if (cast?.commands?.pending?.result == "rejected") {
             Text("$device didn't accept that.", modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
         }
@@ -592,18 +598,91 @@ internal fun TouchCastScreen(ui: CastUi, host: CastSenderHost, onBack: () -> Uni
                     modifier = Modifier.heightIn(min = 48.dp).testTag("cast:forward30")
                 ) { Text("Forward 30 s") }
             }
-            controls?.tracks?.takeIf { it.isNotEmpty() }?.let { tracks ->
-                Text("Subtitles", style = MaterialTheme.typography.titleSmall)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { host.setSubtitle(null) }, enabled = ready, modifier = Modifier.heightIn(min = 48.dp)) {
-                        Text(if (tracks.none { it.selected }) "Off (on)" else "Off")
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.testTag("cast:volume")) {
+                Text(stringResource(R.string.cast_volume), style = MaterialTheme.typography.titleSmall)
+                Slider(
+                    value = (ui.volume ?: 0.0).toFloat(),
+                    onValueChange = { host.setVolume(it.toDouble()) },
+                    enabled = ready && controls?.volume == true && ui.volume != null,
+                    modifier = Modifier.fillMaxWidth().testTag("cast:volume-slider").semantics {
+                        contentDescription = "Cast device volume"
                     }
-                    tracks.forEach { track ->
-                        OutlinedButton(
-                            onClick = { host.setSubtitle(track.id) },
-                            enabled = ready && track.selectable,
-                            modifier = Modifier.heightIn(min = 48.dp)
-                        ) { Text(if (track.selected) "${track.label} (on)" else track.label) }
+                )
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(stringResource(R.string.cast_mute))
+                    Switch(
+                        checked = ui.muted,
+                        onCheckedChange = host::setMuted,
+                        enabled = ready && controls?.volume == true,
+                        modifier = Modifier.testTag("cast:mute").semantics { contentDescription = "Mute Cast device" }
+                    )
+                }
+                if (controls?.volume ==
+                    false
+                ) {
+                    Text(stringResource(R.string.cast_fixed_volume), modifier = Modifier.testTag("cast:volume-reason"))
+                }
+            }
+            if (ui.changingTrack) Text(stringResource(R.string.cast_changing_audio))
+            ui.trackError?.let {
+                Text(
+                    stringResource(R.string.cast_audio_failed),
+                    modifier = Modifier.semantics {
+                        liveRegion =
+                            LiveRegionMode.Polite
+                    }
+                )
+            }
+            listOf("audio", "subtitle").forEach { type ->
+                val tracks = controls?.tracks.orEmpty().filter { it.type == type }
+                if (tracks.isNotEmpty()) {
+                    Text(
+                        stringResource(
+                            if (type ==
+                                "audio"
+                            ) {
+                                R.string.cast_audio
+                            } else {
+                                R.string.cast_subtitles
+                            }
+                        ),
+                        style = MaterialTheme.typography.titleSmall
+                    )
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (type == "subtitle") {
+                            OutlinedButton(
+                                onClick = { host.setSubtitle(null) },
+                                enabled = ready && !ui.changingTrack && observed?.commands?.contains("tracks") == true,
+                                modifier = Modifier.heightIn(min = 48.dp)
+                            ) {
+                                Text(if (tracks.none { it.selected }) "Off (on)" else "Off")
+                            }
+                        }
+                        tracks.forEach { track ->
+                            OutlinedButton(
+                                onClick = { if (type == "audio") host.setAudio(track.id) else host.setSubtitle(track.id) },
+                                enabled = ready && !ui.changingTrack && track.selectable,
+                                modifier = Modifier.heightIn(min = 48.dp).testTag("cast:track:${track.id}").semantics {
+                                    selected =
+                                        track.selected &&
+                                        !ui.changingTrack
+                                }
+                            ) {
+                                Text(if (track.selected && !ui.changingTrack) "${track.label} (on)" else track.label)
+                            }
+                        }
+                    }
+                }
+            }
+            if (ui.queue.size > 1) {
+                Text(stringResource(R.string.cast_queue), style = MaterialTheme.typography.titleSmall)
+                ui.queue.forEach { item ->
+                    TextButton(
+                        onClick = { host.jump(item.entry) },
+                        enabled = ready,
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("cast:queue:${item.entry}")
+                    ) {
+                        Text(if (item.entry == observed?.entry) "${item.title.orEmpty()} (on)" else item.title.orEmpty())
                     }
                 }
             }

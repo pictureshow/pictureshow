@@ -10,6 +10,7 @@ enum PendingSpecCaseManifest {
         let reason: String
     }
     static let suites: [String: Suite] = [
+        "cast-queue": Suite(count: 10, reason: "DMR queue identity and audio reload contracts await the Apple sender port."),
         "account-sign-out": Suite(count: 7, reason: "Merged on main after the Apple core was last synced; the account store lives in the app, whose AccountBookTests.testAccountSignOutVectors executes all seven."),
         "application": Suite(count: 53, reason: "Additional main contracts lack an Apple executor; existing active contracts in this suite continue to execute."),
         "catalog-return": Suite(count: 10, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
