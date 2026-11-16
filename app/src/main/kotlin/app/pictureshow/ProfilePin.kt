@@ -133,7 +133,7 @@ internal fun ProfilePinPad(
             modifier = Modifier.semantics { heading() }
         )
         subtitle?.let { Text(it, textAlign = TextAlign.Center, color = palette.variant, minLines = 2) }
-        val entered = stringResource(R.string.pin_entered, pin.length)
+        val entered = androidx.compose.ui.res.pluralStringResource(R.plurals.pin_entered, pin.length, pin.length)
         Text(
             if (pin.isEmpty()) "–" else "●".repeat(pin.length),
             style = MaterialTheme.typography.headlineMedium,
