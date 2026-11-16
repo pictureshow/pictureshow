@@ -2394,6 +2394,38 @@ enum SpecCaseManifest {
         missing-label-present-is-null|home-browse/missing-item-label
         whole-short-name-allowed|sync-chip-name/case
         whole-long-name-preferred|sync-chip-name/case
+        transport-open-is-not-session-ready|sync-socket-readiness/case
+        server-registration|sync-socket-readiness/case
+        invalid-registration|sync-socket-readiness/case
+        closed-session|sync-socket-readiness/case
+        new-session-needs-new-registration|sync-socket-readiness/case
+        join-ready|sync-membership-registration/case
+        join-leave|sync-membership-registration/case
+        join-timeout|sync-membership-registration/case
+        create-ready|sync-membership-registration/case
+        create-leave|sync-membership-registration/case
+        create-timeout|sync-membership-registration/case
+        join-route|sync-membership-registration/case
+        create-route|sync-membership-registration/case
+        existing-membership-rejoin-cancel|sync-membership-registration/case
+        confirmed-server-left-clears-membership|sync-membership-registration/case
+        definite-denial-clears-unsent-cancellation|sync-membership-registration/case
+        uncertain-post-retains-server-cleanup|sync-membership-registration/case
+        sync-application.deferred-server-7000|sync-application/deferred-seek
+        sync-application.deferred-server-0|sync-application/deferred-seek
+        sync-application.deferred-viewer-7000|sync-application/deferred-seek
+        sync-application.readiness-playing|sync-application/readiness-unpaused
+        sync-application.readiness-buffering-unpaused|sync-application/readiness-unpaused
+        sync-application.readiness-suppressed-unpaused|sync-application/readiness-unpaused
+        sync-application.readiness-buffering-paused|sync-application/readiness-unpaused
+        sync-application.readiness-paused|sync-application/readiness-unpaused
+        sync-application.pause-feedback-solo-native|sync-application/pause-feedback
+        sync-application.pause-feedback-group-barrier|sync-application/pause-feedback
+        sync-application.pause-feedback-group-viewer|sync-application/pause-feedback
+        sync-application.pause-feedback-group-server|sync-application/pause-feedback
+        sync-application.pause-feedback-solo-viewer|sync-application/pause-feedback
+        sync-application.pause-feedback-group-remote|sync-application/pause-feedback
+        sync-application.pause-feedback-solo-remote|sync-application/pause-feedback
         longest-proven-original-prefix|sync-chip-name/case
         six-complete-graphemes-accepted|sync-chip-name/case
         three-letter-stub-rejected|sync-chip-name/case
