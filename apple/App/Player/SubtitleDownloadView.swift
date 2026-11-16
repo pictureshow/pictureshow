@@ -18,17 +18,24 @@ struct SubtitleDownloadView: View {
             Group {
                 if let search { content(search) } else { Color.clear }
             }
+            #if os(tvOS)
+            // tvOS draws a navigation title in its dimmed grey, and the sheet's translucent glass let bright video
+            // show through behind it, so the title was barely readable. The TV panel draws its own header and an
+            // opaque page-colour background instead.
+            .safeAreaInset(edge: .top, spacing: 24) { tvHeader }
+            .toolbar(.hidden, for: .navigationBar)
+            #else
             .navigationTitle("Download subtitles")
-            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
-            #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } }
             }
+            #endif
         }
         #if os(tvOS)
         // A TV sheet sizes to its content; give the list and the long messages room to read from the couch.
         .frame(width: 1240, height: 880)
+        .presentationBackground(Theme.background)
         #endif
         .task {
             guard search == nil else { return }
@@ -38,6 +45,19 @@ struct SubtitleDownloadView: View {
         }
         .onDisappear { search?.close() }
     }
+
+    #if os(tvOS)
+    private var tvHeader: some View {
+        HStack {
+            Text("Download subtitles").font(.title2.weight(.bold)).foregroundStyle(.primary)
+                .accessibilityAddTraits(.isHeader)
+            Spacer()
+            Button("Close") { dismiss() }.secondaryAction()
+        }
+        .padding(.horizontal, 40).padding(.top, 40)
+        .focusSection()
+    }
+    #endif
 
     @ViewBuilder private func content(_ search: RemoteSubtitleSearch) -> some View {
         switch search.phase {
@@ -115,8 +135,8 @@ struct SubtitleDownloadView: View {
         VStack(spacing: 20) {
             blankText(text).frame(maxWidth: 640)
             HStack(spacing: 16) {
-                if let retry { Button("Try again", action: retry) }
-                Button("Close") { dismiss() }
+                if let retry { Button("Try again", action: retry).tvSecondaryAction() }
+                Button("Close") { dismiss() }.tvSecondaryAction()
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity).padding()
@@ -139,6 +159,17 @@ struct SubtitleDownloadView: View {
         case .failed: return "The server couldn't finish that. Try again, or pick another result."
         case .unreachable: return "Couldn't reach your server. Check your connection and try again."
         }
+    }
+}
+
+private extension View {
+    /// tvOS's system bordered button fills and letters itself in the app tint, so an unfocused one showed no words.
+    @ViewBuilder func tvSecondaryAction() -> some View {
+        #if os(tvOS)
+        secondaryAction()
+        #else
+        self
+        #endif
     }
 }
 

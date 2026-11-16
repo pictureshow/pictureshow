@@ -171,6 +171,10 @@ struct LibraryView: View {
             } label: {
                 Label("Sort: \(model.query.sort.title)", systemImage: "arrow.up.arrow.down")
             }
+            #if os(tvOS)
+            // The system's tvOS menu button filled and lettered itself in the app tint, so its words vanished.
+            .buttonStyle(TVActionStyle(prominent: false))
+            #endif
             Menu {
                 ForEach(LibraryQuery.Filter.allCases, id: \.self) { filter in
                     Toggle(filter.title, isOn: Binding(get: { model.query.filters.contains(filter) }, set: { on in
@@ -192,6 +196,9 @@ struct LibraryView: View {
             } label: {
                 Label("Filter", systemImage: model.query.filters.isEmpty && model.query.genres.isEmpty ? "line.3.horizontal.decrease.circle" : "line.3.horizontal.decrease.circle.fill")
             }
+            #if os(tvOS)
+            .buttonStyle(TVActionStyle(prominent: false))
+            #endif
             .task { await model.loadGenres(app: app) }
         }
     }

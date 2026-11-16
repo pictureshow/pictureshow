@@ -265,13 +265,14 @@ struct SystemPlayer: UIViewControllerRepresentable {
             }))
         } else if controller.decision != nil || controller.local != nil, let notice = TrackMenuNotice.empty(type: "Audio", tracks: audio.count) {
             // PLAY-08: say there is nothing to pick rather than leave the viewer looking for the menu.
-            menus.append(UIMenu(title: "Audio", image: UIImage(systemName: "speaker.wave.2"), children: [UIAction(title: notice, attributes: .disabled) { _ in }]))
+            menus.append(UIMenu(title: "Audio", image: UIImage(systemName: "speaker.wave.2"), children: [UIAction(title: notice) { _ in }]))
         }
         let subtitles = controller.subtitleStreams
         let target = controller.subtitleDownloadTarget
         var subtitleItems: [UIMenuElement] = []
         if let notice = TrackMenuNotice.empty(type: "Subtitle", tracks: subtitles.count) {
-            subtitleItems.append(UIAction(title: notice, attributes: .disabled) { _ in })
+            // Enabled so it draws in the label colour: a disabled item is the faint grey that was hard to read.
+            subtitleItems.append(UIAction(title: notice) { _ in })
         } else {
             let off = UIAction(title: "Off", state: controller.selectedSubtitle < 0 ? .on : .off) { [weak controller] _ in controller?.selectSubtitle(-1) }
             subtitleItems.append(UIMenu(options: [.displayInline, .singleSelection], children: [off] + subtitles.map { stream in
@@ -429,11 +430,11 @@ struct PlayerContent: View {
                 }
                 .pickerStyle(.menu)
             } else if controller.decision != nil || controller.local != nil, let notice = TrackMenuNotice.empty(type: "Audio", tracks: audio.count) {
-                Section("Audio") { Text(notice) }
+                Section("Audio") { MenuNotice(text: notice) }
             }
             if let notice = TrackMenuNotice.empty(type: "Subtitle", tracks: controller.subtitleStreams.count) {
                 // PLAY-08: one line instead of a lone Off.
-                Section("Subtitles") { Text(notice) }
+                Section("Subtitles") { MenuNotice(text: notice) }
             } else {
                 Picker("Subtitles", selection: Binding(get: { controller.selectedSubtitle }, set: { controller.selectSubtitle($0) })) {
                     Text("Off").tag(-1)
@@ -536,5 +537,18 @@ struct RoutePicker: UIViewRepresentable {
         return view
     }
     func updateUIView(_ view: AVRoutePickerView, context: Context) {}
+}
+#endif
+
+#if os(iOS)
+/// A line of information in a SwiftUI menu. A bare `Text` there becomes a disabled menu item, which iOS draws in the
+/// faint disabled grey (about 2.5:1 on the dark menu); an enabled item draws in the label colour. Choosing it only
+/// closes the menu.
+private struct MenuNotice: View {
+    let text: String
+    var body: some View {
+        Button {} label: { Text(text) }
+            .accessibilityRemoveTraits(.isButton)
+    }
 }
 #endif

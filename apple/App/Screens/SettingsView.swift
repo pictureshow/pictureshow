@@ -73,8 +73,8 @@ struct SettingsView: View {
             }
         }
         .confirmSignOut(account: $signOutAccount)
-        .navigationTitle("Settings")
         #if os(iOS)
+        .navigationTitle("Settings")
         .scrollContentBackground(.hidden)
         .pageBackground()
         #endif
@@ -126,7 +126,17 @@ struct SettingsView: View {
                 Button(role: .destructive) { signOutAccount = account } label: { DestructiveLabel("Sign out of \(account.username)", systemImage: "rectangle.portrait.and.arrow.right") }
             }
         } header: {
+            #if os(tvOS)
+            // tvOS pins a navigation title in place while a Form scrolls under it, so it drew over the rows. Like Home
+            // and Libraries, the TV page title is part of the content and scrolls away with it.
+            VStack(alignment: .leading, spacing: 28) {
+                Text("Settings").font(.title2.weight(.bold)).foregroundStyle(.primary).textCase(nil)
+                    .accessibilityAddTraits(.isHeader)
+                Text("Accounts")
+            }
+            #else
             Text("Accounts")
+            #endif
         } footer: {
             Text("Each account keeps its own watch history. Switching doesn't sign anyone out, and a signed-out account stays here until you remove it.")
         }
