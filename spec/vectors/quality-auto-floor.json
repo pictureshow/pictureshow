@@ -1,0 +1,195 @@
+{
+  "schemaVersion": 1,
+  "suite": "quality-auto-floor",
+  "cases": [
+    {
+      "id": "quality-auto-floor.tiny-estimate",
+      "input": {
+        "estimate": 427500,
+        "streamBitrate": 8000000,
+        "ceiling": 20000000
+      },
+      "expected": {
+        "cap": 4000000,
+        "reroute": true,
+        "notice": "Lowered to 4 Mbps because the connection slowed. Choose Quality \u2192 Auto to try again."
+      }
+    },
+    {
+      "id": "quality-auto-floor.floor",
+      "input": {
+        "estimate": 1,
+        "streamBitrate": 8000000,
+        "ceiling": 20000000
+      },
+      "expected": {
+        "cap": 4000000,
+        "reroute": true,
+        "notice": "Lowered to 4 Mbps because the connection slowed. Choose Quality \u2192 Auto to try again."
+      }
+    },
+    {
+      "id": "quality-auto-floor.above-short-clip",
+      "input": {
+        "estimate": 150000000,
+        "streamBitrate": 1430000,
+        "ceiling": 200000000
+      },
+      "expected": {
+        "cap": 120000000,
+        "reroute": false,
+        "notice": null
+      }
+    },
+    {
+      "id": "quality-auto-floor.equal-stream",
+      "input": {
+        "estimate": 6000000,
+        "streamBitrate": 4000000,
+        "ceiling": 20000000
+      },
+      "expected": {
+        "cap": 4000000,
+        "reroute": false,
+        "notice": null
+      }
+    },
+    {
+      "id": "quality-auto-floor.unknown-stream",
+      "input": {
+        "estimate": 6000000,
+        "streamBitrate": null,
+        "ceiling": 20000000
+      },
+      "expected": {
+        "cap": 4000000,
+        "reroute": false,
+        "notice": null
+      }
+    },
+    {
+      "id": "quality-auto-floor.at-floor",
+      "input": {
+        "estimate": 100000,
+        "streamBitrate": 8000000,
+        "ceiling": 4000000
+      },
+      "expected": {
+        "cap": 4000000,
+        "reroute": false,
+        "notice": null
+      }
+    },
+    {
+      "id": "quality-auto-floor.server-ceiling",
+      "input": {
+        "estimate": 100000,
+        "streamBitrate": 3000000,
+        "ceiling": 2000000
+      },
+      "expected": {
+        "cap": 2000000,
+        "reroute": false,
+        "notice": null
+      }
+    },
+    {
+      "id": "quality-auto-floor.invalid-estimate",
+      "input": {
+        "estimate": 0,
+        "streamBitrate": 30000000,
+        "ceiling": 20000000
+      },
+      "expected": {
+        "cap": 20000000,
+        "reroute": false,
+        "notice": null
+      }
+    },
+    {
+      "id": "quality-auto-floor.ladder-rounding",
+      "input": {
+        "estimate": 18000000,
+        "streamBitrate": 16000000,
+        "ceiling": 20000000
+      },
+      "expected": {
+        "cap": 10000000,
+        "reroute": true,
+        "notice": "Lowered to 10 Mbps because the connection slowed. Choose Quality \u2192 Auto to try again."
+      }
+    },
+    {
+      "id": "quality-auto-floor.url-ceiling-cannot-inflate-clock",
+      "operation": "stream-bitrate",
+      "input": {
+        "method": "Transcode",
+        "source": {
+          "Bitrate": 1010000
+        },
+        "url": "https://example.test/master.m3u8?VideoCodec=h264&AudioCodec=aac&VideoBitrate=199800000&AudioBitrate=128000"
+      },
+      "expected": null
+    },
+    {
+      "id": "quality-auto-floor.converted-cap-below-source",
+      "operation": "stream-bitrate",
+      "input": {
+        "method": "Transcode",
+        "source": {
+          "Bitrate": 50000000
+        },
+        "url": "https://example.test/master.m3u8?VideoCodec=h264&AudioCodec=aac&VideoBitrate=8000000&AudioBitrate=128000"
+      },
+      "expected": null
+    },
+    {
+      "id": "quality-auto-floor.unknown-source-not-a-measured-rate",
+      "operation": "stream-bitrate",
+      "input": {
+        "method": "Transcode",
+        "source": {
+          "Bitrate": null
+        },
+        "url": "https://example.test/master.m3u8?VideoCodec=h264&AudioCodec=aac&VideoBitrate=199800000&AudioBitrate=128000"
+      },
+      "expected": null
+    },
+    {
+      "id": "quality-auto-floor.remux-may-omit-audio-tracks",
+      "operation": "stream-bitrate",
+      "input": {
+        "method": "Transcode",
+        "source": {
+          "Bitrate": 8000000,
+          "MediaStreams": [
+            {
+              "Type": "Video",
+              "BitRate": 3000000
+            }
+          ]
+        },
+        "url": "https://example.test/master.m3u8?VideoCodec=copy&AudioCodec=copy"
+      },
+      "expected": 3000000
+    },
+    {
+      "id": "quality-auto-floor.audio-conversion-copied-video-bound",
+      "operation": "stream-bitrate",
+      "input": {
+        "method": "Transcode",
+        "source": {
+          "Bitrate": 8000000,
+          "MediaStreams": [
+            {
+              "Type": "Video",
+              "BitRate": 3000000
+            }
+          ]
+        },
+        "url": "https://example.test/master.m3u8?VideoCodec=copy&AudioCodec=aac&AudioBitrate=99999999"
+      },
+      "expected": 3000000
+    }
+  ]
+}

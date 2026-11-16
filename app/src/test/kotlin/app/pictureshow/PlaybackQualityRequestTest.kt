@@ -75,9 +75,9 @@ class PlaybackQualityRequestTest {
                     if (request.url.encodedPath.endsWith("PlaybackInfo")) {
                         requests += Json.parseToJsonElement(request.body.toByteArray().decodeToString()).jsonObject
                         respond(
-                            """{"MediaSources":[{"Id":"src","Container":"mkv","SupportsTranscoding":true,
+                            """{"MediaSources":[{"Id":"src","Container":"mkv","Bitrate":8000000,"SupportsDirectPlay":true,"SupportsTranscoding":true,
                             "DefaultAudioStreamIndex":2,"DefaultSubtitleStreamIndex":7,"MediaStreams":[{"Type":"Audio","Index":2,"Codec":"aac"},{"Type":"Subtitle","Index":7,"Codec":"subrip","IsExternal":true,"DeliveryUrl":"/sub.srt"}],
-                            "TranscodingUrl":"/videos/item/master.m3u8?MediaSourceId=src","TranscodingSubProtocol":"hls","TranscodingContainer":"mp4"}],"PlaySessionId":"view"}""",
+                            "TranscodingUrl":"/videos/item/master.m3u8?MediaSourceId=src&VideoBitrate=8000000&AudioBitrate=128000","TranscodingSubProtocol":"hls","TranscodingContainer":"mp4"}],"PlaySessionId":"view"}""",
                             HttpStatusCode.OK,
                             headersOf(HttpHeaders.ContentType, "application/json")
                         )

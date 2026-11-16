@@ -55,7 +55,7 @@
         "network": "Home",
         "estimatedBandwidth": 2000000
       },
-      "expected": 1600000
+      "expected": 4000000
     },
     {
       "id": "playback-settings.quality.negative-bandwidth-ignored",

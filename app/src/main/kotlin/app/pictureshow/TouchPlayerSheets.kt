@@ -251,6 +251,7 @@ private fun TouchPlaybackInformation(host: PlaybackHostState) {
         return
     }
     val tracks = rememberReceivedTracks(host.player)
+    val speed by host.output.speed.collectAsState()
     Column(Modifier.verticalScroll(rememberScrollState()).testTag("touch:info"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(PlaybackInformation.method(decision), style = MaterialTheme.typography.titleMedium)
         playbackInformationSections(
@@ -260,7 +261,9 @@ private fun TouchPlaybackInformation(host: PlaybackHostState) {
             host.effectiveSettings.maxStreamingBitrate / 1_000_000,
             tracks,
             host.localPreferences.tuning,
-            host.effectiveSettings.maxStreamingBitrate
+            host.effectiveSettings.maxStreamingBitrate,
+            host.adaptiveQualityNotice,
+            speed.encodedAudio
         ).forEach { section ->
             Text(
                 section.title,

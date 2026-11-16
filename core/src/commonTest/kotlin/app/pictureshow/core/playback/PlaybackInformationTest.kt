@@ -42,4 +42,25 @@ class PlaybackInformationTest {
         assertEquals("Not reported", PlaybackInformation.resolution(1920, null))
         assertEquals("Not reported", PlaybackInformation.codec("https://private.example.test"))
     }
+
+    @Test fun currentBitrateUsesUnchangedBytesRatherThanEncoderCeilings() {
+        val source = MediaSourceInfo(
+            bitrate = 8_000_000,
+            mediaStreams = listOf(
+                MediaStream(type = MediaStreamType.Video, codec = "h264", bitRate = 3_000_000)
+            )
+        )
+        fun stream(query: String) = PlayDecision(
+            "film",
+            source,
+            PlayMethod.Transcode,
+            "https://example.test/master.m3u8?$query",
+            emptyMap(),
+            null
+        )
+        assertEquals(3_000_000, PlaybackInformation.streamBitrate(stream("VideoCodec=copy&AudioCodec=aac&AudioBitrate=128000")))
+        assertEquals(3_000_000, PlaybackInformation.streamBitrate(stream("VideoCodec=copy&AudioCodec=aac")))
+        assertEquals(3_000_000, PlaybackInformation.streamBitrate(stream("VideoCodec=copy&AudioCodec=copy")))
+        assertEquals(null, PlaybackInformation.streamBitrate(stream("VideoCodec=h264&VideoBitrate=2000000&AudioBitrate=128000")))
+    }
 }

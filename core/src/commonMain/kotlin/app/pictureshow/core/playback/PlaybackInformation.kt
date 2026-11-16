@@ -41,21 +41,125 @@ object PlaybackInformation {
 
     fun codec(value: String?): String = value?.takeIf { it.matches(Regex("[A-Za-z0-9_.-]{1,32}")) }?.uppercase() ?: "Not reported"
 
+    /** URL bitrate parameters are ceilings, not output measurements. Only unchanged source bytes establish a rate. */
+    fun streamBitrate(decision: PlayDecision?): Int? {
+        if (decision == null) return null
+        val sourceRate = decision.mediaSource.bitrate?.takeIf { it > 0 }
+        if (decision.method != PlayMethod.Transcode) return sourceRate
+        if (!videoCopied(decision)) return null
+        // Remux can omit unselected audio tracks. Copied video alone is a safe lower bound; file total and encoder ceilings are not.
+        return decision.mediaSource.mediaStreams.firstOrNull { it.type == MediaStreamType.Video }?.bitRate?.takeIf { it > 0 }
+    }
+
+    data class ReceivedVideo(val width: Int? = null, val height: Int? = null, val codec: String? = null)
+
+    /** Observations only: dimensions and codecs do not prove which display/decoder/server setting caused conversion. */
+    fun observations(
+        decision: PlayDecision,
+        received: ReceivedVideo,
+        device: String = "this device",
+        receiverAudio: Boolean = false
+    ): List<String> = buildList {
+        val source = decision.mediaSource.mediaStreams.firstOrNull { it.type == MediaStreamType.Video }
+        val codes = decision.transcodeReasons.map { it.lowercase() }.toSet()
+        if (source?.width != null &&
+            source.height != null &&
+            source.width > 0 &&
+            source.height > 0 &&
+            received.width != null &&
+            received.height != null &&
+            received.width > 0 &&
+            received.height > 0 &&
+            (source.width != received.width || source.height != received.height) &&
+            "videoresolutionnotsupported" !in codes
+        ) {
+            add(
+                "Scaled from ${source.width}×${source.height} to ${received.width}×${received.height} during playback. The server did not report a resolution reason."
+            )
+        }
+        val before = codec(source?.codec)
+        val after = codec(received.codec)
+        fun canonical(value: String) = when (value) {
+            "AVC", "AVC1" -> "H264"
+            "H265", "HVC1", "HEV1" -> "HEVC"
+            else -> value
+        }
+        if (before != "Not reported" &&
+            after != "Not reported" &&
+            canonical(before) != canonical(after) &&
+            codes.none {
+                it in
+                    setOf(
+                        "videocodecnotsupported",
+                        "videoprofilenotsupported",
+                        "videolevelnotsupported",
+                        "videobitdepthnotsupported",
+                        "videocodectagnotsupported"
+                    )
+            }
+        ) {
+            add("Video changed from $before to $after during playback. The server did not report a codec reason.")
+        }
+        if (decision.method == PlayMethod.DirectPlay) {
+            add(if (receiverAudio) "Video decoded by $device. Audio sent to your receiver for decoding." else "Decoded by $device.")
+        }
+    }
+
     fun reasons(
         decision: PlayDecision,
         qualityMbps: Int? = null,
         tuning: PlaybackTuning = PlaybackTuning(),
-        activeBitrate: Int? = null
+        activeBitrate: Int? = null,
+        audioIndex: Int? = null
     ): List<String> {
         if (decision.method != PlayMethod.Transcode) return emptyList()
-        return decision.transcodeReasons.map { reason(it, qualityMbps, tuning, activeBitrate) }.distinct().ifEmpty {
+        val video = decision.mediaSource.mediaStreams.firstOrNull { it.type == MediaStreamType.Video }
+        val audio = decision.mediaSource.mediaStreams.firstOrNull {
+            it.type == MediaStreamType.Audio && it.index == (audioIndex ?: decision.mediaSource.defaultAudioStreamIndex)
+        }
+        val videoName = codec(video?.codec).takeUnless { it == "Not reported" }?.let { name ->
+            val profile = video?.profile?.takeIf { it.matches(Regex("[A-Za-z0-9 ._-]{1,40}")) }
+            if (profile == null) name else "$name $profile"
+        }
+        return decision.transcodeReasons.map {
+            reason(it, qualityMbps, tuning, activeBitrate, videoName, codec(audio?.codec).takeUnless { it == "Not reported" })
+        }.distinct().ifEmpty {
             listOf("The server did not report why it is converting this stream.")
         }
     }
 
     /** Keep unknown future codes honest, and never echo a raw server-supplied value. */
-    fun reason(code: String, qualityMbps: Int? = null, tuning: PlaybackTuning = PlaybackTuning(), activeBitrate: Int? = null): String {
+    fun reason(
+        code: String,
+        qualityMbps: Int? = null,
+        tuning: PlaybackTuning = PlaybackTuning(),
+        activeBitrate: Int? = null,
+        videoCodec: String? = null,
+        audioCodec: String? = null
+    ): String {
         val normalized = code.lowercase()
+        if (normalized == "videocodecnotsupported" && videoCodec != null) {
+            return "This device cannot decode $videoCodec. The server converts the video. Try a version with a supported video codec."
+        }
+        if (normalized == "audiocodecnotsupported" && audioCodec != null) {
+            return "This device cannot decode $audioCodec. The server converts the audio. Choose a compatible audio track if available."
+        }
+        if (videoCodec != null) {
+            when (normalized) {
+                "videoprofilenotsupported" ->
+                    return "This device does not support the $videoCodec codec profile. The server converts the video."
+                "videolevelnotsupported" ->
+                    return "$videoCodec exceeds the decoder's supported codec level. The server converts the video."
+                "videocodectagnotsupported" ->
+                    return "This device does not recognize the $videoCodec codec tag. The server makes a compatible stream."
+                "videobitdepthnotsupported" ->
+                    return "This device cannot decode $videoCodec at this bit depth. The server converts the video."
+            }
+        }
+        if (normalized == "audioprofilenotsupported" && audioCodec != null) {
+            return "This device does not support the $audioCodec codec profile. The server converts the audio. " +
+                "Choose another audio track if available."
+        }
         if (normalized == "subtitlecodecnotsupported" && tuning.subtitleBurnIn == SubtitleBurnIn.Always) {
             return "Your subtitle burn-in setting requires conversion of the video."
         }

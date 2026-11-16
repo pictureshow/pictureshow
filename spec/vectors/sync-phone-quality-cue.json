@@ -8,8 +8,8 @@
         "widthDp": 360,
         "heightDp": 780,
         "fontScale": 1.3,
-        "bandwidthA": 1000000,
-        "bandwidthB": 2000000,
+        "bandwidthA": 6000000,
+        "bandwidthB": 18000000,
         "settleMs": 128,
         "menuSettleMs": 400,
         "mountSettleMs": 400
@@ -28,8 +28,8 @@
         "widthDp": 360,
         "heightDp": 780,
         "fontScale": 1.3,
-        "bandwidthA": 1000000,
-        "bandwidthB": 2000000,
+        "bandwidthA": 6000000,
+        "bandwidthB": 18000000,
         "settleMs": 128,
         "durationMs": 5000,
         "visibleCheckMs": 4500,
@@ -56,7 +56,7 @@
         "fontScale": 1.3,
         "settleMs": 128,
         "clearBandwidth": null,
-        "restoreBandwidth": 2000000
+        "restoreBandwidth": 18000000
       },
       "expected": {
         "nullFact": true,
@@ -71,8 +71,8 @@
         "widthDp": 360,
         "heightDp": 780,
         "fontScale": 1.3,
-        "bandwidthA": 1000000,
-        "bandwidthB": 2000000,
+        "bandwidthA": 6000000,
+        "bandwidthB": 18000000,
         "settleMs": 128,
         "blockingDurationMs": 10000,
         "blockedCheckMs": 500,

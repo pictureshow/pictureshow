@@ -8,10 +8,13 @@ package app.pictureshow
 import android.content.Context
 import android.hardware.display.DisplayManager
 import android.media.AudioDeviceInfo
+import android.media.AudioManager
 import android.media.MediaCodecInfo
 import android.media.MediaCodecInfo.CodecProfileLevel
 import android.media.MediaCodecList
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.view.Display
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -30,7 +33,66 @@ import app.pictureshow.core.playback.VideoCodec
 import app.pictureshow.core.playback.VideoDecoder
 import app.pictureshow.core.playback.VideoPerformancePoint
 import app.pictureshow.core.playback.VideoProfileCapability
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.floor
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
+
+/** Serializes cold probes across Play and Settings. No work (including the key) executes on the caller's dispatcher. */
+internal data class CapabilitySnapshot(val revision: Long, val capabilities: DeviceCapabilities)
+
+internal class CapabilitySnapshotCache {
+    private val mutex = Mutex()
+    private var key: Any? = null
+    private var value: DeviceCapabilities? = null
+    private var revision = 0L
+
+    suspend fun snapshot(route: () -> Any, load: () -> DeviceCapabilities): DeviceCapabilities = capture(route, load).capabilities
+
+    suspend fun capture(route: () -> Any, load: () -> DeviceCapabilities): CapabilitySnapshot = withContext(Dispatchers.Default) {
+        mutex.withLock {
+            val current = route()
+            if (key != current || value == null) {
+                val loaded = load()
+                value = loaded
+                key = current
+                revision++
+            }
+            CapabilitySnapshot(revision, requireNotNull(value))
+        }
+    }
+}
+
+/** Keeps notification intent when a newer route/display snapshot supersedes a suspended one. Main-confined. */
+internal class CapabilityUpdates<T>(
+    private val scope: CoroutineScope,
+    private val load: suspend () -> T,
+    private val onChanged: (T) -> Unit,
+    notifyInitial: Boolean
+) {
+    private var previous: T? = null
+    private var notifyPending = notifyInitial
+    private var job: kotlinx.coroutines.Job? = null
+
+    fun refresh(force: Boolean = false) {
+        notifyPending = notifyPending || force
+        job?.cancel()
+        job = scope.launch {
+            val value = load()
+            val changed = previous != null && value != previous
+            previous = value
+            val notify = notifyPending || changed
+            notifyPending = false
+            if (notify) onChanged(value)
+        }
+    }
+}
 
 /** Runtime capabilities; no model-name allowlist. Own this for the player's lifetime and close its route receiver. */
 class DeviceCapabilityProbe(
@@ -39,7 +101,27 @@ class DeviceCapabilityProbe(
     private val ffmpegSupport: (String) -> Boolean = ::ffmpegSupports
 ) : AutoCloseable {
     private var receiver: AudioCapabilitiesReceiver? = null
-    private var routeCapabilities: AudioCapabilities? = null
+
+    @Volatile private var routeCapabilities: AudioCapabilities? = null
+    private var observerScope: CoroutineScope? = null
+    private var displayListener: DisplayManager.DisplayListener? = null
+
+    /** Process cache excludes viewer settings. The route key also catches changes while no screen observes them. */
+    suspend fun cachedSnapshot(): DeviceCapabilities = capture().capabilities
+
+    internal suspend fun capture(): CapabilitySnapshot = processCache.capture(
+        route = {
+            listOf(
+                routeGeneration.get(),
+                display(),
+                routeCapabilities ?: currentAudioCapabilities(),
+                context.getSystemService(AudioManager::class.java).getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+                    .map { it.id to it.type }.sortedBy { it.first },
+                AudioOutputFailures(context).rejected()
+            )
+        },
+        load = { snapshot().copy(settings = PlaybackSettings()) }
+    ).let { it.copy(capabilities = it.capabilities.copy(settings = settings)) }
 
     fun snapshot(): DeviceCapabilities {
         val decoders = MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos.filterNot { it.isEncoder }
@@ -116,15 +198,34 @@ class DeviceCapabilityProbe(
     }
 
     /** Media3 observes HDMI broadcasts, Bluetooth/device changes and surround settings; registration returns the initial route. */
-    fun start(onChanged: (DeviceCapabilities) -> Unit) {
+    fun start(notifyInitial: Boolean = true, onChanged: (DeviceCapabilities) -> Unit) =
+        observe(notifyInitial) { onChanged(it.capabilities) }
+
+    internal fun observe(notifyInitial: Boolean = true, onChanged: (CapabilitySnapshot) -> Unit) {
         close()
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+        observerScope = scope
+        val updates = CapabilityUpdates(scope, ::capture, onChanged, notifyInitial)
         receiver = AudioCapabilitiesReceiver(context, { capabilities ->
             routeCapabilities = capabilities
             AudioOutputFailures(context).clear()
-            // Equal codec lists can hide a new physical output; raw route/setting identity is
-            // checked by the refusal store on every snapshot as well as by the sink.
-            onChanged(snapshot())
+            routeGeneration.incrementAndGet()
+            updates.refresh(force = true)
         }, AudioAttributes.DEFAULT, null).also { routeCapabilities = it.register() }
+        val displays = context.getSystemService(DisplayManager::class.java)
+        displayListener = object : DisplayManager.DisplayListener {
+            override fun onDisplayAdded(displayId: Int) {
+                if (displayId == Display.DEFAULT_DISPLAY) updates.refresh()
+            }
+            override fun onDisplayRemoved(displayId: Int) {
+                if (displayId == Display.DEFAULT_DISPLAY) updates.refresh()
+            }
+            override fun onDisplayChanged(displayId: Int) {
+                if (displayId == Display.DEFAULT_DISPLAY) updates.refresh()
+            }
+        }.also { displays.registerDisplayListener(it, Handler(Looper.getMainLooper())) }
+        // Mode switches for frame-rate matching keep the same capability envelope and do not restart playback.
+        updates.refresh()
     }
 
     /** Forward the actual AudioTrack route when available; null follows Media3's default route discovery. */
@@ -133,6 +234,10 @@ class DeviceCapabilityProbe(
     }
 
     override fun close() {
+        observerScope?.cancel()
+        observerScope = null
+        displayListener?.let { context.getSystemService(DisplayManager::class.java).unregisterDisplayListener(it) }
+        displayListener = null
         receiver?.unregister()
         receiver = null
         routeCapabilities = null
@@ -223,6 +328,9 @@ class DeviceCapabilityProbe(
     }
 
     companion object {
+        private val processCache = CapabilitySnapshotCache()
+        private val routeGeneration = AtomicLong()
+
         internal fun audioOutput(capabilities: AudioCapabilities): AudioOutput = AudioOutput(
             // getMaxChannelCount includes compressed passthrough and must not be used as the PCM count.
             pcmChannels = capabilities.speakerLayoutChannelMasks.maxOfOrNull { Integer.bitCount(it) } ?: 2,

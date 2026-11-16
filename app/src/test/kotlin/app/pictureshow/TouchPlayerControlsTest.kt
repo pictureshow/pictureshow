@@ -480,7 +480,10 @@ class TouchPlayerControlsTest {
             playbackInformationSections(decision(method), 1, -1, null, androidx.media3.common.Tracks.EMPTY).map { it.title }
         }
         assertEquals("Why the server converts this stream", sections(PlayMethod.Transcode).first())
-        assertEquals(listOf("Server-reported media", "Stream received by this device"), sections(PlayMethod.DirectPlay))
+        assertEquals(
+            listOf("Playback on this device", "Server-reported media", "Stream received by this device"),
+            sections(PlayMethod.DirectPlay)
+        )
     }
 
     @Test fun conversionNoticeNamesThisPhoneAndATapOpensPlaybackInfo() {

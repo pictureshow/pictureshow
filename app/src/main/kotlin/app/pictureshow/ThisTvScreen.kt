@@ -46,7 +46,7 @@ import kotlinx.coroutines.withContext
 
 /** No account, client identity, device name or server information enters this capture. */
 internal suspend fun captureThisTv(context: Context, preferences: PlaybackPreferences): ThisTvReport = withContext(Dispatchers.IO) {
-    val capabilities = DeviceCapabilityProbe(context, preferences.deviceSettings()).use { it.snapshot() }
+    val capabilities = DeviceCapabilityProbe(context, preferences.deviceSettings()).use { it.cachedSnapshot() }
     val outputs = context.getSystemService(AudioManager::class.java).getDevices(AudioManager.GET_DEVICES_OUTPUTS)
         .map { device ->
             when (device.type) {

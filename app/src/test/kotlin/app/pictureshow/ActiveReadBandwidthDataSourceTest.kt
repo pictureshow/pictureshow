@@ -214,8 +214,8 @@ class ActiveReadBandwidthDataSourceTest {
                     if (request.url.encodedPath.endsWith("PlaybackInfo")) {
                         requests += Json.parseToJsonElement(request.body.toByteArray().decodeToString()).jsonObject
                         respond(
-                            """{"MediaSources":[{"Id":"src","Container":"mp4","SupportsDirectPlay":true,
-                            "SupportsTranscoding":true,"TranscodingUrl":"/videos/item/master.m3u8?MediaSourceId=src",
+                            """{"MediaSources":[{"Id":"src","Container":"mp4","SupportsDirectPlay":true,"Bitrate":8000000,
+                            "SupportsTranscoding":true,"TranscodingUrl":"/videos/item/master.m3u8?MediaSourceId=src&VideoBitrate=8000000&AudioBitrate=128000",
                             "TranscodingSubProtocol":"hls","TranscodingContainer":"mp4"}],"PlaySessionId":"view"}""",
                             HttpStatusCode.OK,
                             headersOf(HttpHeaders.ContentType, "application/json")

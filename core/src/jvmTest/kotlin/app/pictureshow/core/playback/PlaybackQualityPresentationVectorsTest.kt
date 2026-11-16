@@ -50,7 +50,8 @@ class PlaybackQualityPresentationVectorsTest {
                 "notice" -> PlaybackQualityPresentation.reductionNotice(
                     override,
                     input.getValue("activeBitrate").jsonPrimitive.int,
-                    input.getValue("configuredBitrate").jsonPrimitive.int
+                    input.getValue("configuredBitrate").jsonPrimitive.int,
+                    input["streamBitrate"]?.jsonPrimitive?.intOrNull
                 )?.let(::JsonPrimitive) ?: JsonNull
                 else -> error("Unhandled player quality operation")
             }

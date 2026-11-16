@@ -412,6 +412,11 @@ class DeviceCapabilityProbeTest {
                 .putExtra(AudioManager.EXTRA_MAX_CHANNEL_COUNT, 6)
         )
         shadowOf(android.os.Looper.getMainLooper()).idle()
+        val deadline = System.nanoTime() + 5_000_000_000L
+        while (changes == 0 && System.nanoTime() < deadline) {
+            Thread.sleep(10)
+            shadowOf(android.os.Looper.getMainLooper()).idle()
+        }
         assertTrue(changes > 0)
         assertEquals(setOf(PassthroughEncoding.AC3), probe.snapshot().audioOutput.passthrough)
         probe.close()
@@ -419,6 +424,36 @@ class DeviceCapabilityProbeTest {
         context.sendBroadcast(Intent(AudioManager.ACTION_HDMI_AUDIO_PLUG).putExtra(AudioManager.EXTRA_AUDIO_PLUG_STATE, 0))
         shadowOf(android.os.Looper.getMainLooper()).idle()
         assertEquals(before, changes)
+    }
+
+    @Test fun displayModeNotificationWithSameCapabilitiesDoesNotRestartPlayback() {
+        val probe = DeviceCapabilityProbe(context, ffmpegSupport = { false })
+        var changes = 0
+        probe.start { changes++ }
+        fun await(predicate: () -> Boolean) {
+            val deadline = System.nanoTime() + 5_000_000_000L
+            while (!predicate() && System.nanoTime() < deadline) {
+                Thread.sleep(10)
+                shadowOf(android.os.Looper.getMainLooper()).idle()
+            }
+            assertTrue(predicate())
+        }
+        try {
+            await { changes > 0 }
+            val before = changes
+            val listener = ReflectionHelpers.getField<DisplayManager.DisplayListener>(probe, "displayListener")
+            listener.onDisplayChanged(Display.DEFAULT_DISPLAY)
+            // Drain both the Default work and Main publication by waiting for the same cache request.
+            kotlinx.coroutines.runBlocking { probe.cachedSnapshot() }
+            Thread.sleep(100)
+            shadowOf(android.os.Looper.getMainLooper()).idle()
+            assertEquals(before, changes, "A frame-rate mode notification without changed capabilities must not reroute")
+            listener.onDisplayChanged(42)
+            shadowOf(android.os.Looper.getMainLooper()).idle()
+            assertEquals(before, changes, "An unrelated display must not reroute")
+        } finally {
+            probe.close()
+        }
     }
 
     private fun video(

@@ -38,7 +38,7 @@ internal class BandwidthQualityGuard {
     private var samples = 0
     private var lastChangeMs: Long? = null
     fun reduction(currentCap: Int, estimatedBitrate: Long, bytes: Long, nowMs: Long): Long? {
-        val proposedCap = (estimatedBitrate / 5 * 4).coerceIn(1, Int.MAX_VALUE.toLong()).toInt()
+        val proposedCap = app.pictureshow.core.playback.PlaybackTuning.automaticCap(currentCap, estimatedBitrate)
         if (bytes < 131_072 || estimatedBitrate <= 0 || estimatedBitrate >= currentCap || proposedCap >= currentCap) {
             samples = 0
             return null

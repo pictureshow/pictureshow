@@ -199,7 +199,19 @@ class SyncTouchPlayerIntentRegressionTest {
             playback = PlaybackHostState(MediaItem("film", "A film"), 20_000, output, {}, {})
             playback.sync = sync
             playback.playerSource = mutableStateOf(exposed)
-            playback.stateSource = mutableStateOf(PlaybackState(preparing = false))
+            playback.stateSource = mutableStateOf(
+                PlaybackState(
+                    preparing = false,
+                    decision = app.pictureshow.core.playback.PlayDecision(
+                        "film",
+                        app.pictureshow.core.playback.MediaSourceInfo(bitrate = 180_000_000),
+                        app.pictureshow.core.playback.PlayMethod.DirectPlay,
+                        "https://example.test/film",
+                        emptyMap(),
+                        null
+                    )
+                )
+            )
             playback.duration = 60_000
             sent.clear()
         }

@@ -981,8 +981,7 @@ internal fun Pictureshow(
                         supportedPassthrough = capabilities.audioOutput.passthrough
                         accepted = passthroughEncodingLabels(supportedPassthrough)
                     }
-                    update(probe.snapshot())
-                    probe.start(::update)
+                    probe.start(onChanged = ::update)
                     onDispose { probe.close() }
                 }
                 PlaybackSettingsScreen(
