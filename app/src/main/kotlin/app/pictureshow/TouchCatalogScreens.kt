@@ -717,7 +717,9 @@ internal fun TouchCatalogDetail(
             }
             // Trailers and extras sit with the title they belong to; More like this leads away from it, so it comes last.
             val discoveryShown = if (state.loading || state.error != null) emptyList() else discovery
-            discoveryShown.filter { it.key != "similar" }.forEach { row -> item(key = row.key) { TouchDiscoveryShelf(row, state.account, onDiscovery) } }
+            discoveryShown.filter {
+                it.key != "similar"
+            }.forEach { row -> item(key = row.key) { TouchDiscoveryShelf(row, state.account, onDiscovery) } }
             // Episodes come first on every width: on a series page they are what the viewer came for.
             // The frozen header can be a route card, which has no credits: the fresh read's credits still appear.
             val people = (state.item ?: item)?.people.orEmpty().filter { it.id.isNotBlank() }.distinctBy(MediaPerson::id)
@@ -765,7 +767,9 @@ internal fun TouchCatalogDetail(
                     }
                 }
             }
-            discoveryShown.filter { it.key == "similar" }.forEach { row -> item(key = row.key) { TouchDiscoveryShelf(row, state.account, onDiscovery) } }
+            discoveryShown.filter {
+                it.key == "similar"
+            }.forEach { row -> item(key = row.key) { TouchDiscoveryShelf(row, state.account, onDiscovery) } }
         }
         // Both overlays have no layout footprint: status and failure cannot move the action under a finger.
         page.status?.let { status ->
@@ -1309,5 +1313,8 @@ private fun TouchDiscoveryShelf(row: DiscoveryRow, account: Account, onDiscovery
         row.wide,
         subtitle = { byId[it.id]?.subtitle },
         announceSubtitle = row.key != "similar"
-    ) { card -> byId[card.id]?.let(onDiscovery); Unit }
+    ) { card ->
+        byId[card.id]?.let(onDiscovery)
+        Unit
+    }
 }

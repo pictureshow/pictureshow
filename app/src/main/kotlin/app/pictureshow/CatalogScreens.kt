@@ -2684,11 +2684,17 @@ fun CatalogDetail(
                             onOpen = if (discoveryRow == null) {
                                 onOpen
                             } else {
-                                { card -> discoveryRow.entries.firstOrNull { it.card.id == card.id }?.let(onDiscovery); Unit }
+                                { card ->
+                                    discoveryRow.entries.firstOrNull { it.card.id == card.id }?.let(onDiscovery)
+                                    Unit
+                                }
                             },
                             subtitles = if (section == "people") {
                                 cast.mapNotNull { person ->
-                                    (person.role?.takeIf(String::isNotBlank) ?: person.type?.takeIf(String::isNotBlank))?.let { person.id to it }
+                                    (person.role?.takeIf(String::isNotBlank) ?: person.type?.takeIf(String::isNotBlank))?.let {
+                                        person.id to
+                                            it
+                                    }
                                 }.toMap()
                             } else {
                                 discoveryRow?.entries?.mapNotNull { entry -> entry.subtitle?.let { entry.card.id to it } }?.toMap()

@@ -231,7 +231,11 @@ fun PhotoViewer(account: Account, viewModel: PhotoViewerViewModel, tv: Boolean, 
                     modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
                 )
                 if (tv && !menu) {
-                    Text("Left and Right change photo · OK for slideshow", color = Color(0xFFBBBBBB), style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        "Left and Right change photo · OK for slideshow",
+                        color = Color(0xFFBBBBBB),
+                        style = MaterialTheme.typography.bodySmall
+                    )
                 }
             }
         }
@@ -256,7 +260,14 @@ fun PhotoViewer(account: Account, viewModel: PhotoViewerViewModel, tv: Boolean, 
                     // On TV the menu gets out of the way of a slideshow that has just started.
                     if (tv && slideshow) menu = false
                 }
-                PhotoControl("Every $seconds seconds", tv, Modifier.semantics { contentDescription = "Slideshow speed, every $seconds seconds" }) {
+                PhotoControl(
+                    "Every $seconds seconds",
+                    tv,
+                    Modifier.semantics {
+                        contentDescription =
+                            "Slideshow speed, every $seconds seconds"
+                    }
+                ) {
                     touched++
                     seconds = SLIDESHOW_SECONDS[(SLIDESHOW_SECONDS.indexOf(seconds) + 1) % SLIDESHOW_SECONDS.size]
                 }

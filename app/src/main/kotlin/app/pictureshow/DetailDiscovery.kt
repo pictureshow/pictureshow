@@ -36,7 +36,8 @@ data class DetailDiscoveryState(
     val similar: List<MediaItem> = emptyList()
 )
 
-class DetailDiscoveryViewModel(private val account: Account, private val item: MediaItem, private val session: CatalogSession) : ViewModel() {
+class DetailDiscoveryViewModel(private val account: Account, private val item: MediaItem, private val session: CatalogSession) :
+    ViewModel() {
     private val mutableState = MutableStateFlow(DetailDiscoveryState())
     val state = mutableState.asStateFlow()
 

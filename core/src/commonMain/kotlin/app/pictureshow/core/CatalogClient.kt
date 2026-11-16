@@ -268,18 +268,17 @@ internal class CatalogClient(private val client: HttpClient, private val identit
     override suspend fun parentalRatings(account: Account): ClientResult<List<ParentalRating>> =
         request(account, "Localization/ParentalRatings")
 
-    override suspend fun photos(account: Account, parentId: String, sortBy: String, descending: Boolean): ClientResult<ItemPage> =
-        request(
-            account,
-            "Items",
-            mapOf(
-                "parentId" to parentId,
-                "includeItemTypes" to "Photo",
-                "sortBy" to sortBy,
-                "sortOrder" to if (descending) "Descending" else "Ascending",
-                "limit" to "1000"
-            )
+    override suspend fun photos(account: Account, parentId: String, sortBy: String, descending: Boolean): ClientResult<ItemPage> = request(
+        account,
+        "Items",
+        mapOf(
+            "parentId" to parentId,
+            "includeItemTypes" to "Photo",
+            "sortBy" to sortBy,
+            "sortOrder" to if (descending) "Descending" else "Ascending",
+            "limit" to "1000"
         )
+    )
 
     internal suspend inline fun <reified T> request(
         account: Account,

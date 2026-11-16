@@ -106,7 +106,11 @@ internal fun TouchStillWatchingPrompt(nextName: String, onContinue: () -> Unit, 
                     liveRegion = LiveRegionMode.Assertive
                 }
             )
-            androidx.compose.material3.Text("Next: $nextName", style = androidx.compose.material3.MaterialTheme.typography.bodyMedium, maxLines = 2)
+            androidx.compose.material3.Text(
+                "Next: $nextName",
+                style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+                maxLines = 2
+            )
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 androidx.compose.material3.Button(onClick = onContinue, Modifier.testTag("still-watching:continue")) {
                     androidx.compose.material3.Text("Keep watching")

@@ -64,6 +64,8 @@ const pendingPortSuites = new Set([
     "account-sign-out",
     // Search presentation (CAT-14..16 desktop contract); web search runs its own CAT-14a cases.
     "search-presentation",
+    // CAT-30..32, PHOTO-01/02, PLAY-30, SAVER-01 detail discovery (Android leg 160): web port owed.
+    "discovery",
     "frame-rate-match",
     "playback-start",
     "playback-settings",
@@ -145,6 +147,16 @@ const pendingPortSuites = new Set([
 // Desktop slice 1 added these shared application policies. Their web adapters/UI
 // are still owed; list exact case IDs rather than accepting unknown operations.
 // These remain visible todos, never execution passes.
+// Android leg 160 catalog reads (CAT-30..32, PHOTO-01, SAVER-01): web client port owed.
+// Exact case ID -> HTTP action, so a changed vector cannot hide behind a todo.
+const pendingReferenceHttpCases = new Map([
+    ["catalog-local-trailers", "catalog.localTrailers"],
+    ["catalog-special-features", "catalog.specialFeatures"],
+    ["catalog-similar", "catalog.similar"],
+    ["catalog-screensaver-items", "catalog.screensaverItems"],
+    ["catalog-parental-ratings", "catalog.parentalRatings"],
+    ["catalog-photos", "catalog.photos"],
+]);
 const pendingApplicationCases = new Map([
     ["detail-primary-next", "detail-play-item"],
     ["detail-primary-unplayed", "detail-play-item"],
@@ -322,6 +334,15 @@ for (const file of files) {
                         "Changed owed application operation: " + c.id,
                     );
                 it.todo(c.id + " (web application policy port owed)");
+                continue;
+            }
+            if (
+                suite.suite === "reference" &&
+                pendingReferenceHttpCases.has(c.id)
+            ) {
+                if (pendingReferenceHttpCases.get(c.id) !== c.input?.action)
+                    throw new Error("Changed owed HTTP action: " + c.id);
+                it.todo(c.id + " (web catalog client port owed)");
                 continue;
             }
             it(c.id, async () => {

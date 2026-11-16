@@ -39,7 +39,13 @@ class DiscoveryVectorsTest {
             val input = c.getValue("input").jsonObject
             val actual: JsonElement = when (c.getValue("operation").jsonPrimitive.content) {
                 "detail-reads" -> detailDiscoveryReads(input.getValue("type").jsonPrimitive.content).let {
-                    JsonObject(mapOf("trailers" to JsonPrimitive(it.trailers), "extras" to JsonPrimitive(it.extras), "similar" to JsonPrimitive(it.similar)))
+                    JsonObject(
+                        mapOf(
+                            "trailers" to JsonPrimitive(it.trailers),
+                            "extras" to JsonPrimitive(it.extras),
+                            "similar" to JsonPrimitive(it.similar)
+                        )
+                    )
                 }
                 "youtube-id" -> text(youTubeVideoId(input.getValue("url").jsonPrimitive.content))
                 "trailers" -> JsonArray(
