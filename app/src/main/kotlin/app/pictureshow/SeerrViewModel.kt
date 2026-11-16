@@ -17,7 +17,6 @@ import app.pictureshow.core.seerr.SeerrRequest
 import app.pictureshow.core.seerr.SeerrStatus
 import app.pictureshow.core.seerr.SeerrTitle
 import app.pictureshow.core.seerr.seerrMovieRequestable
-import app.pictureshow.core.seerr.seerrRequestDisplay
 import app.pictureshow.core.seerr.seerrSelectableSeasons
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job

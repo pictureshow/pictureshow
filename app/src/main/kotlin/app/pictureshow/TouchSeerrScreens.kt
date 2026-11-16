@@ -187,9 +187,10 @@ private fun TouchSeerrHub(vm: SeerrViewModel, account: Account, onOpen: (String,
                                 modifier = Modifier.fillMaxWidth().testTag("touch:seerr:query")
                             )
                             val term = normalizeSearch(state.query)
+                            val searchError = state.searchError
                             when {
                                 state.searching -> TouchCatalogLoading(stringResource(R.string.seerr_loading))
-                                state.searchError != null -> TouchMessage(stringResource(seerrErrorText(state.searchError)))
+                                searchError != null -> TouchMessage(stringResource(seerrErrorText(searchError)))
                                 term.length < 2 -> Text(
                                     stringResource(R.string.seerr_search_short),
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
