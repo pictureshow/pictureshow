@@ -49,6 +49,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
@@ -618,7 +619,8 @@ internal fun TouchCastScreen(ui: CastUi, host: CastSenderHost, onBack: () -> Uni
             }
             val volumeLabel = stringResource(R.string.cast_volume_device, device)
             val muteLabel = stringResource(R.string.cast_mute)
-            val percentage = stringResource(R.string.cast_volume_percent, ((ui.volume ?: 0.0) * 100).toInt())
+            val volumePercent = ((ui.volume ?: 0.0) * 100).toInt()
+            val percentage = pluralStringResource(R.plurals.cast_volume_percent, volumePercent, volumePercent)
             Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.testTag("cast:volume")) {
                 Text(volumeLabel, style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
                 if (controls?.volume == false) {
