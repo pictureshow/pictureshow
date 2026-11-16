@@ -166,6 +166,7 @@ struct RoutedStack<Root: View>: View {
                     case .library(let library): LibraryView(library: library)
                     case .person(let id, let name): PersonView(personID: id, name: name)
                     case .photo(let photo, let sortBy, let descending): PhotoViewer(photo: photo, sortBy: sortBy, descending: descending)
+                    case .liveTV: LiveTVRoute()
                     }
                 }
                 .navigationDestination(for: SeerrTitleRoute.self) { SeerrTitleView(route: $0) }

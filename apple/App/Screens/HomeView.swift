@@ -212,7 +212,10 @@ struct LibraryShelf: View {
             SectionHeader(title: "Libraries").padding(.horizontal, Theme.gutter)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: Theme.cardSpacing) {
-                    ForEach(libraries) { library in LibraryTile(library: library) }
+                    ForEach(libraries.filter { !$0.isLiveTvLibrary }) { library in LibraryTile(library: library) }
+                    #if os(tvOS)
+                    LiveTVTile()
+                    #endif
                 }
                 .padding(.horizontal, Theme.gutter)
                 #if os(tvOS)
@@ -236,9 +239,9 @@ struct LibraryTile: View {
 
     var body: some View {
         #if os(tvOS)
-        NavigationLink(value: Route.library(library)) { tile }.buttonStyle(.card)
+        NavigationLink(value: library.isLiveTvLibrary ? Route.liveTV : Route.library(library)) { tile }.buttonStyle(.card)
         #else
-        NavigationLink(value: Route.library(library)) { tile.clipShape(RoundedRectangle(cornerRadius: Theme.corner, style: .continuous)) }.buttonStyle(.plain)
+        NavigationLink(value: library.isLiveTvLibrary ? Route.liveTV : Route.library(library)) { tile.clipShape(RoundedRectangle(cornerRadius: Theme.corner, style: .continuous)) }.buttonStyle(.plain)
         #endif
     }
 

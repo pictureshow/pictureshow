@@ -18,7 +18,9 @@ struct LibrariesView: View {
                 ScrollView {
                     SyncStayBanner(sync: app.syncPlay).padding(.top, 12)
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: platformValue(tv: 420, touch: 300)), spacing: Theme.cardSpacing)], spacing: platformValue(tv: 56, touch: 16)) {
-                        ForEach(items) { library in LibraryTile(library: library, width: platformValue(tv: 420, touch: nil)) }
+                        // LIVE-01: Live TV is its own card; a server view typed livetv isn't repeated as a library.
+                        LiveTVTile(width: platformValue(tv: 420, touch: nil))
+                        ForEach(items.filter { !$0.isLiveTvLibrary }) { library in LibraryTile(library: library, width: platformValue(tv: 420, touch: nil)) }
                     }
                     .padding(Theme.gutter)
                 }

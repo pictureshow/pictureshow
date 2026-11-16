@@ -253,6 +253,15 @@ struct SystemPlayer: UIViewControllerRepresentable {
                 actions.append(UIAction(title: "Next Episode", image: UIImage(systemName: "forward.frame")) { [weak controller] _ in controller?.playNext() })
             }
         }
+        // LIVE-05: the system bar shows Live itself; Go Live returns from a pause or rewind, and a stream that can't
+        // time-shift can't be scrubbed or paused.
+        if controller.isLive {
+            if controller.live.canGoLive {
+                actions.append(UIAction(title: "Go Live", image: UIImage(systemName: "dot.radiowaves.forward")) { [weak controller] _ in controller?.goLive() })
+            }
+            let linear = !controller.live.canTimeShift
+            if vc.requiresLinearPlayback != linear { vc.requiresLinearPlayback = linear }
+        }
         vc.contextualActions = actions
     }
 
@@ -387,7 +396,11 @@ struct PlayerContent: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.bottom, 12)
                 }
-                scrubber
+                if controller.isLive {
+                    LiveTimeline(controller: controller) { scheduleHide() }
+                } else {
+                    scrubber
+                }
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 12)
@@ -454,7 +467,16 @@ struct PlayerContent: View {
         .simultaneousGesture(TapGesture().onEnded { scheduleHide() })
     }
 
-    private var centerButtons: some View {
+    @ViewBuilder private var centerButtons: some View {
+        // LIVE-05: without time shift there is nothing to pause or seek; at the live point there is no forward skip.
+        if controller.isLive && !controller.live.canTimeShift {
+            Color.clear.frame(height: 72)
+        } else {
+            seekButtons
+        }
+    }
+
+    private var seekButtons: some View {
         HStack(spacing: 56) {
             Button { controller.skip(by: -Double(controller.app.preferences.skipBackSeconds)); scheduleHide() } label: {
                 Image(systemName: "gobackward.\(controller.app.preferences.skipBackSeconds)").font(.system(size: 30, weight: .medium))
@@ -468,6 +490,8 @@ struct PlayerContent: View {
                 Image(systemName: "goforward.\(controller.app.preferences.skipForwardSeconds)").font(.system(size: 30, weight: .medium))
             }
             .accessibilityLabel("Forward \(controller.app.preferences.skipForwardSeconds) seconds")
+            .disabled(controller.isLive && (controller.live.atEdge || controller.live.expired))
+            .opacity(controller.isLive && (controller.live.atEdge || controller.live.expired) ? 0.35 : 1)
         }
         .buttonStyle(.plain)
         .opacity(controller.isBuffering && !controller.isPlaying ? 0 : 1)
