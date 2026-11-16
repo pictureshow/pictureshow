@@ -457,6 +457,21 @@ class DesktopControllerTest {
             }
         }
     }
+    @Test fun routeDiagnosticsIncludeBackAndRestoredSearch(): Unit = runBlocking {
+        Fixture().use { f ->
+            val dir = directory()
+            DesktopController(dir).use { c ->
+                c.login(f)
+                c.search(); c.await { it.route == DesktopRoute.Search && !it.busy }
+                c.settings(); c.await { it.route == DesktopRoute.Settings && !it.busy }
+                c.search(); c.await { it.route == DesktopRoute.Search && !it.busy }
+                c.settings(); c.await { it.route == DesktopRoute.Settings && !it.busy }
+                c.back(); c.await { it.route == DesktopRoute.Search && !it.busy }
+                assertEquals(2, File(dir, "app.log").readLines().count { it.endsWith("route Settings→Search") })
+            }
+        }
+    }
+
     @Test fun signingOutKeepsPublicServerButDeletesToken(): Unit = runBlocking {
         Fixture().use { f ->
             val dir = directory()
@@ -464,6 +479,28 @@ class DesktopControllerTest {
                 c.login(f); c.signOut(); c.await { it.account == null && !it.busy }
                 val persisted = File(dir, "accounts.json").readText()
                 assertFalse(persisted.contains("test-token")); assertTrue(persisted.contains("Demo cinema"))
+                assertEquals(DesktopRoute.Accounts, c.state.value.route)
+                assertEquals(1, c.state.value.accounts.size)
+                assertTrue(c.state.value.accounts.single().expired)
+                assertEquals("", c.state.value.accounts.single().accessToken)
+            }
+        }
+    }
+
+    @Test fun signOutTargetsKeptCardAndSelectingItSuppliesSavedUsernameOnly(): Unit = runBlocking {
+        Fixture().use { f ->
+            DesktopController(directory()).use { c ->
+                c.login(f)
+                val saved = requireNotNull(c.state.value.account)
+                c.accounts(); c.await { it.route == DesktopRoute.Accounts && !it.busy }
+                c.signOut(); c.await { it.account == null && !it.busy }
+                assertEquals("account:${saved.key}", c.state.value.returnFocus)
+                c.selectAccount(saved.key); c.await { it.route == DesktopRoute.SignIn && !it.busy }
+                assertEquals(saved.user.name, c.state.value.signInUsername)
+                assertEquals(saved.server, c.state.value.server)
+                assertNull(c.state.value.returnFocus)
+                c.addAccountOn(saved.server); c.await { it.route == DesktopRoute.SignIn && !it.busy }
+                assertNull(c.state.value.signInUsername, "Another user must start with a blank username")
             }
         }
     }

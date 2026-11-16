@@ -254,7 +254,7 @@ private data class LiveConfirmation(val item: MediaItem? = null, val schedule: L
     }
 }
 
-@Composable private fun ColumnScope.DesktopGuide(s: DesktopLiveState, channels: List<LiveChannel>, account: Account?, now: Long, owner: DesktopLiveTv) {
+@Composable internal fun ColumnScope.DesktopGuide(s: DesktopLiveState, channels: List<LiveChannel>, account: Account?, now: Long, owner: DesktopLiveTv) {
     val horizontal = rememberScrollState()
     val vertical = rememberLazyListState()
     var linear by remember { mutableStateOf(false) }
@@ -263,7 +263,7 @@ private data class LiveConfirmation(val item: MediaItem? = null, val schedule: L
     LaunchedEffect(s.start) { if (lastStart != s.start) { horizontal.scrollTo(0); lastStart = s.start } }
     FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         OutlinedButton({ owner.moveWindow(s.start - DesktopLiveTv.WINDOW) }, enabled = !s.loading, modifier = Modifier.controlFocus()) { Text("Earlier") }
-        TextButton({ datePicker = true }, modifier = Modifier.controlFocus()) { Text(liveDay(s.start) + " · " + liveClock(s.start)) }
+        TextButton({ datePicker = true }, modifier = Modifier.controlFocus().probe("live:guide-date")) { Text(liveDay(s.start) + " · " + liveClock(s.start)) }
         OutlinedButton({ owner.moveWindow(s.start + DesktopLiveTv.WINDOW) }, enabled = !s.loading, modifier = Modifier.controlFocus()) { Text("Later") }
         Button(owner::jumpNow, enabled = !s.loading, modifier = Modifier.controlFocus().probe("live:now")) { Text("Now") }
         LiveToggle(linear, { linear = !linear }, "List view", Modifier.probe("live:guide:list"))
@@ -333,24 +333,26 @@ private data class LiveConfirmation(val item: MediaItem? = null, val schedule: L
         var timesOpen by remember { mutableStateOf(false) }
         val dayOpener = remember { FocusRequester() }
         val timeOpener = remember { FocusRequester() }
+        val dayFocus = remember { FocusRequester() }
+        val timeFocus = remember { FocusRequester() }
         val first = day.atStartOfDay(zone).toInstant().toEpochMilli()
         val end = day.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
         // Enumerating instants offers both fall-back offsets and never offers a nonexistent spring hour.
         val times = remember(day) { generateSequence(first) { it + 1_800_000 }.takeWhile { it < end }.toList() }
         AlertDialog(onDismissRequest = { datePicker = false }, title = { Text("Guide date and time") }, text = { Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Box {
-                OutlinedButton({ daysOpen = true }, modifier = Modifier.focusRequester(dayOpener).probe("live:guide-day")) { Text(DateTimeFormatter.ofLocalizedDate(FormatStyle.FULL).format(day)) }
-                DesktopDropdownMenu(daysOpen, { daysOpen = false }, dayOpener) {
+                OutlinedButton({ daysOpen = true }, modifier = Modifier.focusRequester(dayOpener).controlFocus(allowInModal = true, enabled = !daysOpen).probe("live:guide-day")) { Text(DateTimeFormatter.ofLocalizedDate(FormatStyle.FULL).format(day)) }
+                DesktopDropdownMenu(daysOpen, { daysOpen = false }, dayOpener, dayFocus) {
                     val today = Instant.now().atZone(zone).toLocalDate()
-                    (listOf(initial) + (0L..6L).map { today.plusDays(it) }).distinct().forEach { date ->
-                        DropdownMenuItem(text = { Text(DateTimeFormatter.ofLocalizedDate(FormatStyle.FULL).format(date)) }, onClick = { day = date; selected = date.atStartOfDay(zone).toInstant().toEpochMilli(); daysOpen = false })
+                    (listOf(day, initial) + (0L..6L).map { today.plusDays(it) }).distinct().forEach { date ->
+                        DropdownMenuItem(text = { Text(DateTimeFormatter.ofLocalizedDate(FormatStyle.FULL).format(date)) }, modifier = Modifier.then(if (date == day) Modifier.focusRequester(dayFocus) else Modifier).menuItemFocus().probe("live:guide-day:$date"), onClick = { day = date; selected = date.atStartOfDay(zone).toInstant().toEpochMilli(); daysOpen = false })
                     }
                 }
             }
             Box {
-                OutlinedButton({ timesOpen = true }, modifier = Modifier.focusRequester(timeOpener).probe("live:guide-time")) { Text(liveClock(selected)) }
-                DesktopDropdownMenu(timesOpen, { timesOpen = false }, timeOpener, modifier = Modifier.heightIn(max = 280.dp)) {
-                    times.forEach { instant -> DropdownMenuItem(text = { Text(liveClock(instant)) }, leadingIcon = { RadioButton(selected == instant, null) }, onClick = { selected = instant; timesOpen = false }) }
+                OutlinedButton({ timesOpen = true }, modifier = Modifier.focusRequester(timeOpener).controlFocus(allowInModal = true, enabled = !timesOpen).probe("live:guide-time")) { Text(liveClock(selected)) }
+                DesktopDropdownMenu(timesOpen, { timesOpen = false }, timeOpener, timeFocus, modifier = Modifier.heightIn(max = 280.dp)) {
+                    (listOf(selected) + times).distinct().sorted().forEach { instant -> DropdownMenuItem(text = { Text(liveClock(instant)) }, leadingIcon = { RadioButton(selected == instant, null) }, modifier = Modifier.then(if (selected == instant) Modifier.focusRequester(timeFocus) else Modifier).menuItemFocus().probe("live:guide-time:$instant"), onClick = { selected = instant; timesOpen = false }) }
                 }
             }
             Text("Local time · ${zone.id}", style = MaterialTheme.typography.bodySmall)

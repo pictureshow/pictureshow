@@ -562,7 +562,7 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
         val ratio=((duration-12)/duration).coerceIn(0.0,1.0)
         robot.mouseMove(origin.x+((slider.left+slider.width*ratio)/pixelScale).roundToInt(),origin.y+(slider.center.y/pixelScale).roundToInt());robot.mousePress(InputEvent.BUTTON1_DOWN_MASK);robot.mouseRelease(InputEvent.BUTTON1_DOWN_MASK)
         waitFor("natural EOF autoplay",35){c.state.value.playback?.let{it.ready&&it.item.id!=episode.id}==true};checks["autoplayNext"]=true
-        click("stop");ready(DesktopRoute.Detail);click("nav:settings");ready(DesktopRoute.Settings);screenshot("11-settings");screenshot("11b-settings-minimum",listOf(800 to 600));if(System.getenv("PICTURESHOW_SMOKE_4K")=="1") screenshot("11c-settings-4k",listOf(3840 to 2160))
+        click("stop");ready(DesktopRoute.Detail);click("nav:settings");ready(DesktopRoute.Settings);waitFor("Settings entry focuses Video quality") { DesktopUiProbe.focus["quality"]==true };screenshot("11-settings");screenshot("11b-settings-minimum",listOf(800 to 600));if(System.getenv("PICTURESHOW_SMOKE_4K")=="1") screenshot("11c-settings-4k",listOf(3840 to 2160))
         click("conversion");ready(DesktopRoute.Settings);check(!c.state.value.settings.conversionNotice);click("conversion");ready(DesktopRoute.Settings);checks["settings"]=true
         // D-1: every sidebar destination stays inside the minimum window with Living-room size on.
         click("large-interface");waitFor("Living-room size on"){c.state.value.settings.largeInterface&&!c.state.value.busy}
@@ -575,7 +575,12 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
         screenshot("11d-settings-minimum-living-room",listOf(800 to 600))
         SwingUtilities.invokeAndWait { windowState.size=DpSize(1280.dp,800.dp);window.setSize(1280,800) }
         click("large-interface");waitFor("Living-room size off"){!c.state.value.settings.largeInterface&&!c.state.value.busy}
-        click("nav:account");click("account-menu:switch");ready(DesktopRoute.Accounts);screenshot("12-accounts")
+        val savedBeforeSwitch = c.state.value.accounts
+        SwingUtilities.invokeAndWait { DesktopUiProbe.requestFocus["nav:account"]?.requestFocus() }
+        key(KeyEvent.VK_ENTER);waitFor("account menu initially focuses Switch account") { DesktopUiProbe.focus["account-menu:switch"]==true }
+        key(KeyEvent.VK_DOWN);waitFor("one Down focuses Settings, never Sign out") { DesktopUiProbe.focus["account-menu:settings"]==true }
+        key(KeyEvent.VK_UP);key(KeyEvent.VK_ENTER);ready(DesktopRoute.Accounts)
+        check(c.state.value.accounts == savedBeforeSwitch) { "Switch account changed saved accounts" };screenshot("12-accounts")
         val removeKey=c.state.value.accounts.first().key
         click("remove:$removeKey");waitFor("removal dialog initially focuses Cancel") { DesktopUiProbe.focus["remove-cancel"]==true };screenshot("12b-remove-confirmation");waitFor("Cancel remains focused after capture") { DesktopUiProbe.focus["remove-cancel"]==true }
         key(KeyEvent.VK_LEFT);key(KeyEvent.VK_DOWN)
@@ -588,7 +593,11 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
         waitFor("removal dialog returns focus to opener") { DesktopUiProbe.focus["remove:$removeKey"]==true }
         // Voluntary sign-out is tested before the second authentication method.
         click("account:${c.state.value.accounts.first().key}");ready(DesktopRoute.Home);click("nav:settings");ready(DesktopRoute.Settings);click("sign-out")
+        waitFor("sign out confirmation focuses Cancel") { DesktopUiProbe.focus["sign-out-cancel"]==true }
+        screenshot("12d-sign-out-confirmation");click("sign-out-confirm")
         waitFor("signed out"){c.state.value.account==null&&!c.state.value.busy}
+        check(c.state.value.route == DesktopRoute.Accounts && c.state.value.accounts.any { it.expired && it.accessToken.isBlank() }) { "Sign out forgot the saved account" }
+        screenshot("12e-signed-out-card")
         if(c.state.value.route==DesktopRoute.SignIn) {
             check(c.state.value.server?.url?.trimEnd('/')==server.trimEnd('/')) { "Sign-out did not retain the selected server" }
         } else {

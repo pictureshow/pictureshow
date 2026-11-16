@@ -247,19 +247,24 @@ fun PlayerPage(state: DesktopState, c: DesktopController, fullscreen: () -> Unit
 
 /** PLAY-17 after a genuine end: Up next with Play now and a countdown, or Finished with Back to title and Replay. */
 @Composable
-private fun EndCard(p: DesktopPlaybackState, end: DesktopEndCard, c: DesktopController) {
+internal fun EndCard(p: DesktopPlaybackState, end: DesktopEndCard, c: DesktopController) {
     val next = end.next
     val primary = if (next != null) "end-play-now" else "end-back"
     LaunchedEffect(next?.id) { withFrameNanos { }; DesktopUiProbe.requestFocus[primary]?.let { runCatching { it.requestFocus() } } }
     Column(Modifier.fillMaxWidth().padding(20.dp).probe("end-card"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (next != null) {
-            Text("Up next", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(listOfNotNull(episodeLabel(next).takeIf { next.type == "Episode" }, next.name).joinToString(" · "),
-                style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            Text(end.secondsLeft?.let { "Playing in $it s" } ?: "${p.item.name} finished.", Modifier.semantics { liveRegion = LiveRegionMode.Polite },
-                style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            val nextLabel = listOfNotNull(episodeLabel(next).takeIf { next.type == "Episode" }, next.name).joinToString(" · ")
+            if (end.secondsLeft != null) {
+                Text("Up next · Playing in ${end.secondsLeft} s", Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                    style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(nextLabel, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            } else {
+                Text("${p.item.name} finished", Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                    style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text("Next: $nextLabel", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Button(onClick = c::nextEpisode, modifier = Modifier.controlFocus().heightIn(min = 44.dp).probe("end-play-now")) { Icon(DesktopGlyph.Play, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Play now") }
+                Button(onClick = c::nextEpisode, modifier = Modifier.controlFocus().heightIn(min = 44.dp).probe("end-play-now")) { Icon(DesktopGlyph.Play, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text(if (end.secondsLeft != null) "Play now" else "Play next") }
                 if (end.secondsLeft != null) OutlinedButton(onClick = c::cancelEndCountdown, modifier = Modifier.controlFocus().heightIn(min = 44.dp).probe("end-cancel")) { Text("Cancel") }
                 else OutlinedButton(onClick = c::stopPlayback, modifier = Modifier.controlFocus().heightIn(min = 44.dp).probe("end-back")) { Text("Back to title") }
             }
@@ -322,14 +327,16 @@ private fun SeekBar(p: DesktopPlaybackState, c: DesktopController, modifier: Mod
  * so the timeline and times stay visible (D-15). Escape closes it back to the chip (PLAY-05).
  */
 @Composable
-private fun TrackMenu(label: String, tag: String, icon: androidx.compose.ui.graphics.vector.ImageVector, items: List<Pair<Int, String>>, selected: Int,
+internal fun TrackMenu(label: String, tag: String, icon: androidx.compose.ui.graphics.vector.ImageVector, items: List<Pair<Int, String>>, selected: Int,
                       chipValue: String, note: String?, open: Boolean, onOpen: () -> Unit, onDismiss: () -> Unit, ceiling: Int, chipWidth: Dp = 156.dp, onChoose: (Int) -> Unit) {
     val density = LocalDensity.current
     val opener = remember { FocusRequester() }
     val menuKeys = DesktopMenuRegistration(open, opener, onDismiss)
+    val initialFocus = remember { FocusRequester() }
+    val initialKey = items.firstOrNull { it.first == selected }?.first ?: items.firstOrNull()?.first
     Box {
-        OutlinedButton(onClick = { if (open) onDismiss() else onOpen() }, contentPadding = PaddingValues(horizontal = 12.dp),
-            modifier = Modifier.focusRequester(opener).controlFocus().width(chipWidth).probe(tag).semantics { contentDescription = "$label: $chipValue${note?.let { ". $it" } ?: ""}" }) {
+        OutlinedButton(onClick = { if (open) onDismiss() else onOpen() }, enabled = items.isNotEmpty(), contentPadding = PaddingValues(horizontal = 12.dp),
+            modifier = Modifier.focusRequester(opener).controlFocus(enabled = !open).width(chipWidth).probe(tag).semantics { contentDescription = "$label: $chipValue${note?.let { ". $it" } ?: ""}" }) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp))
                 Text(chipValue, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = MaterialTheme.typography.labelLarge.fontWeight)
@@ -339,16 +346,24 @@ private fun TrackMenu(label: String, tag: String, icon: androidx.compose.ui.grap
         if (open) {
             val gap = with(density) { 8.dp.roundToPx() }
             val position = remember(ceiling, gap) { AboveSeekRow(ceiling, gap) }
-            LaunchedEffect(Unit) { withFrameNanos { }; DesktopUiProbe.requestFocus["$tag:$selected"]?.let { runCatching { it.requestFocus() } } }
             Popup(popupPositionProvider = position, onDismissRequest = onDismiss, properties = PopupProperties(focusable = true)) {
+                LaunchedEffect(Unit) { if (items.isNotEmpty()) { withFrameNanos { }; initialFocus.requestFocus() } }
                 val maxHeight = with(density) { (ceiling - 2 * gap).coerceAtLeast(160).toDp() }
+                val popupFocus = LocalFocusManager.current
                 Surface(shape = RoundedCornerShape(8.dp), tonalElevation = 3.dp, shadowElevation = 8.dp,
-                    modifier = Modifier.onPreviewKeyEvent(menuKeys).widthIn(min = 240.dp, max = 440.dp).heightIn(max = maxHeight)) {
+                    modifier = Modifier.onPreviewKeyEvent { event ->
+                        if (menuKeys(event)) true
+                        else if (event.key == Key.DirectionDown || event.key == Key.DirectionUp) {
+                            if (event.type == KeyEventType.KeyDown) popupFocus.moveFocus(
+                                if (event.key == Key.DirectionDown) FocusDirection.Next else FocusDirection.Previous)
+                            true
+                        } else false
+                    }.widthIn(min = 240.dp, max = 440.dp).heightIn(max = maxHeight)) {
                     Column(Modifier.width(IntrinsicSize.Max).verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
                         Text(label, Modifier.padding(horizontal = 16.dp, vertical = 6.dp), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         items.forEach { (key, text) ->
                             DropdownMenuItem(text = { Text(text) }, onClick = { onDismiss(); onChoose(key) }, leadingIcon = { RadioButton(selected == key, null) },
-                                modifier = Modifier.fillMaxWidth().controlFocus(RoundedCornerShape(4.dp)).probe("$tag:$key"))
+                                modifier = Modifier.fillMaxWidth().then(if (key == initialKey) Modifier.focusRequester(initialFocus) else Modifier).menuItemFocus().probe("$tag:$key"))
                         }
                         note?.let { Text(it, Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                     }

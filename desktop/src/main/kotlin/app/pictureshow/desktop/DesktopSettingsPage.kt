@@ -51,12 +51,12 @@ internal const val VIDEO_QUALITY_ORIGINAL = "Original (no conversion unless need
 internal const val VIDEO_QUALITY_CAPTION = "Lower it if playback stutters. A cap below the file's bitrate makes the server convert it."
 
 @Composable
-internal fun SettingsPage(state:DesktopState,c:DesktopController) {
+internal fun SettingsPage(state:DesktopState,c:DesktopController,onSignOut:()->Unit) {
     val s=state.settings
     FormPage("Settings","Playback and viewing preferences for this computer.") {
         SettingsSection("Account") {
             SettingRow(state.account?.user?.name ?: "Signed out", state.account?.server?.name ?: "No account is connected") {
-                OutlinedButton(onClick = c::signOut, modifier = Modifier.controlFocus().heightIn(min = 40.dp).probe("sign-out")) { Text("Sign out") }
+                OutlinedButton(onClick = onSignOut, modifier = Modifier.controlFocus().heightIn(min = 40.dp).probe("sign-out")) { Text("Sign out") }
             }
         }
         SettingsSection("Playback") {
@@ -107,14 +107,28 @@ internal fun SettingSwitch(title:String,caption:String,value:Boolean,tag:String,
 internal fun <T> Choice(label:String,items:List<Pair<T,String>>,selected:T,tag:String,buttonValue:String?=null,buttonWidth:Dp=560.dp,icon:ImageVector?=null,trailingIcon:ImageVector?=DesktopGlyph.ChevronDown,fixedWidth:Boolean=false,menuMinWidth:Dp=Dp.Unspecified,onChoose:(T)->Unit) {
     var expanded by remember { mutableStateOf(false) }
     val opener = remember { FocusRequester() }
+    val initialFocus = remember { FocusRequester() }
+    val initialKey = items.firstOrNull { it.first == selected }?.first ?: items.firstOrNull()?.first
+    // Quality has a label and a supporting line; preserve their room on every desktop font.
+    val popupWidth = if (tag == "quality" && (!menuMinWidth.isSpecified || menuMinWidth < 360.dp)) 360.dp else menuMinWidth
     Box {
-        OutlinedButton(onClick={expanded=true},contentPadding = if (icon != null) PaddingValues(horizontal = 12.dp) else ButtonDefaults.ContentPadding,modifier = Modifier.focusRequester(opener).controlFocus().then(if (fixedWidth) Modifier.width(buttonWidth) else Modifier.widthIn(max=buttonWidth)).probe(tag).semantics { contentDescription = "$label: ${items.firstOrNull{it.first==selected}?.second ?: "Default"}" }) {
+        OutlinedButton(onClick={expanded=true},enabled=items.isNotEmpty(),contentPadding = if (icon != null) PaddingValues(horizontal = 12.dp) else ButtonDefaults.ContentPadding,modifier = Modifier.focusRequester(opener).controlFocus(enabled = !expanded).then(if (fixedWidth) Modifier.width(buttonWidth) else Modifier.widthIn(max=buttonWidth)).probe(tag).semantics { contentDescription = "$label: ${items.firstOrNull{it.first==selected}?.second ?: "Default"}" }) {
             Row(if (fixedWidth) Modifier.fillMaxWidth() else Modifier, verticalAlignment = Alignment.CenterVertically) {
                 if(icon!=null) { Icon(icon,contentDescription=null,modifier=Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)) }
                 Text(buttonValue ?: "$label · ${items.firstOrNull{it.first==selected}?.second ?: "Default"}",modifier=Modifier.weight(1f, fill=fixedWidth),maxLines=1,overflow=TextOverflow.Ellipsis,fontWeight=MaterialTheme.typography.labelLarge.fontWeight)
                 if (trailingIcon != null) { Spacer(Modifier.width(8.dp)); Icon(trailingIcon, contentDescription = null, modifier = Modifier.size(16.dp)) }
             }
         }
-        DesktopDropdownMenu(expanded,onDismissRequest={expanded=false},opener=opener,modifier=Modifier.widthIn(min=menuMinWidth).probe("$tag-menu")) { items.forEach { (key,text) -> DropdownMenuItem(text={Text(text)},onClick={expanded=false;onChoose(key)},leadingIcon={RadioButton(selected==key,null)},modifier=Modifier.controlFocus(RoundedCornerShape(4.dp)).probe("$tag:$key")) } }
+        DesktopDropdownMenu(expanded,onDismissRequest={expanded=false},opener=opener,initialFocus=initialFocus,modifier=Modifier.widthIn(min=popupWidth).probe("$tag-menu")) { items.forEach { (key,text) -> DropdownMenuItem(text={Column { Text(text); if (tag == "quality") qualitySupport((key as? Int) ?: 0)?.let { Text(it, style=MaterialTheme.typography.bodySmall, color=MaterialTheme.colorScheme.onSurfaceVariant) } }},onClick={expanded=false;onChoose(key)},leadingIcon={RadioButton(selected==key,null)},modifier=Modifier.then(if (key == initialKey) Modifier.focusRequester(initialFocus) else Modifier).menuItemFocus().then(if (tag == "quality") Modifier.heightIn(min=64.dp) else Modifier).probe("$tag:$key")) } }
     }
+}
+
+internal fun qualitySupport(mbps: Int): String? = when (mbps) {
+    0 -> "Keep original quality when supported"
+    4 -> "For slow connections; a softer picture"
+    10 -> "A smaller cap for everyday streaming"
+    20 -> "More detail with a steady connection"
+    40 -> "Higher bitrate; fast connection"
+    80 -> "Demanding video; very fast connection"
+    else -> null
 }

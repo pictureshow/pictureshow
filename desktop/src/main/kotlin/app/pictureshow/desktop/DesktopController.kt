@@ -52,6 +52,23 @@ class DesktopController(
     @Volatile private var nextPageIndex = 0
     private val viewingMutex = kotlinx.coroutines.sync.Mutex()
     private val events = DesktopEventLog(File(directory, "app.log"))
+    private val inputDiagnostics = DesktopInputDiagnostics(events::log)
+    private val inputListener = java.awt.event.AWTEventListener { event ->
+        val source = event.source as? java.awt.Component
+        val eventWindow = source?.let { if (it is Window) it else javax.swing.SwingUtilities.getWindowAncestor(it) }
+        val ourWindow = window
+        if (ourWindow != null && generateSequence(eventWindow) { it.owner }.any { it === ourWindow }) {
+            when (event) {
+                is java.awt.event.KeyEvent -> inputDiagnostics.key()
+                is java.awt.event.MouseEvent -> inputDiagnostics.pointer()
+            }
+        }
+    }
+    private var inputAttached = false
+    init {
+        inputDiagnostics.route(mutable.value.route)
+        scope.launch { while (isActive) { delay(10_000); inputDiagnostics.heartbeat() } }
+    }
     /** A report error from a viewing that has closed; shown by whatever opens next instead of being wiped (D-4). */
     @Volatile private var carriedReportError: String? = null
     private var endJob: Job? = null
@@ -78,14 +95,20 @@ class DesktopController(
         return UUID.randomUUID().toString().also { atomicPrivateWrite(file, it.toByteArray()) }
     }
     private fun identityClient() = JellyfinClient(http, identity.copy(deviceId = UUID.randomUUID().toString()))
-    private fun snapshotAccounts() { val s = store.snapshots.value; mutable.update { it.copy(accounts = s.accounts, rememberedServers = s.rememberedServers) } }
+    /** Record every committed transition, including quick intermediate routes that StateFlow can conflate. */
+    @Synchronized private fun updateState(change: (DesktopState) -> DesktopState) {
+        val next = change(mutable.value)
+        mutable.value = next
+        inputDiagnostics.route(next.route)
+    }
+    private fun snapshotAccounts() { val s = store.snapshots.value; updateState { it.copy(accounts = s.accounts, rememberedServers = s.rememberedServers) } }
     @Synchronized private fun page(route: DesktopRoute, remember: Boolean = false, block: suspend (Long) -> Unit) {
         val before = mutable.value
         if (remember && before.route !in setOf(DesktopRoute.Loading, DesktopRoute.Player)) synchronized(history) { history.add(before) }
         val g = generation.incrementAndGet()
         pageJob?.cancel()
         if (route !in setOf(DesktopRoute.SignIn, DesktopRoute.QuickConnect)) { pendingQuick = null; quickOwner = null }
-        mutable.update { it.copy(route = route, busy = true, error = null, errorKind = null, root = desktopRootFor(route, it.root)) }
+        updateState { it.copy(route = route, busy = true, error = null, errorKind = null, root = desktopRootFor(route, it.root)) }
         pageJob = scope.launch {
             try {
                 if (before.route == DesktopRoute.Player && route != DesktopRoute.Player) {
@@ -99,7 +122,7 @@ class DesktopController(
             finally { publish(g) { it.copy(busy = false) } }
         }
     }
-    @Synchronized private fun publish(g: Long, change: (DesktopState) -> DesktopState) { if (generation.get() == g && !closing) mutable.update(change) }
+    @Synchronized private fun publish(g: Long, change: (DesktopState) -> DesktopState) { if (generation.get() == g && !closing) updateState(change) }
     private suspend fun <T> result(account: Account? = null, call: suspend () -> ClientResult<T>): T {
         val response = call()
         currentCoroutineContext().ensureActive()
@@ -110,7 +133,7 @@ class DesktopController(
                     store.expire(account.key, account.accessToken)
                     if (mutable.value.account?.accessToken == account.accessToken) {
                         synchronized(history) { history.clear() }
-                        mutable.update { it.copy(account = null, server = account.server, route = DesktopRoute.SignIn,
+                        updateState { it.copy(account = null, server = account.server, route = DesktopRoute.SignIn,
                             homeRows = emptyList(), items = emptyList(), library = null, detail = null,
                             seasons = emptyList(), episodes = emptyList(), selectedSeason = null, playback = null) }
                     }
@@ -125,9 +148,9 @@ class DesktopController(
     private suspend fun <T> attempt(g: Long, account: Account? = null, call: suspend () -> ClientResult<T>): T? = try { result(account, call) }
     catch (e: DesktopFailure) { publish(g) { it.copy(error = e.message, errorKind = e.kind) }; null }
 
-    fun clearError() { mutable.update { it.copy(error = null, errorKind = null) } }
+    fun clearError() { updateState { it.copy(error = null, errorKind = null) } }
     /** The page that honoured [DesktopState.returnFocus] clears it, so it applies once. */
-    fun returnFocusDone() { mutable.update { it.copy(returnFocus = null) } }
+    fun returnFocusDone() { updateState { it.copy(returnFocus = null) } }
 
     fun start() = page(DesktopRoute.Loading) { g ->
         val s = store.load()
@@ -137,28 +160,28 @@ class DesktopController(
         val account = s.currentAccount
         if (account != null && !account.expired && account.accessToken.isNotBlank()) {
             when (val checked = client.me(account)) {
-                is ClientResult.Success -> { mutable.update { it.copy(account = account) }; loadHome(g) }
+                is ClientResult.Success -> { updateState { it.copy(account = account) }; loadHome(g) }
                 is ClientResult.Failure -> if (checked.error.kind == ErrorKind.INVALID_CREDENTIALS) {
                     store.expire(account.key, account.accessToken); snapshotAccounts()
-                    publish(g) { it.copy(route = DesktopRoute.SignIn, server = account.server, error = "Your session ended. Sign in again.", errorKind = ErrorKind.EXPIRED) }
+                    publish(g) { it.copy(route = DesktopRoute.SignIn, server = account.server, signInUsername = account.user.name, error = "Your session ended. Sign in again.", errorKind = ErrorKind.EXPIRED) }
                 } else publish(g) { it.copy(route = DesktopRoute.Home, account = account, error = checked.error.message, errorKind = checked.error.kind) }
             }
         } else publish(g) { it.copy(route = if (s.accounts.isNotEmpty()) DesktopRoute.Accounts else DesktopRoute.Servers) }
     }
     fun discover() {
         if (discoveryJob?.isActive == true) return
-        mutable.update { it.copy(discovering = true, discovered = emptyList()) }
+        updateState { it.copy(discovering = true, discovered = emptyList()) }
         discoveryJob = scope.launch {
-            try { discovery.discover { found -> mutable.update { it.copy(discovered = (it.discovered + found).distinctBy(DiscoveredServer::id)) } } }
-            catch (_: Exception) { mutable.update { it.copy(error = "Network discovery is unavailable. Enter your server address to connect.") } }
-            finally { mutable.update { it.copy(discovering = false) } }
+            try { discovery.discover { found -> updateState { it.copy(discovered = (it.discovered + found).distinctBy(DiscoveredServer::id)) } } }
+            catch (_: Exception) { updateState { it.copy(error = "Network discovery is unavailable. Enter your server address to connect.") } }
+            finally { updateState { it.copy(discovering = false) } }
         }
     }
     fun connect(address: String) {
-        mutable.update { it.copy(serverAddress = address) }
+        updateState { it.copy(serverAddress = address, signInUsername = null) }
         page(DesktopRoute.Servers) { g ->
             val server = attempt(g) { client.probe(address) } ?: return@page
-            publish(g) { it.copy(server = server, route = DesktopRoute.SignIn, publicUsers = emptyList(), quickCode = null) }
+            publish(g) { it.copy(server = server, route = DesktopRoute.SignIn, publicUsers = emptyList(), quickCode = null, signInUsername = null) }
             val users = attempt(g) { client.publicUsers(server) }.orEmpty()
             publish(g) { it.copy(publicUsers = users) }
         }
@@ -178,7 +201,7 @@ class DesktopController(
         snapshotAccounts()
         synchronized(history) { history.clear() }
         pendingQuick = null; quickOwner = null
-        publish(g) { it.copy(search = DesktopSearchState(), account = account, server = account.server, quickCode = null, detail = null, playback = null, homeRows = emptyList()) }
+        publish(g) { it.copy(search = DesktopSearchState(), account = account, server = account.server, quickCode = null, signInUsername = null, detail = null, playback = null, homeRows = emptyList()) }
         loadHome(g)
     }
     fun quickConnect() {
@@ -186,6 +209,7 @@ class DesktopController(
         if (mutable.value.busy && mutable.value.route == DesktopRoute.QuickConnect) return
         if (quickOwner != server) { pendingQuick = null; quickOwner = server }
         page(DesktopRoute.QuickConnect) { g ->
+            publish(g) { it.copy(signInUsername = null) }
             identityClient().quickConnect(server, pendingQuick) { pendingQuick = it }.collect { q ->
                 when (q) {
                     is QuickConnectState.Code -> publish(g) { it.copy(quickCode = q.code, busy = false, error = null, errorKind = null) }
@@ -198,37 +222,42 @@ class DesktopController(
     }
     // Back from the picker returns to the page it was opened from (D-6); re-opening it doesn't stack.
     fun accounts() = page(DesktopRoute.Accounts, remember = mutable.value.route != DesktopRoute.Accounts) { _ -> snapshotAccounts() }
-    fun addServer() = page(DesktopRoute.Servers) { _ -> }
+    fun addServer() = page(DesktopRoute.Servers) { g -> publish(g) { it.copy(signInUsername = null) } }
     /** AUTH-07: another viewer on a saved server goes straight to its sign-in; Back returns to the chooser. */
     fun addAccountOn(server: Server) {
         if (mutable.value.busy && mutable.value.route == DesktopRoute.SignIn) return
         page(DesktopRoute.SignIn, remember = true) { g ->
-            publish(g) { it.copy(server = server, publicUsers = emptyList(), quickCode = null) }
+            publish(g) { it.copy(server = server, publicUsers = emptyList(), quickCode = null, signInUsername = null) }
             val users = attempt(g) { client.publicUsers(server) }.orEmpty()
             publish(g) { it.copy(publicUsers = users) }
         }
     }
     fun selectAccount(key: String) = page(DesktopRoute.Accounts) { g ->
         val account = store.snapshots.value.accounts.firstOrNull { it.key == key } ?: return@page
-        if (account.expired || account.accessToken.isBlank()) { publish(g) { it.copy(server = account.server, route = DesktopRoute.SignIn) }; return@page }
+        if (account.expired || account.accessToken.isBlank()) {
+            publish(g) { it.copy(server = account.server, route = DesktopRoute.SignIn, signInUsername = account.user.name,
+                publicUsers = emptyList(), quickCode = null, returnFocus = null) }
+            return@page
+        }
         if (attempt(g, account) { client.me(account) } == null) {
             if (store.snapshots.value.accounts.firstOrNull { it.key == key }?.expired == true) {
-                publish(g) { it.copy(server = account.server, route = DesktopRoute.SignIn,
+                publish(g) { it.copy(server = account.server, route = DesktopRoute.SignIn, signInUsername = account.user.name,
                     error = "Your session ended. Sign in again.", errorKind = ErrorKind.EXPIRED) }
             }
             return@page
         }
         liveTv.clear()
         store.select(key); snapshotAccounts(); synchronized(history) { history.clear() }
-        publish(g) { it.copy(search = DesktopSearchState(), account = account, server = account.server, detail = null, playback = null, homeRows = emptyList()) }; loadHome(g)
+        publish(g) { it.copy(search = DesktopSearchState(), account = account, server = account.server, signInUsername = null, detail = null, playback = null, homeRows = emptyList()) }; loadHome(g)
     }
     fun signOut() {
         val account = mutable.value.account ?: return
         page(DesktopRoute.Accounts) { g ->
             finishViewing()
-            store.signOut(account.key); snapshotAccounts(); synchronized(history) { history.clear() }
+            store.signOutKeepingAccount(account.key); snapshotAccounts(); synchronized(history) { history.clear() }
             publish(g) { DesktopState(route = if (store.snapshots.value.accounts.isEmpty()) DesktopRoute.SignIn else DesktopRoute.Accounts,
-                server = account.server, accounts = store.snapshots.value.accounts, rememberedServers = store.snapshots.value.rememberedServers, settings = it.settings) }
+                server = account.server, accounts = store.snapshots.value.accounts, rememberedServers = store.snapshots.value.rememberedServers,
+                returnFocus = "account:${account.key}", settings = it.settings) }
             liveTv.clear()
             runCatching { client.logout(account) }
         }
@@ -241,7 +270,7 @@ class DesktopController(
     @Synchronized fun search() {
         if (mutable.value.account == null) return
         if (mutable.value.route == DesktopRoute.Search) {
-            mutable.update { it.copy(returnFocus = "search-field") }
+            updateState { it.copy(returnFocus = "search-field") }
             return
         }
         val a = mutable.value.account ?: return
@@ -251,8 +280,8 @@ class DesktopController(
         }
         if (previous != null) {
             generation.incrementAndGet(); pageJob?.cancel()
-            mutable.value = previous.copy(busy = false, settings = mutable.value.settings, returnFocus = "search-field",
-                search = previous.search.copy(recent = store.snapshots.value.recentSearches[a.key].orEmpty(), storageError = mutable.value.search.storageError))
+            updateState { previous.copy(busy = false, settings = mutable.value.settings, returnFocus = "search-field",
+                search = previous.search.copy(recent = store.snapshots.value.recentSearches[a.key].orEmpty(), storageError = mutable.value.search.storageError)) }
             searchQuery(previous.search.query, immediate = true, retainResults = true)
             return
         }
@@ -264,7 +293,7 @@ class DesktopController(
         if (mutable.value.route != DesktopRoute.Search) return
         val bounded = value.take(SEARCH_QUERY_LIMIT)
         val term = normalizeSearch(bounded)
-        mutable.update { it.copy(search = it.search.copy(query = bounded, rows = if (retainResults) it.search.rows else emptyList(), loading = term.length >= 2,
+        updateState { it.copy(search = it.search.copy(query = bounded, rows = if (retainResults) it.search.rows else emptyList(), loading = term.length >= 2,
             completed = false, someFailed = false, allFailed = false, libraries = if (retainResults) it.search.libraries else emptyMap(), libraryError = false)) }
         page(DesktopRoute.Search) { g ->
             if (term.length < 2) return@page
@@ -307,9 +336,9 @@ class DesktopController(
         scope.launch {
             try {
                 if (clear) store.clearSearches(a.key) else if (term.length >= 2) store.recordSearch(a.key, term)
-                mutable.update { if (it.account?.key == a.key) it.copy(search = it.search.copy(recent = store.snapshots.value.recentSearches[a.key].orEmpty(), storageError = null)) else it }
+                updateState { if (it.account?.key == a.key) it.copy(search = it.search.copy(recent = store.snapshots.value.recentSearches[a.key].orEmpty(), storageError = null)) else it }
             } catch (_: Exception) {
-                mutable.update { if (it.account?.key == a.key) it.copy(search = it.search.copy(storageError = "Could not save recent searches.")) else it }
+                updateState { if (it.account?.key == a.key) it.copy(search = it.search.copy(storageError = "Could not save recent searches.")) else it }
             }
         }
     }
@@ -345,7 +374,7 @@ class DesktopController(
         publish(g) { it.copy(homeRows = rows) }
     }
     /** A sidebar library: its top page, lit as its own root (TOUCH-02). Folders opened inside it keep this root. */
-    fun browseRoot(library: MediaItem) { browse(library); mutable.update { it.copy(root = desktopLibraryRoot(library.id)) } }
+    fun browseRoot(library: MediaItem) { browse(library); updateState { it.copy(root = desktopLibraryRoot(library.id)) } }
     /** Live TV (gap C34) has its own leg; until then the view opens an honest interim page, never "empty". */
     internal fun isLiveTvView(item: MediaItem) = item.collectionType.equals("livetv", ignoreCase = true)
     fun openLiveTv(item: MediaItem? = null) = page(DesktopRoute.LiveTv, remember = mutable.value.route != DesktopRoute.LiveTv) { g ->
@@ -376,7 +405,7 @@ class DesktopController(
         val before = mutable.value
         if (before.route != DesktopRoute.Library || before.busy || nextPageIndex >= before.total || before.library?.let(::isLiveTvView) == true) return
         val a = before.account ?: return; val library = before.library ?: return
-        val g = generation.get(); val startIndex = nextPageIndex; mutable.update { it.copy(busy = true) }
+        val g = generation.get(); val startIndex = nextPageIndex; updateState { it.copy(busy = true) }
         pageJob = scope.launch {
             try {
                 val p = attempt(g, a) { client.items(a, BrowseQuery(library.id, sortBy = before.sortBy, descending = before.descending, startIndex = startIndex)) }
@@ -433,8 +462,8 @@ class DesktopController(
         val previous = synchronized(history) { if (history.isEmpty()) null else history.removeAt(history.lastIndex) }
         generation.incrementAndGet(); pageJob?.cancel()
         if (previous != null) {
-            mutable.value = previous.copy(busy = false, error = null, errorKind = null, settings = s.settings,
-                search = previous.search.copy(recent = store.snapshots.value.recentSearches[previous.account?.key].orEmpty(), storageError = s.search.storageError))
+            updateState { previous.copy(busy = false, error = null, errorKind = null, settings = s.settings,
+                search = previous.search.copy(recent = store.snapshots.value.recentSearches[previous.account?.key].orEmpty(), storageError = s.search.storageError)) }
             refreshReturnedPage(previous)
         } else when (s.route) {
             DesktopRoute.SignIn -> addServer()
@@ -473,7 +502,7 @@ class DesktopController(
             seasons = s.seasons.map(::patch), episodes = s.episodes.map(::patch),
             homeRows = s.homeRows.map { it.copy(items = it.items.map(::patch)) },
             search = s.search.copy(rows = s.search.rows.map { it.copy(items = it.items.map(::patch)) }))
-        mutable.update(::patch)
+        updateState(::patch)
         synchronized(history) { history.indices.forEach { history[it] = patch(history[it]) } }
     }
 
@@ -493,11 +522,23 @@ class DesktopController(
             DesktopRoute.Detail -> s.detail?.let { page(DesktopRoute.Detail) { g -> loadDetail(g, it) } }
             DesktopRoute.QuickConnect -> quickConnect()
             DesktopRoute.Servers -> s.serverAddress?.let(::connect)
-            else -> mutable.update { it.copy(error = null, errorKind = null) }
+            else -> updateState { it.copy(error = null, errorKind = null) }
         }
     }
-    fun attachWindow(window: Window) { this.window = window; engine?.attach(window) }
-    fun detachWindow() { window = null }
+    fun attachWindow(window: Window) {
+        this.window = window
+        if (!inputAttached) {
+            java.awt.Toolkit.getDefaultToolkit().addAWTEventListener(inputListener,
+                java.awt.AWTEvent.KEY_EVENT_MASK or java.awt.AWTEvent.MOUSE_EVENT_MASK or
+                    java.awt.AWTEvent.MOUSE_MOTION_EVENT_MASK or java.awt.AWTEvent.MOUSE_WHEEL_EVENT_MASK)
+            inputAttached = true
+        }
+        engine?.attach(window)
+    }
+    fun detachWindow() {
+        if (inputAttached) java.awt.Toolkit.getDefaultToolkit().removeAWTEventListener(inputListener)
+        inputAttached = false; window = null
+    }
 
     fun play(item: MediaItem, fromStart: Boolean = false) {
         if (mutable.value.busy) return
@@ -703,10 +744,10 @@ class DesktopController(
                     delay(500)
                     if (v.closing || viewing !== v) break
                     val snap = player.snapshot()
-                    mutable.update { s -> if (viewing === v) s.copy(playback = s.playback?.copy(positionSeconds = snap.positionSeconds, durationSeconds = snap.durationSeconds.takeIf { it > 0 } ?: s.playback.durationSeconds,
+                    updateState { s -> if (viewing === v) s.copy(playback = s.playback?.copy(positionSeconds = snap.positionSeconds, durationSeconds = snap.durationSeconds.takeIf { it > 0 } ?: s.playback.durationSeconds,
                         paused = snap.paused, ready = snap.ready, liveWindow = snap.liveWindow, bufferExpired = snap.liveWindow?.pausedPositionExpired(pausedLivePosition) == true, received = snap.received)) else s }
-                    if (snap.error != null && !snap.ended) { v.playbackFailed = true; events.log("playback error item=${v.item.id}"); mutable.update { it.copy(error = snap.error) }; break }
-                    if (!snap.ready && elapsed >= 60) { mutable.update { it.copy(error = "The video did not start. Return to the title and try again.") }; break }
+                    if (snap.error != null && !snap.ended) { v.playbackFailed = true; events.log("playback error item=${v.item.id}"); updateState { it.copy(error = snap.error) }; break }
+                    if (!snap.ready && elapsed >= 60) { updateState { it.copy(error = "The video did not start. Return to the title and try again.") }; break }
                     if (snap.ready && !v.startAttempted) v.reports.withLock {
                         if (!v.closing && !v.startAttempted) {
                             val p = mutable.value.playback
@@ -716,7 +757,7 @@ class DesktopController(
                                 val report = PlaybackReports(decision).progress(observed.positionSeconds.seconds, observed.paused,
                                     p.audioIndex.takeIf { v.audioChosen }, p.subtitleIndex.takeIf { v.subtitleChosen })
                                 when (val sent = playbackClient.reportStart(a, report)) {
-                                    is ClientResult.Failure -> { events.log("playback start item=${v.item.id} report=failed:${sent.error.kind}"); if (viewing === v) mutable.update { it.copy(error = sent.error.message) } }
+                                    is ClientResult.Failure -> { events.log("playback start item=${v.item.id} report=failed:${sent.error.kind}"); if (viewing === v) updateState { it.copy(error = sent.error.message) } }
                                     is ClientResult.Success -> { v.startReported = true; events.log("playback start item=${v.item.id} method=${decision.method} report=ok") }
                                 }
                             }
@@ -727,7 +768,7 @@ class DesktopController(
                     if (snap.exitRequested) { stopPlayback(); break }
                     if (snap.ended && !informationOpen && !snap.informationOpen) {
                         if (liveChannel != null || v.decision.isLive) {
-                            mutable.update { it.copy(error = "The live stream ended. Return to Live TV and tune again.") }
+                            updateState { it.copy(error = "The live stream ended. Return to Live TV and tune again.") }
                             scope.launch { finishViewing() }
                         } else onPhysicalEnd(v, snap)
                         break
@@ -737,7 +778,7 @@ class DesktopController(
             catch (e: Exception) {
                 if (viewing === v && !v.ended) {
                     events.log("playback loop-failed item=${v.item.id} type=${e.javaClass.simpleName}")
-                    mutable.update { it.copy(error = "Playback stopped unexpectedly. Return to the title and try again.") }
+                    updateState { it.copy(error = "Playback stopped unexpectedly. Return to the title and try again.") }
                 }
             }
         }
@@ -750,12 +791,12 @@ class DesktopController(
         if (!v.startAttempted || v.stopped || v.closing || viewing !== v) return@withLock
         val p = mutable.value.playback ?: return@withLock
         val observed = runCatching { v.engine.snapshot() }.getOrElse {
-            mutable.update { state -> state.copy(error = "Progress could not be read from the player. Return to the title and try again.") }
+            updateState { state -> state.copy(error = "Progress could not be read from the player. Return to the title and try again.") }
             return@withLock
         }
         val r = playbackClient.reportProgress(v.account, PlaybackReports(v.decision).progress(observed.positionSeconds.seconds, observed.paused,
             p.audioIndex.takeIf { v.audioChosen }, p.subtitleIndex.takeIf { v.subtitleChosen }).copy(isMuted = v.muted))
-        if (r is ClientResult.Failure && viewing === v) mutable.update { it.copy(error = "Progress could not be saved. ${r.error.message}") }
+        if (r is ClientResult.Failure && viewing === v) updateState { it.copy(error = "Progress could not be saved. ${r.error.message}") }
     }
     fun fullscreen(enabled: Boolean) { engine?.fullscreen(enabled) }
     fun videoViewport(topRatio: Double, bottomRatio: Double) { engine?.viewport(topRatio,bottomRatio) }
@@ -804,7 +845,7 @@ class DesktopController(
         val target = seconds.coerceAtLeast(0.0).let { if (duration != null) it.coerceAtMost(duration) else it }
         engine?.seek(target)
         seekTarget = target; seekTargetAt = System.nanoTime()
-        mutable.update { s -> s.copy(playback = s.playback?.copy(positionSeconds = target)) }
+        updateState { s -> s.copy(playback = s.playback?.copy(positionSeconds = target)) }
     }
     /** Relative seek for keys and the 10 s buttons. Repeats inside 1.5 s build on the last target, so the
      * 500 ms clock poll cannot swallow a second press (PLAY-07's intent, desktop's version). */
@@ -818,7 +859,7 @@ class DesktopController(
         val muted = !v.muted
         if (runCatching { v.engine.mute(muted) }.isFailure) return
         v.muted = muted
-        mutable.update { s -> s.copy(playback = s.playback?.copy(muted = muted)) }
+        updateState { s -> s.copy(playback = s.playback?.copy(muted = muted)) }
         scope.launch { if (viewing === v) sendProgress(v) }
     }
     /** Arrow-key volume: saved like the Settings volume, without leaving the player. Raising it unmutes. */
@@ -826,7 +867,7 @@ class DesktopController(
         val settings = mutable.value.settings
         val volume = (settings.volume + delta).coerceIn(0, 100)
         val updated = settings.copy(volume = volume)
-        mutable.update { it.copy(settings = updated) }
+        updateState { it.copy(settings = updated) }
         engine?.let { e -> runCatching { e.volume(volume) } }
         if (delta > 0 && viewing?.muted == true) toggleMute()
         scope.launch { runCatching { settingsStore.write(updated) } }
@@ -842,7 +883,7 @@ class DesktopController(
         val applied = if (audio != null) engine?.selectAudio(audio) == true else engine?.selectSubtitle(requireNotNull(subtitle)) == true
         if (applied) {
             if (audio != null) current.audioChosen = true else current.subtitleChosen = true
-            mutable.update { it.copy(playback = it.playback?.copy(audioIndex = audio ?: p.audioIndex, subtitleIndex = subtitle ?: p.subtitleIndex)) }
+            updateState { it.copy(playback = it.playback?.copy(audioIndex = audio ?: p.audioIndex, subtitleIndex = subtitle ?: p.subtitleIndex)) }
             scope.launch { if (viewing === current) sendProgress(current) }
             return
         }
@@ -864,7 +905,7 @@ class DesktopController(
     /** End card Cancel: the countdown stops and the card stays, offering Play now and Back to title. */
     fun cancelEndCountdown() {
         countdownCancelled = true
-        mutable.update { s -> s.copy(playback = s.playback?.let { p -> p.end?.let { p.copy(end = it.copy(secondsLeft = null)) } ?: p }) }
+        updateState { s -> s.copy(playback = s.playback?.let { p -> p.end?.let { p.copy(end = it.copy(secondsLeft = null)) } ?: p }) }
     }
     @Volatile private var countdownCancelled = false
     /** End card Replay: a new viewing of the same item from the start. */
@@ -907,7 +948,7 @@ class DesktopController(
         val next = mutable.value.playback?.nextEpisode
         val countdown = if (next != null && mutable.value.settings.autoplayNext) endCountdownSeconds.coerceAtLeast(0) else null
         countdownCancelled = false
-        mutable.update { s -> if (viewing === v) s.copy(playback = s.playback?.copy(end = DesktopEndCard(next, countdown),
+        updateState { s -> if (viewing === v) s.copy(playback = s.playback?.copy(end = DesktopEndCard(next, countdown),
             positionSeconds = v.endPosition, paused = true)) else s }
         events.log("playback end item=${v.item.id} next=${next?.id ?: "none"} countdown=${countdown ?: "off"}")
         val g = generation.get()
@@ -919,7 +960,7 @@ class DesktopController(
                 delay(1000)
                 if (generation.get() != g || countdownCancelled || mutable.value.playback?.end?.next?.id != next.id) return@launch
                 left--
-                mutable.update { s -> s.copy(playback = s.playback?.let { p -> p.end?.takeIf { it.secondsLeft != null }?.let { p.copy(end = it.copy(secondsLeft = left)) } ?: p }) }
+                updateState { s -> s.copy(playback = s.playback?.let { p -> p.end?.takeIf { it.secondsLeft != null }?.let { p.copy(end = it.copy(secondsLeft = left)) } ?: p }) }
             }
             if (generation.get() == g && !countdownCancelled && mutable.value.route == DesktopRoute.Player &&
                 mutable.value.playback?.end?.let { it.next?.id == next.id && it.secondsLeft != null } == true) nextEpisode()
@@ -955,7 +996,7 @@ class DesktopController(
                 carriedReportError = "${v.item.name} finished, but it could not be marked as watched. Check the connection."
             }
         }
-        carriedReportError?.let { e -> mutable.update { it.copy(error = e) } }
+        carriedReportError?.let { e -> updateState { it.copy(error = e) } }
     }
     private suspend fun finishViewing() = withContext(NonCancellable) {
         viewingMutex.withLock {
@@ -989,12 +1030,12 @@ class DesktopController(
                             if (stopped is ClientResult.Failure) {
                                 events.log("playback stop item=${v.item.id} position=${position.toLong()} failed=$failed ended=${v.ended} report=failed:${stopped.error.kind}")
                                 carriedReportError = "Playback ended, but progress could not be saved. ${stopped.error.message}"
-                                mutable.update { it.copy(error = carriedReportError) }
+                                updateState { it.copy(error = carriedReportError) }
                             } else events.log("playback stop item=${v.item.id} position=${position.toLong()} failed=$failed ended=${v.ended} report=ok")
                         }.onFailure { e ->
                             events.log("playback stop item=${v.item.id} report=failed:${e.javaClass.simpleName}")
                             carriedReportError = "Playback ended, but progress could not be saved. Check the connection."
-                            mutable.update { it.copy(error = carriedReportError) }
+                            updateState { it.copy(error = carriedReportError) }
                         }
                     }
                     if (v.ended) completeWatched(v)
@@ -1008,12 +1049,12 @@ class DesktopController(
                 if (cleanupFailures.isNotEmpty()) {
                     events.log("playback cleanup item=${v.item.id} failed=${cleanupFailures.joinToString(",")}")
                     // After a genuine end the viewer has nothing to do about it; otherwise keep the existing hint.
-                    if (!v.ended) mutable.update { it.copy(error = "Playback ended, but the player could not finish every cleanup step. You can return to the title and try again.") }
+                    if (!v.ended) updateState { it.copy(error = "Playback ended, but the player could not finish every cleanup step. You can return to the title and try again.") }
                 }
             }
         }
     }
-    suspend fun shutdown() { closing = true; generation.incrementAndGet(); pageJob?.cancelAndJoin(); withContext(NonCancellable) { finishViewing() }; scope.cancel(); http.close() }
+    suspend fun shutdown() { detachWindow(); inputDiagnostics.heartbeat(); closing = true; generation.incrementAndGet(); pageJob?.cancelAndJoin(); withContext(NonCancellable) { finishViewing() }; scope.cancel(); http.close() }
     override fun close() { runBlocking { shutdown() } }
 }
 

@@ -84,6 +84,47 @@ class AccountStoreTest {
     }
 
     @Test
+    fun signingOutKeepsCardButDiscardsCredentialAndPrivateStateAcrossReload() = runTest {
+        val persistence = MemoryPersistence()
+        val store = AccountStore(persistence)
+        store.remember(first.copy(deviceId = "old-device"))
+        store.remember(first.copy(accessToken = "replacement-token", deviceId = "new-device"))
+        store.remember(second)
+        store.select(first.key)
+        store.recordSearch(first.key, "private search")
+        store.recordSearch(second.key, "other search")
+        store.saveHomePreferences(first.key, HomePreferences(landing = "libraries"), pending = true)
+        store.signOutKeepingAccount(first.key)
+        val restored = AccountStore(persistence).load()
+        assertEquals(first.copy(accessToken = "", expired = true, deviceId = "new-device"), restored.accounts[0])
+        assertEquals(second, restored.accounts[1])
+        assertNull(restored.currentAccount)
+        assertEquals(first.server, restored.lastServer)
+        assertEquals(mapOf(second.key to listOf("other search")), restored.recentSearches)
+        assertTrue(restored.homePreferences.isEmpty())
+        assertTrue(restored.pendingHomePreferences.isEmpty())
+        assertTrue(restored.retiredDeviceAccounts.isEmpty())
+        for (privateValue in listOf(first.accessToken, "replacement-token", "private search", "old-device")) {
+            assertFalse(persistence.value.orEmpty().contains(privateValue))
+        }
+        store.removeAccount(first.key)
+        assertEquals(listOf(second), AccountStore(persistence).load().accounts)
+    }
+
+    @Test
+    fun failedRetainedSignOutCannotPublishOrDiscardWorkingCredentials() = runTest {
+        val persistence = MemoryPersistence()
+        val store = AccountStore(persistence)
+        store.remember(first)
+        store.recordSearch(first.key, "saved search")
+        val before = store.load()
+        persistence.failWrites = true
+        assertFailsWith<IllegalStateException> { store.signOutKeepingAccount(first.key) }
+        assertEquals(before, store.snapshots.value)
+        assertEquals(before, AccountStore(persistence).load())
+    }
+
+    @Test
     fun lastSignedOutServerComesFirstWithoutHidingOtherSavedServersOrDuplicatingEndpoints() = runTest {
         val store = AccountStore(MemoryPersistence())
         listOf(first, second, third).forEach { store.remember(it) }

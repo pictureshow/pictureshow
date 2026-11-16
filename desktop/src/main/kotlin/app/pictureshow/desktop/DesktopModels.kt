@@ -56,6 +56,8 @@ data class DesktopState(
     val discovered: List<DiscoveredServer> = emptyList(),
     val discovering: Boolean = false,
     val publicUsers: List<User> = emptyList(),
+    /** Saved-card reauthentication supplies only the username; passwords stay local to SignInForm. */
+    val signInUsername: String? = null,
     val quickCode: String? = null,
     val busy: Boolean = false,
     val error: String? = null,

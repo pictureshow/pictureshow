@@ -103,6 +103,9 @@ jobs:
           export SPIKE_SOFTWARE_GPU=1
           export SKIKO_RENDER_API=SOFTWARE
           export PICTURESHOW_SMOKE_NATIVE_CLOSE=1
+          # Exercise the real adapter attachment/replacement path while a second
+          # application owns foreground, before the full natural-EOF autoplay.
+          python3 desktop/tools/app-smoke/macos-focus.py "$PWD/desktop/build/app-native/prefix" "$SPIKE_LAYER_BRIDGE" "$PWD/desktop/build/native-focus" "$PWD/desktop-evidence/native-build/macos-focus.json"
           # Additional 4K catalog captures and playing/native-close tail need a
           # finite budget beyond the normal 240-second two-size smoke.
           python3 desktop/tools/app-smoke/macos-run.py --work desktop/build/disposable-app-smoke --evidence desktop-evidence/app-smoke --timeout 420

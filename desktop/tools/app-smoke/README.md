@@ -58,6 +58,16 @@ approval and static server progress all fail. Run verdict negative controls with
 python -m unittest discover -s desktop/tools/app-smoke -p test_smoke.py -v
 ```
 
+The macOS job also runs `macos-focus.py PREFIX SURFACE_LIBRARY BUILD OUTPUT_JSON`
+before this flow. It launches its own helper application, requires that helper to
+own foreground, then creates and replaces the real mpv/AppKit surface while the
+host stays inactive. Both attachments must keep the helper frontmost and report
+`applicationActive: false`. This isolates the attachment path shared by manual
+playback and autoplay from the separate natural-EOF/controller smoke. Rebuilding
+the pre-fix adapter makes the first attachment fail this check. The helper is
+terminated on both pass and failure; do not run this foreground test beside
+another live UI pilot.
+
 `build-native.sh` creates development smoke dependencies using LGPL-disabled-GPL
 FFmpeg and mpv plus the qualified native adapter. FFmpeg includes its built-in
 decoders/demuxers/parsers and libdav1d for software AV1. The isolated Mac/Linux

@@ -143,6 +143,25 @@ class AccountStore(private val persistence: TextPersistence) {
         )
     }
 
+    /**
+     * AUTH-10: end a session without forgetting its account card. Local private state is discarded before logout;
+     * network revocation uses the caller's captured credential and cannot restore this token on failure.
+     */
+    suspend fun signOutKeepingAccount(key: String) = update { snapshot ->
+        snapshot.copy(
+            accounts = snapshot.accounts.map {
+                if (it.key == key) it.copy(accessToken = "", expired = true) else it
+            },
+            currentKey = snapshot.currentKey.takeUnless { it == key },
+            recentSearches = snapshot.recentSearches - key,
+            homePreferences = snapshot.homePreferences - key,
+            pendingHomePreferences = snapshot.pendingHomePreferences - key,
+            retiredDeviceAccounts = snapshot.retiredDeviceAccounts.filterNot { it.key == key },
+            lastServer = snapshot.accounts.firstOrNull { it.key == key }?.server ?: snapshot.lastServer
+        )
+    }
+
+    /** Legacy Android sign-out, pending the AUTH-10 offline/session cleanup port; desktop uses signOutKeepingAccount. */
     suspend fun signOut(key: String) = update { snapshot ->
         snapshot.copy(
             accounts = snapshot.accounts.filterNot { it.key == key },

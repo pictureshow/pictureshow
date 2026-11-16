@@ -79,10 +79,12 @@ internal fun DesktopLiveScheduleEditor(original: LiveSchedule, series: Boolean, 
                     else {
                         var open by remember { mutableStateOf(false) }
                         val opener = remember { FocusRequester() }
+                        val initialFocus = remember { FocusRequester() }
+                        val choices = (listOfNotNull(current) + listOf("UntilDeleted", "UntilSpaceNeeded")).distinct()
                         Box {
-                            OutlinedButton({ open = true }, enabled = !busy, modifier = Modifier.focusRequester(opener).controlFocus().probe("live:retention")) { Text(labels[current] ?: "Provider retention setting") }
-                            DesktopDropdownMenu(open, { open = false }, opener) {
-                                listOf("UntilDeleted", "UntilSpaceNeeded").forEach { choice -> DropdownMenuItem(text = { Text(labels.getValue(choice)) }, leadingIcon = { RadioButton(current == choice, null) }, onClick = { edits = edits + ("KeepUntil" to JsonPrimitive(choice)); open = false }) }
+                            OutlinedButton({ open = true }, enabled = !busy, modifier = Modifier.focusRequester(opener).controlFocus(allowInModal = true, enabled = !open).probe("live:retention")) { Text(labels[current] ?: "Provider retention setting") }
+                            DesktopDropdownMenu(open, { open = false }, opener, initialFocus) {
+                                choices.forEach { choice -> DropdownMenuItem(text = { Text(labels[choice] ?: "Provider retention setting") }, leadingIcon = { RadioButton(current == choice, null) }, modifier = Modifier.then(if (choice == (current ?: choices.first())) Modifier.focusRequester(initialFocus) else Modifier).menuItemFocus().probe("live:retention:$choice"), onClick = { edits = edits + ("KeepUntil" to JsonPrimitive(choice)); open = false }) }
                             }
                         }
                     }

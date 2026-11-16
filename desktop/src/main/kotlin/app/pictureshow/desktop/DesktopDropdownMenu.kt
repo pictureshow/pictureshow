@@ -4,7 +4,9 @@
 package app.pictureshow.desktop
 
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.focusable
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.unit.dp
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -51,10 +53,16 @@ internal fun DesktopMenuRegistration(open: Boolean, opener: FocusRequester, dism
 }
 
 @Composable
-internal fun DesktopDropdownMenu(expanded: Boolean, onDismissRequest: () -> Unit, opener: FocusRequester,
+internal fun DesktopDropdownMenu(expanded: Boolean, onDismissRequest: () -> Unit, opener: FocusRequester, initialFocus: FocusRequester,
                                  modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     val keys = DesktopMenuRegistration(expanded, opener, onDismissRequest)
-    val menuFocus = remember { FocusRequester() }
-    LaunchedEffect(expanded) { if (expanded) { withFrameNanos { }; runCatching { menuFocus.requestFocus() } } }
-    DropdownMenu(expanded, onDismissRequest, modifier = modifier.onPreviewKeyEvent(keys).focusRequester(menuFocus).focusable(), content = content)
+    DropdownMenu(expanded, onDismissRequest, modifier = modifier.onPreviewKeyEvent(keys),
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        tonalElevation = 6.dp, shadowElevation = 8.dp,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f))) {
+        // Request from the popup composition, after its item targets have attached. A focused
+        // container makes directional search jump to the last child instead of the next item.
+        LaunchedEffect(Unit) { withFrameNanos { }; initialFocus.requestFocus() }
+        content()
+    }
 }
