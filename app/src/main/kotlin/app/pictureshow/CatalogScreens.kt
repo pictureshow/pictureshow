@@ -164,6 +164,9 @@ private val CatalogMuted = Color(0xFFB9C1D6)
 internal val SelectedSeasonOutline = Color(0xFFB8C4FF)
 private val HEADER_ROWS = setOf("account", "search", "settings", "live-tv", "requests", "customize", "profile")
 
+/** The TV home header (account, Search, Settings, Requests, Downloads); it scrolls sideways when the actions outgrow the screen. */
+internal const val HOME_ACTIONS_TAG = "home:actions"
+
 /** Each navigation entry owns its saveable focus identity and lazy-list scroll positions. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -417,7 +420,7 @@ fun CatalogHome(
                     // With Requests and Downloads the actions outgrow a 960 dp TV screen; the row scrolls (focus brings
                     // each button into view) rather than squeezing a label onto three lines.
                     Row(
-                        modifier = Modifier.horizontalScroll(rememberScrollState()),
+                        modifier = Modifier.horizontalScroll(rememberScrollState()).testTag(HOME_ACTIONS_TAG),
                         horizontalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
                         // Who is signed in, and the way to Switch user and Sign out, lead the header (T-1).

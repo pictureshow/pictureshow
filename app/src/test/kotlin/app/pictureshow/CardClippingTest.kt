@@ -15,6 +15,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performScrollTo
@@ -72,7 +73,7 @@ class CardClippingTest {
         } else {
             SemanticsProperties.HorizontalScrollAxisRange
         }
-        compose.onNode(SemanticsMatcher.keyIsDefined(axisProperty)).performScrollToIndex(index)
+        compose.onNode(SemanticsMatcher.keyIsDefined(axisProperty) and !hasTestTag(HOME_ACTIONS_TAG)).performScrollToIndex(index)
         val node = compose.onNodeWithTag(tag)
         node.performScrollTo().performSemanticsAction(SemanticsActions.RequestFocus) { it() }
         compose.mainClock.advanceTimeBy(1_000)
