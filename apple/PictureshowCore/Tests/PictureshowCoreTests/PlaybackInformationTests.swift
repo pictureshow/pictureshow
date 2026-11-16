@@ -44,7 +44,7 @@ final class PlaybackInformationTests: XCTestCase {
         XCTAssertEqual(PlaybackInformation.reasons([], method: "DirectPlay"), [])
         XCTAssertEqual(
             PlaybackInformation.reasons(["VideoCodecNotSupported", "videocodecnotsupported"], method: "Transcode"),
-            ["This device cannot decode this video format. The server converts the video. Try a version with a supported video codec."]
+            ["This device cannot decode this video format. The server converts the video."]
         )
         XCTAssertEqual(
             PlaybackInformation.reasons([], method: "Transcode"),

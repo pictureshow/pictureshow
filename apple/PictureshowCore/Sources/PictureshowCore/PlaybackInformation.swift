@@ -7,14 +7,14 @@ public enum PlaybackInformation {
     private static let unknownReason = "The server reported an additional conversion requirement that this client does not recognize."
     private static let explanations: [String: String] = [
         "containernotsupported": "This device cannot open the file's container. The server repackages the stream into a compatible container.",
-        "videocodecnotsupported": "This device cannot decode this video format. The server converts the video. Try a version with a supported video codec.",
-        "audiocodecnotsupported": "This device cannot decode this audio format. The server converts the audio. Choose a compatible audio track if available.",
-        "subtitlecodecnotsupported": "This device cannot display this subtitle format. The server converts the subtitles or burns them into the video. Choose a text subtitle track or turn subtitles off to avoid burn-in.",
+        "videocodecnotsupported": "This device cannot decode this video format. The server converts the video.",
+        "audiocodecnotsupported": "This device cannot decode this audio format. The server converts the audio.",
+        "subtitlecodecnotsupported": "This device cannot display this subtitle format. The server converts the subtitles or burns them into the video.",
         "audioisexternal": "The audio is in a separate file. The server combines it with the video.",
-        "secondaryaudionotsupported": "This device cannot play the selected secondary audio directly. Choose the default audio track to try direct playback.",
+        "secondaryaudionotsupported": "This device cannot play the selected secondary audio directly. The server converts the audio.",
         "streamcountexceedslimit": "The file contains more streams than this device supports. The server selects compatible streams.",
         "videoprofilenotsupported": "This device does not support the video's codec profile. The server converts the video.",
-        "videorangetypenotsupported": "This device does not support this video's HDR or color range. The server converts the video. Try an SDR version if available.",
+        "videorangetypenotsupported": "This device does not support this video's HDR or color range. The server converts the video.",
         "videocodectagnotsupported": "This device does not recognize the video's codec tag. The server makes a compatible stream.",
         "videolevelnotsupported": "This video exceeds the decoder's supported codec level. The server converts the video.",
         "videoresolutionnotsupported": "This video's resolution exceeds this device's limit. The server reduces the resolution.",
@@ -24,23 +24,23 @@ public enum PlaybackInformation {
         "refframesnotsupported": "This video needs more reference frames than the decoder supports. The server converts the video.",
         "anamorphicvideonotsupported": "This device cannot display the video's non-square pixels correctly. The server converts the video.",
         "interlacedvideonotsupported": "This device cannot display this interlaced video directly. The server deinterlaces it.",
-        "audiochannelsnotsupported": "The selected audio has more channels than the current output supports. The server converts the audio. Choose a track with fewer channels or check your audio output settings.",
-        "audioprofilenotsupported": "This device does not support the audio's codec profile. The server converts the audio. Choose another audio track if available.",
+        "audiochannelsnotsupported": "The selected audio has more channels than the current output supports. The server converts the audio.",
+        "audioprofilenotsupported": "This device does not support the audio's codec profile. The server converts the audio.",
         "audiosampleratenotsupported": "This device does not support the audio's sample rate. The server converts the audio.",
         "audiobitdepthnotsupported": "This device does not support the audio's bit depth. The server converts the audio.",
-        "audiobitratenotsupported": "The audio exceeds a supported bitrate limit. The server lowers its bitrate. Choose another audio track if available.",
-        "unknownvideostreaminfo": "The server could not identify the video's properties. Refresh this item's metadata on the server and try again.",
-        "unknownaudiostreaminfo": "The server could not identify the audio's properties. Refresh this item's metadata on the server and try again.",
-        "directplayerror": "Direct playback failed. The server is providing a converted stream. Try another version or check the device's codec support."
+        "audiobitratenotsupported": "The audio exceeds a supported bitrate limit. The server lowers its bitrate.",
+        "unknownvideostreaminfo": "The server could not identify the video's properties.",
+        "unknownaudiostreaminfo": "The server could not identify the audio's properties.",
+        "directplayerror": "This device can't play the file as it is, so the server provides a stream it can play."
     ]
 
     public static func reason(_ value: String, qualityMbps: Int? = nil) -> String {
         let key = value.lowercased()
         if key == "containerbitrateexceedslimit", let qualityMbps, qualityMbps > 0 {
-            return "Quality is capped at \(qualityMbps) Mbps in Settings. Raise the limit to try the original quality; device or server limits may still require conversion."
+            return "Quality is capped at \(qualityMbps) Mbps in Settings. The server lowers the bitrate."
         }
         if key == "containerbitrateexceedslimit" || key == "videobitratenotsupported" {
-            return "This stream exceeds a device or server bitrate limit. The server lowers its bitrate. Check the server's streaming limits."
+            return "This stream exceeds a device or server bitrate limit. The server lowers its bitrate."
         }
         return explanations[key] ?? unknownReason
     }

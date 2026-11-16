@@ -3,22 +3,22 @@
 import Foundation
 
 /// Exact contracts introduced on main before the Apple ports exist. Expected results stay only in spec/vectors.
-/// The active 1,500 contracts remain in SpecCaseManifest and continue to execute unchanged.
+/// The active contracts remain in SpecCaseManifest and continue to execute unchanged.
 enum PendingSpecCaseManifest {
     struct Suite {
         let count: Int
         let reason: String
     }
     static let suites: [String: Suite] = [
-        "reference": Suite(count: 19, reason: "Additional main contracts lack an Apple executor; existing active contracts in this suite continue to execute."),
-        "player-overlay-layout": Suite(count: 8, reason: "Newly merged main policy or presentation contracts are not ported to Apple; native acceptance remains owed."),
-        "live-source": Suite(count: 11, reason: "Newly merged main policy or presentation contracts are not ported to Apple; native acceptance remains owed."),
-        "live-presentation": Suite(count: 366, reason: "Newly merged main policy or presentation contracts are not ported to Apple; native acceptance remains owed."),
-        "live-guide": Suite(count: 14, reason: "Newly merged main policy or presentation contracts are not ported to Apple; native acceptance remains owed."),
-        "live-dvr": Suite(count: 22, reason: "Newly merged main policy or presentation contracts are not ported to Apple; native acceptance remains owed."),
-        "home-browse": Suite(count: 142, reason: "Newly merged main policy or presentation contracts are not ported to Apple; native acceptance remains owed."),
-        "application": Suite(count: 11, reason: "Additional main contracts lack an Apple executor; existing active contracts in this suite continue to execute."),
+        "account-sign-out": Suite(count: 7, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
+        "application": Suite(count: 32, reason: "Additional main contracts lack an Apple executor; existing active contracts in this suite continue to execute."),
+        "catalog-return": Suite(count: 10, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
         "frame-rate-match": Suite(count: 6, reason: "Display-mode policy and native display qualification are not ported to Apple."),
+        "home-browse": Suite(count: 160, reason: "Newly merged main policy or presentation contracts are not ported to Apple; native acceptance remains owed."),
+        "live-dvr": Suite(count: 22, reason: "Newly merged main policy or presentation contracts are not ported to Apple; native acceptance remains owed."),
+        "live-guide": Suite(count: 14, reason: "Newly merged main policy or presentation contracts are not ported to Apple; native acceptance remains owed."),
+        "live-presentation": Suite(count: 366, reason: "Newly merged main policy or presentation contracts are not ported to Apple; native acceptance remains owed."),
+        "live-source": Suite(count: 11, reason: "Newly merged main policy or presentation contracts are not ported to Apple; native acceptance remains owed."),
         "offline-budget": Suite(count: 40, reason: "The merged offline policy and its Apple runtime integration are not ported."),
         "offline-fmp4": Suite(count: 43, reason: "The merged offline policy and its Apple runtime integration are not ported."),
         "offline-job": Suite(count: 283, reason: "The merged offline policy and its Apple runtime integration are not ported."),
@@ -28,11 +28,47 @@ enum PendingSpecCaseManifest {
         "offline-plan": Suite(count: 58, reason: "The merged offline policy and its Apple runtime integration are not ported."),
         "offline-reconnect": Suite(count: 16, reason: "The merged offline policy and its Apple runtime integration are not ported."),
         "offline-resume": Suite(count: 78, reason: "The merged offline policy and its Apple runtime integration are not ported."),
-        "playback-settings-layout": Suite(count: 7, reason: "These seven measured Android Compose layouts require native Apple UI acceptance; a pure core answer would not prove them."),
+        "playback-formats": Suite(count: 30, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
+        "playback-information": Suite(count: 19, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
         "playback-settings": Suite(count: 68, reason: "The merged playback tuning, network and preference policies are not ported to Apple."),
-        "playback-start": Suite(count: 4, reason: "The merged start-origin and rewind policy is not ported to Apple."),
+        "playback-settings-layout": Suite(count: 7, reason: "These seven measured Android Compose layouts require native Apple UI acceptance; a pure core answer would not prove them."),
+        "playback-start": Suite(count: 5, reason: "The merged start-origin and rewind policy is not ported to Apple."),
+        "player-control-affordances": Suite(count: 4, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
+        "player-overlay-layout": Suite(count: 8, reason: "Newly merged main policy or presentation contracts are not ported to Apple; native acceptance remains owed."),
         "player-quality": Suite(count: 14, reason: "The merged per-viewing quality selection policy is not ported to Apple."),
+        "reference": Suite(count: 19, reason: "Additional main contracts lack an Apple executor; existing active contracts in this suite continue to execute."),
+        "search-presentation": Suite(count: 11, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
         "settings-presentation": Suite(count: 65, reason: "The merged advanced playback setting labels and consequences are not ported to Apple."),
+        "sync-application": Suite(count: 15, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
+        "sync-chip-name": Suite(count: 10, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
+        "sync-clock": Suite(count: 98, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
+        "sync-completion": Suite(count: 25, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
+        "sync-completion-reporting": Suite(count: 6, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
+        "sync-departure": Suite(count: 18, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
+        "sync-drift": Suite(count: 26, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
+        "sync-group-social-summary-and-picker-role": Suite(count: 15, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
+        "sync-local-display": Suite(count: 4, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
+        "sync-membership-registration": Suite(count: 12, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
+        "sync-phone-player-chrome": Suite(count: 10, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
+        "sync-phone-quality-cue": Suite(count: 5, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
+        "sync-phone-remote-chrome": Suite(count: 4, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
+        "sync-phone-remote-search": Suite(count: 3, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
+        "sync-phone-surfaces": Suite(count: 7, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
+        "sync-player-intent-presentation": Suite(count: 12, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
+        "sync-presentation": Suite(count: 57, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
+        "sync-queue": Suite(count: 10, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
+        "sync-rate-presentation": Suite(count: 4, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
+        "sync-route-consent": Suite(count: 10, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
+        "sync-socket-readiness": Suite(count: 5, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
+        "sync-source": Suite(count: 21, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
+        "sync-speed-intent-origin": Suite(count: 4, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
+        "sync-state": Suite(count: 64, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
+        "sync-tv-attention": Suite(count: 6, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
+        "sync-tv-player-coherence": Suite(count: 6, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
+        "sync-tv-rhythm": Suite(count: 3, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
+        "sync-tv-structure-discovery": Suite(count: 11, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
+        "sync-tv-surfaces": Suite(count: 15, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
+        "touch-player-director-clearance-paint-edges": Suite(count: 13, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
     ]
     static let contracts: [String: String] = {
         let rows = """
@@ -1506,6 +1542,626 @@ enum PendingSpecCaseManifest {
         settings-presentation.subtitle-label.Outline.6|settings-presentation/subtitle-label
         settings-presentation.subtitle-label.Small.1|settings-presentation/subtitle-label
         settings-presentation.subtitle-label.System.0|settings-presentation/subtitle-label
+        auth10.current-sign-out-keeps-card|account-sign-out/case
+        auth10.other-sign-out-preserves-current|account-sign-out/case
+        auth10.repeat-sign-out-is-idempotent|account-sign-out/case
+        auth10.remove-forgets-signed-out-card|account-sign-out/case
+        auth10.sign-in-replaces-kept-card|account-sign-out/case
+        auth10.missing-sign-out-keeps-everything|account-sign-out/case
+        auth10.both-sign-out-retain-both-cards|account-sign-out/case
+        track-label-server-display-title-ignored|application/track-labels
+        track-label-three-letter-language-channels|application/track-labels
+        runtime-label-under-minute|application/runtime-label
+        runtime-label-tiny|application/runtime-label
+        runtime-label-just-under-minute|application/runtime-label
+        runtime-label-one-minute|application/runtime-label
+        runtime-label-hours|application/runtime-label
+        runtime-label-implausible|application/runtime-label
+        placeholder-kind-movies|application/catalog-placeholder-kind
+        placeholder-kind-shows|application/catalog-placeholder-kind
+        placeholder-kind-livetv|application/catalog-placeholder-kind
+        placeholder-kind-unknown-library|application/catalog-placeholder-kind
+        placeholder-kind-boxset|application/catalog-placeholder-kind
+        placeholder-kind-title|application/catalog-placeholder-kind
+        search-duplicate-labels.same-film-two-libraries|application/search-duplicate-labels
+        search-duplicate-labels.different-year-is-distinct|application/search-duplicate-labels
+        search-duplicate-labels.case-and-spacing-ignored|application/search-duplicate-labels
+        search-duplicate-labels.missing-year-matches-missing-year|application/search-duplicate-labels
+        search-duplicate-labels.episodes-need-same-series|application/search-duplicate-labels
+        search-duplicate-labels.kinds-kept-apart|application/search-duplicate-labels
+        search-duplicate-labels.people-never-labelled|application/search-duplicate-labels
+        return-home|catalog-return/refresh
+        return-detail|catalog-return/refresh
+        return-library|catalog-return/refresh
+        return-person|catalog-return/refresh
+        return-search|catalog-return/refresh
+        return-settings|catalog-return/refresh
+        local-eof|catalog-return/progress
+        local-stop|catalog-return/progress
+        local-rewatch|catalog-return/progress
+        local-negative|catalog-return/progress
+        browse-scope-movies|home-browse/library-browse-scope
+        browse-scope-tvshows|home-browse/library-browse-scope
+        browse-scope-boxsets|home-browse/library-browse-scope
+        browse-scope-homevideos-keeps-folders|home-browse/library-browse-scope
+        browse-scope-mixed-keeps-folders|home-browse/library-browse-scope
+        letter-jump-ascending|home-browse/letter-jump
+        letter-jump-number-sign|home-browse/letter-jump
+        letter-jump-absent-letter|home-browse/letter-jump
+        letter-jump-descending-reads-given-order|home-browse/letter-jump
+        letter-jump-symbol-and-blank|home-browse/letter-jump
+        play-scope-box-set|home-browse/collection-play-scope
+        play-scope-movies-library|home-browse/collection-play-scope
+        play-scope-shows-library-not-offered|home-browse/collection-play-scope
+        play-scope-folder-not-offered|home-browse/collection-play-scope
+        play-queue-limit|home-browse/queue-limit
+        home-browse.title-count.inexact-0|home-browse/title-count-label
+        home-browse.title-count.inexact-1|home-browse/title-count-label
+        home-browse.title-count.inexact-35|home-browse/title-count-label
+        range-HDR10|playback-formats/range
+        range-HDR10Plus|playback-formats/range
+        range-HLG|playback-formats/range
+        range-SDR|playback-formats/range
+        range-Unknown|playback-formats/range
+        range-DOVI|playback-formats/range
+        range-DOVIWithHDR10|playback-formats/range
+        range-DOVIWithHDR10Plus|playback-formats/range
+        range-DOVIWithHLG|playback-formats/range
+        range-DOVIWithSDR|playback-formats/range
+        range-DOVIInvalid|playback-formats/range
+        missing-range|playback-formats/range
+        invalid-profile|playback-formats/range
+        decoder-software|playback-formats/decoder
+        decoder-hardware|playback-formats/decoder
+        decoder-missing|playback-formats/decoder
+        decoder-unsafe|playback-formats/decoder
+        display-mac|playback-formats/display
+        display-windows|playback-formats/display
+        display-sdr-monitor|playback-formats/display
+        display-linux|playback-formats/display
+        display-unknown|playback-formats/display
+        display-sdr-on-hdr|playback-formats/display
+        display-missing-frame|playback-formats/display
+        format-profile-main10|playback-formats/profile
+        format-profile-missing|playback-formats/profile
+        format-profile-private|playback-formats/profile
+        display-hdr-inactive|playback-formats/display
+        display-hlg-inactive|playback-formats/display
+        display-sdr-on-inactive|playback-formats/display
+        playback-information.conversion-explanation.channels-only-single-track|playback-information/conversion-explanation
+        playback-information.conversion-explanation.channels-target-not-reported|playback-information/conversion-explanation
+        playback-information.conversion-explanation.burn-in-without-subtitle-code|playback-information/conversion-explanation
+        playback-information.conversion-explanation.burn-in-with-subtitle-code|playback-information/conversion-explanation
+        playback-information.conversion-explanation.subtitle-code-without-burn-in|playback-information/conversion-explanation
+        playback-information.conversion-explanation.burn-in-over-copied-video|playback-information/conversion-explanation
+        playback-information.conversion-explanation.video-limit-outranks-burn-in|playback-information/conversion-explanation
+        playback-information.conversion-explanation.audio-format-single-track|playback-information/conversion-explanation
+        playback-information.conversion-explanation.audio-format-two-tracks|playback-information/conversion-explanation
+        playback-information.conversion-explanation.audio-other-tracks-also-converted|playback-information/conversion-explanation
+        playback-information.conversion-explanation.audio-selected-track-not-counted|playback-information/conversion-explanation
+        playback-information.conversion-explanation.audio-carried-alternative-dca|playback-information/conversion-explanation
+        playback-information.conversion-explanation.audio-format-outranks-channels|playback-information/conversion-explanation
+        playback-information.conversion-explanation.container-only-is-repackaging|playback-information/conversion-explanation
+        playback-information.conversion-explanation.repackage-reasons-without-copy-say-direct-stream|playback-information/conversion-explanation
+        playback-information.conversion-explanation.direct-stream-method|playback-information/conversion-explanation
+        playback-information.conversion-explanation.unknown-code-is-not-repackaging|playback-information/conversion-explanation
+        playback-information.conversion-explanation.quality-cap|playback-information/conversion-explanation
+        playback-information.conversion-explanation.direct-play|playback-information/conversion-explanation
+        playback-start.syncplay-server-position|playback-start/start-position
+        vod-seeks-white-large-font|player-control-affordances/case
+        landscape-portrait-inward-corners|player-control-affordances/case
+        portrait-landscape-outward-corners|player-control-affordances/case
+        tv-action-overflow-large-font|player-control-affordances/case
+        search-presentation.same-title-year|search-presentation/search-duplicate-ids
+        search-presentation.same-title-different-year|search-presentation/search-duplicate-ids
+        search-presentation.normalized-title|search-presentation/search-duplicate-ids
+        search-presentation.one-item-repeated-is-not-two-copies|search-presentation/search-duplicate-ids
+        search-presentation.different-types|search-presentation/search-duplicate-ids
+        search-presentation.missing-years-still-ambiguous|search-presentation/search-duplicate-ids
+        search-presentation.unique-titles|search-presentation/search-duplicate-ids
+        search-presentation.empty|search-presentation/search-duplicate-ids
+        search-presentation.library-from-visible-view|search-presentation/search-library-name
+        search-presentation.ancestor-library-fallback|search-presentation/search-library-name
+        search-presentation.no-guessed-folder|search-presentation/search-library-name
+        sync-application.deferred-server-7000|sync-application/deferred-seek
+        sync-application.deferred-server-0|sync-application/deferred-seek
+        sync-application.deferred-viewer-7000|sync-application/deferred-seek
+        sync-application.readiness-playing|sync-application/readiness-unpaused
+        sync-application.readiness-buffering-unpaused|sync-application/readiness-unpaused
+        sync-application.readiness-suppressed-unpaused|sync-application/readiness-unpaused
+        sync-application.readiness-buffering-paused|sync-application/readiness-unpaused
+        sync-application.readiness-paused|sync-application/readiness-unpaused
+        sync-application.pause-feedback-solo-native|sync-application/pause-feedback
+        sync-application.pause-feedback-group-barrier|sync-application/pause-feedback
+        sync-application.pause-feedback-group-viewer|sync-application/pause-feedback
+        sync-application.pause-feedback-group-server|sync-application/pause-feedback
+        sync-application.pause-feedback-solo-viewer|sync-application/pause-feedback
+        sync-application.pause-feedback-group-remote|sync-application/pause-feedback
+        sync-application.pause-feedback-solo-remote|sync-application/pause-feedback
+        whole-short-name-allowed|sync-chip-name/case
+        whole-long-name-preferred|sync-chip-name/case
+        longest-proven-original-prefix|sync-chip-name/case
+        six-complete-graphemes-accepted|sync-chip-name/case
+        three-letter-stub-rejected|sync-chip-name/case
+        five-letter-stub-rejected|sync-chip-name/case
+        count-only-if-no-prefix-fits|sync-chip-name/case
+        api23-unproven-segmentation-count-only|sync-chip-name/case
+        unproven-segmentation-whole-name-still-safe|sync-chip-name/case
+        complete-extended-grapheme-prefix|sync-chip-name/case
+        clock-processing-positive|sync-clock/case
+        clock-negative-offset|sync-clock/case
+        clock-half-ms|sync-clock/case
+        clock-negative-rtt|sync-clock/case
+        clock-too-slow|sync-clock/case
+        clock-max-rtt|sync-clock/case
+        clock-backward-server|sync-clock/case
+        clock-overflow|sync-clock/case
+        target-future|sync-clock/case
+        target-late-playing|sync-clock/case
+        target-late-paused|sync-clock/case
+        target-bounds|sync-clock/case
+        target-fractional-future|sync-clock/case
+        scheduled-zero|sync-clock/case
+        scheduled-ahead80|sync-clock/case
+        scheduled-behind80|sync-clock/case
+        scheduled-ahead-outside|sync-clock/case
+        scheduled-behind-outside|sync-clock/case
+        scheduled-pause-small|sync-clock/case
+        scheduled-seek-small|sync-clock/case
+        scheduled-invalid-current|sync-clock/case
+        scheduled-large-ticks|sync-clock/case
+        scheduled-large-target|sync-clock/case
+        timeline-paused-seek|sync-clock/case
+        timeline-playing-seek|sync-clock/case
+        timeline-unpause|sync-clock/case
+        timeline-pause|sync-clock/case
+        scheduled-mode-playing|sync-clock/case
+        scheduled-mode-waiting|sync-clock/case
+        scheduled-mode-paused|sync-clock/case
+        scheduled-mode-no-authority-playing|sync-clock/case
+        scheduled-mode-no-authority-waiting|sync-clock/case
+        unpause-echo-new-emission-same-timeline|sync-clock/case
+        unpause-echo-not-yet-applied|sync-clock/case
+        unpause-echo-changed-group|sync-clock/case
+        unpause-echo-changed-entry|sync-clock/case
+        unpause-echo-changed-when|sync-clock/case
+        unpause-echo-changed-position|sync-clock/case
+        unpause-echo-changed-command|sync-clock/case
+        unpause-echo-previous-pause|sync-clock/case
+        unpause-echo-missing-position|sync-clock/case
+        seek-feedback-automatic-no-preview|sync-clock/case
+        seek-feedback-automatic-preserves-deliberate-preview|sync-clock/case
+        seek-feedback-viewer-starts-preview|sync-clock/case
+        seek-feedback-viewer-replaces-preview|sync-clock/case
+        correction-execution-native-catches-up-with-moving-target|sync-clock/case
+        correction-execution-positive-80ms-equality|sync-clock/case
+        correction-execution-negative-80ms-equality|sync-clock/case
+        correction-execution-positive-80ms-plus-tick|sync-clock/case
+        correction-execution-native-millisecond-resolution|sync-clock/case
+        correction-execution-target-still-advances-at-execution|sync-clock/case
+        correction-execution-paused-fractional-native-target|sync-clock/case
+        correction-execution-paused-real-position-change|sync-clock/case
+        correction-execution-clock-reversed|sync-clock/case
+        correction-execution-invalid-resolution|sync-clock/case
+        correction-execution-duration-clamp-without-overflow|sync-clock/case
+        correction-execution-native-duration-end|sync-clock/case
+        unpause-echo-exact-wire-when|sync-clock/case
+        unpause-echo-changed-one-tick-when|sync-clock/case
+        pcm-rate-known-software-pcm|sync-clock/case
+        pcm-rate-encoded|sync-clock/case
+        pcm-rate-unknown|sync-clock/case
+        pcm-rate-unknown-renderer|sync-clock/case
+        pcm-rate-command-unavailable|sync-clock/case
+        replay-active-fast|sync-clock/case
+        replay-active-slow|sync-clock/case
+        replay-last-active-ms|sync-clock/case
+        replay-deadline|sync-clock/case
+        replay-expired|sync-clock/case
+        replay-different-timeline|sync-clock/case
+        replay-held-mode|sync-clock/case
+        replay-lost-rate-capability|sync-clock/case
+        replay-no-start|sync-clock/case
+        replay-clock-reversed|sync-clock/case
+        replay-clock-overflow|sync-clock/case
+        replay-unsupported-rate|sync-clock/case
+        future-unpause-prepared-submillisecond|sync-clock/case
+        future-unpause-late-receipt|sync-clock/case
+        future-unpause-not-ready|sync-clock/case
+        future-unpause-buffering|sync-clock/case
+        future-unpause-already-unpaused|sync-clock/case
+        future-unpause-pending-position|sync-clock/case
+        future-unpause-other-command|sync-clock/case
+        future-unpause-aligned-positive-boundary|sync-clock/case
+        future-unpause-aligned-negative-boundary|sync-clock/case
+        future-unpause-past-positive-boundary|sync-clock/case
+        future-unpause-past-negative-boundary|sync-clock/case
+        future-unpause-invalid-current|sync-clock/case
+        future-unpause-invalid-base|sync-clock/case
+        clock-refresh-null-no-completion|sync-clock/case
+        clock-refresh-null-before|sync-clock/case
+        clock-refresh-null-exact|sync-clock/case
+        clock-refresh-null-after|sync-clock/case
+        clock-refresh-null-backward|sync-clock/case
+        clock-refresh-anchor-before|sync-clock/case
+        clock-refresh-anchor-exact|sync-clock/case
+        clock-refresh-null-positive-overflow|sync-clock/case
+        clock-refresh-null-negative-overflow|sync-clock/case
+        sync-completion-reporting.current-decision|sync-completion-reporting/video-completion
+        sync-completion-reporting.obsolete-decision|sync-completion-reporting/video-completion
+        sync-completion-reporting.earlier-current-decision|sync-completion-reporting/video-completion
+        sync-completion-reporting.earlier-obsolete-decision|sync-completion-reporting/video-completion
+        sync-completion-reporting.repeat-one-current-decision|sync-completion-reporting/video-completion
+        sync-completion-reporting.repeat-one-obsolete-decision|sync-completion-reporting/video-completion
+        sync-completion.RepeatNone-first|sync-completion/natural-completion
+        sync-completion.RepeatNone-middle|sync-completion/natural-completion
+        sync-completion.RepeatNone-last|sync-completion/natural-completion
+        sync-completion.RepeatNone-single|sync-completion/natural-completion
+        sync-completion.RepeatOne-first|sync-completion/natural-completion
+        sync-completion.RepeatOne-middle|sync-completion/natural-completion
+        sync-completion.RepeatOne-last|sync-completion/natural-completion
+        sync-completion.RepeatOne-single|sync-completion/natural-completion
+        sync-completion.RepeatAll-first|sync-completion/natural-completion
+        sync-completion.RepeatAll-middle|sync-completion/natural-completion
+        sync-completion.RepeatAll-last|sync-completion/natural-completion
+        sync-completion.RepeatAll-single|sync-completion/natural-completion
+        sync-completion.RepeatNone-without-snapshot|sync-completion/natural-completion
+        sync-completion.RepeatNone-without-matches|sync-completion/natural-completion
+        sync-completion.RepeatNone-without-unpaused|sync-completion/natural-completion
+        sync-completion.RepeatOne-without-snapshot|sync-completion/natural-completion
+        sync-completion.RepeatOne-without-matches|sync-completion/natural-completion
+        sync-completion.RepeatOne-without-unpaused|sync-completion/natural-completion
+        sync-completion.RepeatAll-without-snapshot|sync-completion/natural-completion
+        sync-completion.RepeatAll-without-matches|sync-completion/natural-completion
+        sync-completion.RepeatAll-without-unpaused|sync-completion/natural-completion
+        sync-completion.empty|sync-completion/natural-completion
+        sync-completion.negative-index|sync-completion/natural-completion
+        sync-completion.past-end-index|sync-completion/natural-completion
+        sync-completion.unknown-repeat|sync-completion/natural-completion
+        hidden-stop-dismissal-without-presentation-retains|sync-departure/case
+        visible-matching-dismiss-consumes-exactly-once|sync-departure/case
+        wrong-scope-id-session-cannot-consume|sync-departure/case
+        newer-presentation-rejects-old-session-acks|sync-departure/case
+        new-record-survives-old-layout-and-close|sync-departure/case
+        scope-change-drops-private-name-keeps-id-monotonic|sync-departure/case
+        same-scope-rebind-is-not-a-reset|sync-departure/case
+        accepted-membership-clears-only-matching-scope|sync-departure/case
+        wrong-scope-record-cannot-replace-fact|sync-departure/case
+        blank-known-name-becomes-null-never-group-id|sync-departure/case
+        unknown-name-stays-null|sync-departure/case
+        known-name-retained-verbatim|sync-departure/case
+        truthful-cause-manual_leave|sync-departure/case
+        truthful-cause-playback_stopped|sync-departure/case
+        truthful-cause-playback_ended|sync-departure/case
+        truthful-cause-playback_closed|sync-departure/case
+        truthful-cause-external_route|sync-departure/case
+        truthful-cause-membership_lost|sync-departure/case
+        drift--251|sync-drift/case
+        drift--250|sync-drift/case
+        drift--81|sync-drift/case
+        drift--80|sync-drift/case
+        drift-0|sync-drift/case
+        drift-80|sync-drift/case
+        drift-81|sync-drift/case
+        drift-250|sync-drift/case
+        drift-251|sync-drift/case
+        no-exact-rate|sync-drift/case
+        source-refuses-rate|sync-drift/case
+        rate-five-second-cap|sync-drift/case
+        rate-before-cap|sync-drift/case
+        rate-restore-in-tolerance|sync-drift/case
+        seek-cooldown-before|sync-drift/case
+        seek-cooldown-equality|sync-drift/case
+        paused-small-seek|sync-drift/case
+        paused-aligned|sync-drift/case
+        scheduled-seek-cooldown-before-boundary|sync-drift/case
+        scheduled-seek-cooldown-equality|sync-drift/case
+        paused-scheduled-seek-retains-cooldown|sync-drift/case
+        scheduled-seek-already-aligned|sync-drift/case
+        aligned-unpause-keeps-expired-seek-deadline|sync-drift/case
+        aligned-unpause-keeps-active-seek-deadline|sync-drift/case
+        aligned-unpause-keeps-exact-seek-deadline|sync-drift/case
+        aligned-unpause-restores-normal-rate|sync-drift/case
+        phone-empty-one-person|sync-group-social-summary-and-picker-role/case
+        phone-empty-two-people-large-font|sync-group-social-summary-and-picker-role/case
+        remote-only-picker|sync-group-social-summary-and-picker-role/case
+        media-play-picker|sync-group-social-summary-and-picker-role/case
+        phone-empty-count-snapshot-lifecycle|sync-group-social-summary-and-picker-role/case
+        tv-joined-name-count-first-baseline-font10|sync-group-social-summary-and-picker-role/case
+        tv-joined-name-count-first-baseline-font13|sync-group-social-summary-and-picker-role/case
+        phone-joined-shared-playback-scope-font10|sync-group-social-summary-and-picker-role/case
+        phone-joined-shared-playback-scope-font13|sync-group-social-summary-and-picker-role/case
+        native-direction-none-single|sync-group-social-summary-and-picker-role/case
+        native-direction-none-first|sync-group-social-summary-and-picker-role/case
+        native-direction-none-middle|sync-group-social-summary-and-picker-role/case
+        native-direction-none-last|sync-group-social-summary-and-picker-role/case
+        native-direction-one-single|sync-group-social-summary-and-picker-role/case
+        native-direction-all-single|sync-group-social-summary-and-picker-role/case
+        joined-empty-cannot-claim-preparing|sync-local-display/case
+        joined-empty-cannot-claim-ready|sync-local-display/case
+        selected-unavailable-remains-visible|sync-local-display/case
+        selected-buffering-remains-visible|sync-local-display/case
+        join-ready|sync-membership-registration/case
+        join-leave|sync-membership-registration/case
+        join-timeout|sync-membership-registration/case
+        create-ready|sync-membership-registration/case
+        create-leave|sync-membership-registration/case
+        create-timeout|sync-membership-registration/case
+        join-route|sync-membership-registration/case
+        create-route|sync-membership-registration/case
+        existing-membership-rejoin-cancel|sync-membership-registration/case
+        confirmed-server-left-clears-membership|sync-membership-registration/case
+        definite-denial-clears-unsent-cancellation|sync-membership-registration/case
+        uncertain-post-retains-server-cleanup|sync-membership-registration/case
+        scrim-transparent-upper-edge|sync-phone-player-chrome/case
+        scrim-opacity-ramp|sync-phone-player-chrome/case
+        seek-time-row-font-1-0|sync-phone-player-chrome/case
+        quality-detail-context-font-1-0|sync-phone-player-chrome/case
+        targets-font-1-0|sync-phone-player-chrome/case
+        seek-time-row-font-1-3|sync-phone-player-chrome/case
+        quality-detail-context-font-1-3|sync-phone-player-chrome/case
+        targets-font-1-3|sync-phone-player-chrome/case
+        grouped-centered-transport-blockers-font-1-3|sync-phone-player-chrome/case
+        live-secondary-header-alignment|sync-phone-player-chrome/case
+        quality-detail-reachable|sync-phone-quality-cue/case
+        quality-changed-fact-lifetime-and-no-replay|sync-phone-quality-cue/case
+        quality-null-resets-reduction-episode|sync-phone-quality-cue/case
+        quality-conversion-priority-defers|sync-phone-quality-cue/case
+        quality-sheet-priority-defers|sync-phone-quality-cue/case
+        remote-device-identity-and-account|sync-phone-remote-chrome/case
+        remote-contained-status-first-bar|sync-phone-remote-chrome/case
+        remote-exit-actions-scroll-reachable|sync-phone-remote-chrome/case
+        group-body-structural-scroll-position|sync-phone-remote-chrome/case
+        remote-search-submit-adjacency-and-first-viewport|sync-phone-remote-search/case
+        remote-search-reservation-stable-across-send-lifecycle|sync-phone-remote-search/case
+        remote-search-ime-send-uses-guarded-submit|sync-phone-remote-search/case
+        compact-native-font1|sync-phone-surfaces/case
+        compact-native-font13|sync-phone-surfaces/case
+        speed-reason-at-point-of-use|sync-phone-surfaces/case
+        compact-shorter-window-no-notice-font1|sync-phone-surfaces/case
+        compact-shorter-window-no-notice-font13|sync-phone-surfaces/case
+        compact-initial-reveal-defers-actionable-recovery|sync-phone-surfaces/case
+        compact-initial-reveal-does-not-repeat-for-same-group|sync-phone-surfaces/case
+        group-playing-local-True|sync-player-intent-presentation/case
+        group-playing-local-False|sync-player-intent-presentation/case
+        group-paused-local-True|sync-player-intent-presentation/case
+        group-paused-local-False|sync-player-intent-presentation/case
+        group-waiting-local-True|sync-player-intent-presentation/case
+        group-waiting-local-False|sync-player-intent-presentation/case
+        standalone-local-True|sync-player-intent-presentation/case
+        standalone-local-False|sync-player-intent-presentation/case
+        group-unavailable-False-1|sync-player-intent-presentation/case
+        group-unavailable-True-0|sync-player-intent-presentation/case
+        speed-selection-grouped-True|sync-player-intent-presentation/case
+        speed-selection-grouped-False|sync-player-intent-presentation/case
+        current-ready-estimate|sync-presentation/case
+        boundary-estimate|sync-presentation/case
+        clock-unavailable|sync-presentation/case
+        renderer-unready|sync-presentation/case
+        unapplied-command|sync-presentation/case
+        unknown-error|sync-presentation/case
+        unknown-uncertainty|sync-presentation/case
+        uncertain-clock|sync-presentation/case
+        catching-up|sync-presentation/case
+        catching-up-boundary|sync-presentation/case
+        out-of-sync|sync-presentation/case
+        overflow-distance|sync-presentation/case
+        title-current|sync-presentation/case
+        title-account-replaced|sync-presentation/case
+        title-membership-replaced|sync-presentation/case
+        title-queue-replaced|sync-presentation/case
+        title-revision-changed-with-retained-entry|sync-presentation/case
+        title-entry-removed|sync-presentation/case
+        title-no-requested-entry|sync-presentation/case
+        waiting-buffer-is-group|sync-presentation/case
+        waiting-ready-not-all-ready|sync-presentation/case
+        waiting-seek|sync-presentation/case
+        playing-not-qualification|sync-presentation/case
+        unknown-phase|sync-presentation/case
+        names-capped-without-inferred-you-or-ready|sync-presentation/case
+        empty-group-no-transport|sync-presentation/case
+        usable-single-entry-transport|sync-presentation/case
+        usable-many-entry-transport|sync-presentation/case
+        unusable-group-no-transport|sync-presentation/case
+        unusable-empty-no-transport|sync-presentation/case
+        invalid-negative-count-no-transport|sync-presentation/case
+        panel-warning-banner-owns-recovery|sync-presentation/case
+        panel-recovery-hides-catchup|sync-presentation/case
+        panel-recovery-hides-healthy-estimate|sync-presentation/case
+        panel-unknown-stays-unknown|sync-presentation/case
+        panel-no-recovery-keeps-warning|sync-presentation/case
+        panel-no-recovery-keeps-healthy|sync-presentation/case
+        chip-quality-unknown|sync-presentation/case
+        chip-quality-in-sync|sync-presentation/case
+        chip-quality-catching-up|sync-presentation/case
+        chip-quality-out-of-sync|sync-presentation/case
+        direction-none-single|sync-presentation/case
+        direction-none-first|sync-presentation/case
+        direction-none-middle|sync-presentation/case
+        direction-none-last|sync-presentation/case
+        direction-one-single|sync-presentation/case
+        direction-all-single|sync-presentation/case
+        direction-unknown-repeat-retains-general|sync-presentation/case
+        direction-null-repeat-retains-general|sync-presentation/case
+        direction-missing-authority-retains-general|sync-presentation/case
+        direction-missing-current-retains-general|sync-presentation/case
+        direction-ambiguous-current-retains-general|sync-presentation/case
+        direction-current-not-in-queue-retains-general|sync-presentation/case
+        direction-authority-size-mismatch-retains-general|sync-presentation/case
+        direction-unusable-still-disabled|sync-presentation/case
+        direction-empty-still-disabled|sync-presentation/case
+        direction-blank-entry-retains-general|sync-presentation/case
+        sync-queue.duplicate-media-has-distinct-entry-identities|sync-queue/membership
+        sync-queue.duplicate-entry-identities-are-invalid|sync-queue/membership
+        sync-queue.older-revision-requires-recovery|sync-queue/membership
+        sync-queue.equal-revision-preserves-server-order|sync-queue/membership
+        sync-queue.repeat-shuffle-are-authoritative|sync-queue/membership
+        sync-queue.ticks-retain-signed64-precision|sync-queue/membership
+        sync-queue.stale-command-cannot-revive-prior-queue|sync-queue/membership
+        sync-queue.missing-playlist-needs-snapshot|sync-queue/membership
+        sync-queue.out-of-range-current-index-is-invalid|sync-queue/membership
+        sync-queue.empty-authoritative-queue-remains-stopped|sync-queue/membership
+        temporary-slow|sync-rate-presentation/case
+        temporary-fast|sync-rate-presentation/case
+        restore-viewer-choice|sync-rate-presentation/case
+        genuine-adjustment-after-group|sync-rate-presentation/case
+        consent-account|sync-route-consent/case
+        consent-token|sync-route-consent/case
+        consent-logout|sync-route-consent/case
+        consent-same|sync-route-consent/case
+        stale-confirm|sync-route-consent/case
+        stale-cancel|sync-route-consent/case
+        wrong-scope-confirm|sync-route-consent/case
+        wrong-scope-cancel|sync-route-consent/case
+        duplicate|sync-route-consent/case
+        scope-change-during-leave|sync-route-consent/case
+        transport-open-is-not-session-ready|sync-socket-readiness/case
+        server-registration|sync-socket-readiness/case
+        invalid-registration|sync-socket-readiness/case
+        closed-session|sync-socket-readiness/case
+        new-session-needs-new-registration|sync-socket-readiness/case
+        positive-duration-one-tick|sync-source/case
+        positive-duration-long-max|sync-source/case
+        unknown-zero-duration|sync-source/case
+        negative-duration|sync-source/case
+        negative-duration-long-min|sync-source/case
+        finite-seekable-server-vod-or-audio|sync-source/case
+        finite-looking-live|sync-source/case
+        finite-looking-infinite|sync-source/case
+        finite-looking-offline|sync-source/case
+        live-and-infinite|sync-source/case
+        live-and-offline|sync-source/case
+        infinite-and-offline|sync-source/case
+        live-infinite-and-offline|sync-source/case
+        finite-nonseekable|sync-source/case
+        nonseekable-live|sync-source/case
+        nonseekable-infinite|sync-source/case
+        nonseekable-offline|sync-source/case
+        nonseekable-live-infinite|sync-source/case
+        nonseekable-live-offline|sync-source/case
+        nonseekable-infinite-offline|sync-source/case
+        nonseekable-live-infinite-offline|sync-source/case
+        grouped-audio-output-maintenance|sync-speed-intent-origin/case
+        grouped-viewer|sync-speed-intent-origin/case
+        standalone-audio-output-maintenance|sync-speed-intent-origin/case
+        standalone-viewer|sync-speed-intent-origin/case
+        sync-state.join-then-queue-is-paused-until-snapshot|sync-state/membership
+        sync-state.queue-then-join-is-equivalent|sync-state/membership
+        sync-state.playing-group-still-needs-authoritative-queue|sync-state/membership
+        sync-state.leave-invalidates-old-generation|sync-state/membership
+        sync-state.rejoin-rejects-old-membership|sync-state/membership
+        sync-state.foreign-group-never-replaces-current|sync-state/membership
+        sync-state.duplicate-message-id-is-idempotent|sync-state/membership
+        sync-state.equal-command-time-preserves-socket-order|sync-state/membership
+        sync-state.old-command-after-new-command-requires-paused-recovery|sync-state/membership
+        sync-state.command-without-snapshot-requires-recovery|sync-state/membership
+        sync-state.command-for-previous-queue-entry-requires-recovery|sync-state/membership
+        sync-state.unknown-event-is-recoverable|sync-state/membership
+        sync-state.malformed-seek-is-recoverable|sync-state/membership
+        sync-state.library-denial-retains-way-to-leave|sync-state/membership
+        sync-state.legacy-CreateGroupDenied|sync-state/membership
+        sync-state.legacy-JoinGroupDenied|sync-state/membership
+        sync-state.server-left-invalidates-membership|sync-state/membership
+        sync-state.participants-use-server-names|sync-state/membership
+        sync-state.state-wait-and-resume-are-server-facts|sync-state/membership
+        sync-state.unrelated-socket-message-is-not-syncplay|sync-state/membership
+        sync-state.empty-idle-group-stop-is-a-real-server-snapshot|sync-state/membership
+        sync-state.same-group-rejoin-rejects-valid-old-membership-events|sync-state/membership
+        sync-state.readiness-idle-new-queue-without-stop-reports-ready|sync-state/readiness
+        sync-state.readiness-idle-explicitly-stopped-entry-does-not-restart|sync-state/readiness
+        sync-state.readiness-idle-new-entry-after-stop-reports-ready|sync-state/readiness
+        sync-state.readiness-paused-entry-reports-readiness|sync-state/readiness
+        sync-state.readiness-waiting-entry-reports-readiness|sync-state/readiness
+        sync-state.readiness-playing-entry-reports-readiness|sync-state/readiness
+        sync-state.renderer-readiness-no-pending-entry-needs-no-renderer-entry-id|sync-state/renderer-readiness
+        sync-state.renderer-readiness-same-media-old-playlist-entry-still-waits|sync-state/renderer-readiness
+        sync-state.renderer-readiness-pending-entry-without-renderer-acknowledgment-waits|sync-state/renderer-readiness
+        sync-state.renderer-readiness-pending-entry-matches-actual-renderer-entry|sync-state/renderer-readiness
+        sync-state.renderer-bind-exact-open-matches-current-membership-entry-and-media|sync-state/renderer-bind
+        sync-state.renderer-bind-stale-generation-cannot-bind|sync-state/renderer-bind
+        sync-state.renderer-bind-newer-wrong-generation-cannot-bind|sync-state/renderer-bind
+        sync-state.renderer-bind-same-media-wrong-playlist-entry-cannot-bind|sync-state/renderer-bind
+        sync-state.renderer-bind-same-entry-wrong-media-cannot-bind|sync-state/renderer-bind
+        sync-state.renderer-bind-missing-current-entry-cannot-bind|sync-state/renderer-bind
+        sync-state.access-initial-unknown|sync-state/access-presentation
+        sync-state.access-lookup-in-flight|sync-state/access-presentation
+        sync-state.access-lookup-failed|sync-state/access-presentation
+        sync-state.access-confirmed-denied-can-refresh|sync-state/access-presentation
+        sync-state.access-confirmed-join-only|sync-state/access-presentation
+        sync-state.access-confirmed-create-and-join|sync-state/access-presentation
+        sync-state.access-stale-allowed-is-not-confirmed|sync-state/access-presentation
+        sync-state.access-failed-lookup-invalidates-old-allowed|sync-state/access-presentation
+        sync-state.access-unknown-server-policy-fails-closed|sync-state/access-presentation
+        sync-state.future-unpause-replaces-paused-seek-before-output-time|sync-state/membership
+        sync-state.readiness-cache-short-buffer-between-samples-needs-new-ready|sync-state/readiness-cache
+        sync-state.readiness-cache-long-buffer-reports-unready-then-ready-once|sync-state/readiness-cache
+        sync-state.readiness-cache-aligned-no-seek-retains-ready-acknowledgement|sync-state/readiness-cache
+        sync-state.readiness-cache-unchanged-waiting-observations-do-not-rearm-ready|sync-state/readiness-cache
+        sync-state.readiness-cache-new-entry-needs-independent-acknowledgement|sync-state/readiness-cache
+        sync-state.readiness-cache-new-membership-or-binding-resets-old-acknowledgement|sync-state/readiness-cache
+        sync-state.readiness-cache-unready-after-seek-is-not-a-ready-acknowledgement|sync-state/readiness-cache
+        sync-state.deferred-native-completion-sub-tick-buffer|sync-state/readiness-cache
+        sync-state.deferred-native-completion-long-buffer|sync-state/readiness-cache
+        sync-state.native-completion-same-decoder-same-media-retired-entry|sync-state/renderer-bind
+        sync-state.native-completion-retired-membership|sync-state/renderer-bind
+        sync-state.older-identical-pause-preserves-snapshot|sync-state/membership
+        sync-state.older-identical-unpause-preserves-snapshot|sync-state/membership
+        sync-state.older-identical-seek-preserves-snapshot|sync-state/membership
+        sync-state.snapshot-loss-never-enables-local-replacement|sync-state/membership
+        sync-state.older-pause-changed-one-tick-when-requires-recovery|sync-state/membership
+        create-quiet-rest-focus-font10|sync-tv-attention/case
+        create-quiet-rest-focus-font13|sync-tv-attention/case
+        cold-empty-access-resolves-before-input|sync-tv-attention/case
+        cold-empty-access-resolves-after-dpad|sync-tv-attention/case
+        create-heading-privacy-before-editor|sync-tv-attention/case
+        joined-shared-personal-is-group-context|sync-tv-attention/case
+        tv-roster-lifecycle-font-one|sync-tv-player-coherence/case
+        tv-roster-lifecycle-large-font|sync-tv-player-coherence/case
+        tv-actions-one-row-font-one|sync-tv-player-coherence/case
+        tv-actions-one-row-large-font|sync-tv-player-coherence/case
+        tv-safe-edges-font-one|sync-tv-player-coherence/case
+        tv-safe-edges-large-font|sync-tv-player-coherence/case
+        pinned-preview-rule-separation-native-156dpi|sync-tv-rhythm/case
+        repeat-next-setting-painted-separation-native-156dpi|sync-tv-rhythm/case
+        repeat-setting-title-hierarchy-native-156dpi|sync-tv-rhythm/case
+        joined-personal-and-group-sections|sync-tv-structure-discovery/case
+        forward-discovery-font10|sync-tv-structure-discovery/case
+        forward-discovery-font13|sync-tv-structure-discovery/case
+        create-privacy-to-floating-label-font10|sync-tv-structure-discovery/case
+        create-privacy-to-floating-label-font13|sync-tv-structure-discovery/case
+        empty-transport-tv|sync-tv-structure-discovery/case
+        empty-transport-phone|sync-tv-structure-discovery/case
+        phone640-discovery-font10|sync-tv-structure-discovery/case
+        phone640-discovery-font13|sync-tv-structure-discovery/case
+        phone800-discovery-font13|sync-tv-structure-discovery/case
+        settings-secondary-watch-together-order|sync-tv-structure-discovery/case
+        create-visible-focus-default|sync-tv-surfaces/case
+        create-visible-focus-alternate|sync-tv-surfaces/case
+        create-footer-during-edit|sync-tv-surfaces/case
+        create-footer-after-platform-dismissal|sync-tv-surfaces/case
+        whole-row-full-ink-font-1-0|sync-tv-surfaces/case
+        whole-row-full-ink-font-1-3|sync-tv-surfaces/case
+        empty-status-clearance|sync-tv-surfaces/case
+        empty-status-hierarchy|sync-tv-surfaces/case
+        cut-row-full-mask-font-1-0|sync-tv-surfaces/case
+        cut-row-full-mask-font-1-3|sync-tv-surfaces/case
+        repeat-stable-paint-font-1-0|sync-tv-surfaces/case
+        repeat-stable-paint-font-1-3|sync-tv-surfaces/case
+        back-after-zero-inset-ime-dismissal|sync-tv-surfaces/case
+        back-with-zero-inset-ime-visible|sync-tv-surfaces/case
+        whole-repeat-full-ink-native-156dpi|sync-tv-surfaces/case
+        joined-landscape-free-band-clearance|touch-player-director-clearance-paint-edges/case
+        bright-video-whole-seek-target-backing-and-hidden-release|touch-player-director-clearance-paint-edges/case
+        quality-and-total-clock-painted-right-edge|touch-player-director-clearance-paint-edges/case
+        group-chip-skip-intro-portrait-normal|touch-player-director-clearance-paint-edges/case
+        group-chip-next-episode-portrait-normal|touch-player-director-clearance-paint-edges/case
+        group-chip-skip-intro-portrait-large-font|touch-player-director-clearance-paint-edges/case
+        group-chip-next-episode-portrait-large-font|touch-player-director-clearance-paint-edges/case
+        group-chip-skip-intro-landscape-guard|touch-player-director-clearance-paint-edges/case
+        group-chip-next-episode-landscape-guard|touch-player-director-clearance-paint-edges/case
+        group-chip-skip-intro-landscape-rtl|touch-player-director-clearance-paint-edges/case
+        group-chip-next-episode-landscape-rtl|touch-player-director-clearance-paint-edges/case
+        group-chip-next-episode-portrait-large-font-rtl|touch-player-director-clearance-paint-edges/case
+        conversion-notice-reserved-action-band|touch-player-director-clearance-paint-edges/case
         """
         return Dictionary(uniqueKeysWithValues: rows.split(separator: "\n").map {
             let pair = $0.split(separator: "|", maxSplits: 1)

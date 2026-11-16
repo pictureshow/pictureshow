@@ -4,10 +4,10 @@ import XCTest
 
 final class CatchupPolicyTests: XCTestCase {
     func testManifestRejectsUnknownIDsAndMismatchedContracts() throws {
-        XCTAssertEqual(SpecCaseManifest.contracts.count, 1500)
-        XCTAssertEqual(PendingSpecCaseManifest.contracts.count, 1470)
-        XCTAssertEqual(PendingSpecCaseManifest.suites.count, 23)
-        XCTAssertEqual(PendingSpecCaseManifest.suites.values.reduce(0) { $0 + $1.count }, 1470)
+        XCTAssertEqual(SpecCaseManifest.contracts.count, 1442)
+        XCTAssertEqual(PendingSpecCaseManifest.contracts.count, 2090)
+        XCTAssertEqual(PendingSpecCaseManifest.suites.count, 59)
+        XCTAssertEqual(PendingSpecCaseManifest.suites.values.reduce(0) { $0 + $1.count }, 2090)
         XCTAssertTrue(Set(SpecCaseManifest.contracts.keys).isDisjoint(with: Set(PendingSpecCaseManifest.contracts.keys)))
         XCTAssertThrowsError(try PendingSpecCaseManifest.validate(id: "offline-job.invented", suite: "offline-job", operation: "job"))
         let pendingID = try XCTUnwrap(PendingSpecCaseManifest.contracts.keys.first)
@@ -45,8 +45,8 @@ final class CatchupPolicyTests: XCTestCase {
         let source = MediaSource(id: "source")
         XCTAssertNil(ConversionNotice.of(method: "Transcode", url: "https://media.example.test/video?VideoCodec=copy", source: source, reasons: ["VideoCodecNotSupported"]))
         let notice = ConversionNotice.of(method: "Transcode", url: "https://media.example.test/video?VideoCodec=h264", source: source, reasons: ["VideoCodecNotSupported"], device: "this TV")
-        XCTAssertEqual(notice?.fix, "A 1080p H.264 copy on the server would play without conversion.")
-        XCTAssertEqual(notice?.reason, "This video format cannot play on this TV.")
+        XCTAssertEqual(notice?.fix, "It still plays, and a 1080p H.264 copy on the server plays directly.")
+        XCTAssertEqual(notice?.reason, "Its video format won't play on this TV.")
         XCTAssertNil(ConversionNotice.of(method: "Transcode", url: "https://media.example.test/video", source: source, reasons: ["ContainerBitrateExceedsLimit"]))
     }
     func testEveryVideoNoticeExplainsOngoingConversionAndRetainsItsSpecificRemedy() throws {
@@ -66,8 +66,8 @@ final class CatchupPolicyTests: XCTestCase {
             XCTAssertTrue(notice.reason.contains("this phone"), code)
             let visibleBody = "\(notice.reason) \(notice.fix) Don’t show again this viewing"
             XCTAssertLessThanOrEqual(visibleBody.split(separator: " ").count, 30, code)
-            XCTAssertEqual(notice.fix, "\(copy) on the server would play without conversion.")
-            XCTAssertFalse(notice.reason.contains("won't play"), code)
+            // Main's copy (spec playback-information vectors): the video still plays; the remedy names the copy.
+            XCTAssertEqual(notice.fix, "It still plays, and \(copy.prefix(1).lowercased())\(copy.dropFirst()) on the server plays directly.")
         }
     }
     func testNewOperationsRejectMalformedPolicyInputs() async throws {
