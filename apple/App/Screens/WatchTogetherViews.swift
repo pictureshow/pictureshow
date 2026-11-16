@@ -246,15 +246,25 @@ struct SyncGroupChip: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 6) {
+            // The whole status where it fits, else the group's name, else the icon (the sheet has the rest), so the
+            // chip never shows clipped fragments beside the player's other buttons.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 6) {
+                    Image(systemName: "person.2.fill")
+                    Text(sync.groupName ?? "Group").lineLimit(1).fixedSize()
+                    Text("·").opacity(0.6)
+                    Text(SyncLabels.phase(sync.phase)).lineLimit(1).fixedSize()
+                }
+                HStack(spacing: 6) {
+                    Image(systemName: "person.2.fill")
+                    Text(sync.groupName ?? "Group").lineLimit(1).fixedSize()
+                }
                 Image(systemName: "person.2.fill")
-                Text(sync.groupName ?? "Group").lineLimit(1)
-                Text("·").opacity(0.6)
-                Text(SyncLabels.phase(sync.phase)).lineLimit(1)
             }
             .font(.caption.weight(.semibold))
             .padding(.horizontal, 12).padding(.vertical, 8)
             .background(Capsule().fill(.black.opacity(0.55)))
+            .contentShape(Capsule())
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Watch together: \(sync.groupName ?? "group"), \(SyncLabels.phase(sync.phase))\(SyncLabels.quality(sync.quality).map { ", \($0)" } ?? "")")
