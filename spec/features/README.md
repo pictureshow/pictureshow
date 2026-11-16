@@ -10,6 +10,7 @@ This is a manifest of observable behavior, with stable feature IDs for platform 
 | Server discovery, sign-in, Quick Connect, saved accounts | [Accounts](accounts.md) |
 | Home, libraries, details, search, people | [Catalog](catalog.md), [Viewer home and library browsing](home-browse.md) |
 | Playback, tracks, captions, chapters, segments, continuation | [Player](player.md) |
+| Finding and downloading subtitles through the server | [Subtitle download (launch draft)](subtitle-download.md) |
 | Settings and server-side preference honor matrix | [Settings](settings.md) |
 | Device report, About, licenses, Supporter | [Information and support](information.md) |
 | Phone/tablet adaptation and additions | [Touch](touch.md) |
@@ -21,6 +22,7 @@ This is a manifest of observable behavior, with stable feature IDs for platform 
 | Music library and background audio | [Music (launch draft)](music.md) |
 | Guide, live tune, recordings and schedules | [Live TV and DVR (launch draft)](live-tv.md) |
 | Watch together | [SyncPlay (launch draft)](syncplay.md) |
+| Requests to the household's Seerr | [Seerr requests (launch draft)](seerr.md) |
 | Exact server operations and version limits for launch drafts | [Launch API reference](launch-api.md) |
 
 `phone` diverged before several fixes in `main`. Its touch screens are additive UI requirements, **not** permission to regress main's reporting, detail freshness, Retry deadlines, HLS recovery or release ordering. A phone behavior that differs is identified explicitly in the touch manifest. Missing Android behavior is recorded as a gap, rather than silently promoted into an existing feature.

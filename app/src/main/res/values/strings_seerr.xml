@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: MPL-2.0 -->
+<!-- Seerr (Jellyseerr/Overseerr) requests. Kept apart from strings.xml so parallel work merges cleanly. -->
+<resources>
+    <string name="seerr_settings_title">Requests (Seerr)</string>
+    <string name="seerr_settings_off">Ask for movies and series that aren\'t in your library yet, with Jellyseerr or Overseerr.</string>
+    <string name="seerr_settings_on">Connected as %1$s</string>
+
+    <string name="seerr_connect_title">Connect to Seerr</string>
+    <string name="seerr_connect_intro">Jellyseerr and Overseerr let you ask for movies and series your server doesn\'t have yet. Enter the address you use to open it in a browser.</string>
+    <string name="seerr_connect_address">Seerr address</string>
+    <string name="seerr_connect_address_hint">For example, requests.example.com or seerr.home.example:5055</string>
+    <string name="seerr_connect_method_jellyfin">Sign in with Jellyfin</string>
+    <string name="seerr_connect_method_key">Use an API key</string>
+    <string name="seerr_connect_username">Jellyfin username</string>
+    <string name="seerr_connect_password">Jellyfin password</string>
+    <string name="seerr_connect_password_note">Saved encrypted on this device so Pictureshow can renew the Seerr sign-in when it lapses.</string>
+    <string name="seerr_connect_key">API key</string>
+    <string name="seerr_connect_key_note">In Seerr: Settings, General, API Key. Requests are still made as you: your Jellyfin account must be imported into Seerr.</string>
+    <string name="seerr_connect_action">Connect</string>
+    <string name="seerr_connect_busy">Connecting…</string>
+    <string name="seerr_connected_as">Connected to %1$s as %2$s.</string>
+    <string name="seerr_connected_cannot_request">This Seerr account can\'t make requests. Ask whoever runs Seerr to give it the Request permission.</string>
+    <string name="seerr_disconnect">Disconnect</string>
+    <string name="seerr_disconnect_note">Removes the Seerr sign-in from this device for %1$s. Your requests stay on Seerr.</string>
+    <string name="seerr_open_requests">Open Requests</string>
+    <string name="seerr_back">Back</string>
+
+    <string name="seerr_nav">Requests</string>
+    <string name="seerr_tab_discover">Trending</string>
+    <string name="seerr_tab_search">Search</string>
+    <string name="seerr_tab_mine">My requests</string>
+    <string name="seerr_trending_movies">Trending movies</string>
+    <string name="seerr_trending_series">Trending series</string>
+    <string name="seerr_search_label">Search Seerr</string>
+    <string name="seerr_search_hint">Movies and series, in your library or not</string>
+    <string name="seerr_search_short">Enter at least 2 characters.</string>
+    <string name="seerr_search_none">Seerr found nothing for “%1$s”.</string>
+    <string name="seerr_mine_none">You haven\'t requested anything yet.</string>
+    <string name="seerr_loading">Loading…</string>
+    <string name="seerr_retry">Retry</string>
+
+    <string name="seerr_not_in_library">Not in your library</string>
+    <string name="seerr_movie">Movie</string>
+    <string name="seerr_series">Series</string>
+
+    <string name="seerr_status_none">Not requested</string>
+    <string name="seerr_status_pending">Pending approval</string>
+    <string name="seerr_status_approved">Approved</string>
+    <string name="seerr_status_processing">Downloading</string>
+    <string name="seerr_status_partial">Partly available</string>
+    <string name="seerr_status_available">Available</string>
+    <string name="seerr_status_declined">Declined</string>
+    <string name="seerr_status_failed">Failed</string>
+    <string name="seerr_status_blocked">Blocked</string>
+
+    <string name="seerr_request">Request</string>
+    <plurals name="seerr_request_seasons">
+        <item quantity="one">Request %1$d season</item>
+        <item quantity="other">Request %1$d seasons</item>
+    </plurals>
+    <string name="seerr_requesting">Requesting…</string>
+    <string name="seerr_requested_done">Requested. You\'ll find it in My requests.</string>
+    <string name="seerr_all_seasons">All seasons</string>
+    <string name="seerr_season">Season %1$d</string>
+    <plurals name="seerr_season_episodes">
+        <item quantity="one">%1$d episode</item>
+        <item quantity="other">%1$d episodes</item>
+    </plurals>
+    <string name="seerr_choose_seasons">Choose the seasons to request.</string>
+    <string name="seerr_nothing_left">Every season is already requested or available.</string>
+    <string name="seerr_already_have">This is already requested or available.</string>
+    <string name="seerr_no_permission_type">Your Seerr account can\'t request this kind of title.</string>
+
+    <string name="seerr_error_unreachable">Can\'t reach Seerr. Check the address and that this device is on the same network, then try again.</string>
+    <string name="seerr_error_password">Seerr didn\'t accept that Jellyfin username and password.</string>
+    <string name="seerr_error_api_key">Seerr didn\'t accept that API key.</string>
+    <string name="seerr_error_expired">Your Seerr sign-in has ended. Connect again in Settings.</string>
+    <string name="seerr_error_permission">Your Seerr account doesn\'t have permission to request. Ask whoever runs Seerr.</string>
+    <string name="seerr_error_quota">You\'ve reached your request limit on Seerr. Try again later.</string>
+    <string name="seerr_error_already">This was already requested.</string>
+    <string name="seerr_error_blocked">Seerr has blocked requests for this title.</string>
+    <string name="seerr_error_not_linked">Your Jellyfin account isn\'t linked in Seerr, so requests can\'t be made as you. Ask whoever runs Seerr to import your Jellyfin user, or sign in with Jellyfin instead.</string>
+    <string name="seerr_error_server">Seerr answered with an error. Try again later.</string>
+    <string name="seerr_error_address">That doesn\'t look like a Seerr address. Use the address you open Seerr with in a browser, including http:// if it doesn\'t use https.</string>
+    <string name="seerr_error_storage">The saved Seerr sign-in can\'t be read on this device. Connect again in Settings.</string>
+</resources>

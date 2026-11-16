@@ -64,6 +64,7 @@ class PictureshowApplication : Application() {
                     single {
                         app.pictureshow.core.ProfileLockStore(ProfileLockPersistence(get()), app.pictureshow.core.JvmProfilePinHasher())
                     }
+                    single { SeerrStore(get()) }
                     single { DeviceIdentityStore(get()) }
                     single { PlaybackPreferencesStore(get()) }
                     single { AndroidOfflineForeground(this@PictureshowApplication) }
@@ -165,6 +166,7 @@ class PictureshowApplication : Application() {
                         )
                     }
                     viewModel { (account: Account) -> LiveTvViewModel(account, get()) }
+                    viewModel { (account: Account) -> SeerrViewModel(account, get()) }
                     single<CatalogService> { get<JellyfinService>() as CatalogService }
                     single<app.pictureshow.core.music.MusicService> { get<JellyfinService>() as app.pictureshow.core.music.MusicService }
                     single {

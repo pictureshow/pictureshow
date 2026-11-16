@@ -13,6 +13,7 @@ import androidx.compose.foundation.gestures.BringIntoViewSpec
 import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.gestures.ScrollableState
 import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -48,6 +49,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.onFocusedBoundsChanged
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -160,7 +162,10 @@ import kotlinx.coroutines.withTimeoutOrNull
 internal val CatalogBackground = Color(0xFF10131C)
 private val CatalogMuted = Color(0xFFB9C1D6)
 internal val SelectedSeasonOutline = Color(0xFFB8C4FF)
-private val HEADER_ROWS = setOf("account", "search", "settings", "live-tv", "customize", "profile")
+private val HEADER_ROWS = setOf("account", "search", "settings", "live-tv", "requests", "customize", "profile")
+
+/** The TV home header (account, Search, Settings, Requests, Downloads); it scrolls sideways when the actions outgrow the screen. */
+internal const val HOME_ACTIONS_TAG = "home:actions"
 
 /** Each navigation entry owns its saveable focus identity and lazy-list scroll positions. */
 @OptIn(ExperimentalFoundationApi::class)
@@ -179,8 +184,11 @@ fun CatalogHome(
     onDownloads: (() -> Unit)? = null,
     onWatchDownloads: (() -> Unit)? = null,
     serverLabel: String = account.server.name,
-    onLiveTv: () -> Unit = {}
+    onLiveTv: () -> Unit = {},
+    /** Seerr's Discover and Requests; null (not connected to Seerr) hides the button. */
+    onRequests: (() -> Unit)? = null
 ) {
+    val requestsLabel = androidx.compose.ui.res.stringResource(R.string.seerr_nav)
     val homeLifecycle by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
     // Navigation supplies this destination's lifecycle, so Back refreshes without restarting the Activity.
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { onResume() }
@@ -214,7 +222,7 @@ fun CatalogHome(
     }
     val restoreAction = when {
         state.busy && selectedRow in listOf("account", "settings", "profile") -> "search"
-        selectedRow in listOf("account", "search", "settings", "live-tv", "customize", "profile") -> selectedRow
+        selectedRow in listOf("account", "search", "settings", "live-tv", "requests", "customize", "profile") -> selectedRow
         rows.isEmpty() && !state.loading -> if (state.error != null) "retry" else "profile"
         else -> null
     }
@@ -222,6 +230,7 @@ fun CatalogHome(
         "search" -> "Search"
         "settings" -> "Settings"
         "live-tv" -> "Live TV"
+        "requests" -> requestsLabel
         "customize" -> "Customize home"
         "profile" -> "Switch user"
         "account" -> accountChipLabel(account.user.name, serverLabel)
@@ -259,6 +268,7 @@ fun CatalogHome(
     val signOutFocus = remember { FocusRequester() }
     val settingsFocus = remember { FocusRequester() }
     val liveFocus = remember { FocusRequester() }
+    val requestsFocus = remember { FocusRequester() }
     val customizeFocus = remember { FocusRequester() }
     val retry = remember { FocusRequester() }
     val scope = rememberCoroutineScope()
@@ -353,7 +363,7 @@ fun CatalogHome(
     val belowTop =
         rows.isNotEmpty() &&
             selectedRow.isNotEmpty() &&
-            selectedRow !in listOf("account", "search", "settings", "live-tv", "customize", rows.first().key)
+            selectedRow !in listOf("account", "search", "settings", "live-tv", "requests", "customize", rows.first().key)
     val pendingReturn = returning && !restored
     var entryBackSwallowed by remember { mutableStateOf(false) }
     BackHandler(enabled = if (pendingReturn) !entryBackSwallowed else belowTop && homeLifecycle == Lifecycle.State.RESUMED) {
@@ -407,7 +417,12 @@ fun CatalogHome(
                 Column(modifier = Modifier.accessibilityGroup(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     // Up from the first shelf lands on Search; Settings is beside it. The account chip leads the row
                     // (Switch user · Sign out · Settings), and the same two buttons stay below every shelf.
-                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    // With Requests and Downloads the actions outgrow a 960 dp TV screen; the row scrolls (focus brings
+                    // each button into view) rather than squeezing a label onto three lines.
+                    Row(
+                        modifier = Modifier.horizontalScroll(rememberScrollState()).testTag(HOME_ACTIONS_TAG),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
                         // Who is signed in, and the way to Switch user and Sign out, lead the header (T-1).
                         AccountChip(
                             account.user.name,
@@ -452,10 +467,22 @@ fun CatalogHome(
                                 onLiveTv()
                             },
                             modifier = target(Modifier, restoreAction == "live-tv").focusRequester(liveFocus).testTag("home:live-tv")
-                                .staysInRow(first = false, last = onCustomize == null && onDownloads == null)
+                                .staysInRow(first = false, last = onRequests == null && onCustomize == null && onDownloads == null)
                                 .onFocusChanged { if (it.isFocused && (restored || initialNavigation)) selectedRow = "live-tv" }
                                 .onPreviewKeyEvent { headerDown(it) }
                         ) { Text("Live TV") }
+                        if (onRequests != null) {
+                            Button(
+                                onClick = {
+                                    selectedRow = "requests"
+                                    onRequests()
+                                },
+                                modifier = target(Modifier, restoreAction == "requests").focusRequester(requestsFocus)
+                                    .testTag("home:requests").staysInRow(first = false, last = onCustomize == null && onDownloads == null)
+                                    .onFocusChanged { if (it.isFocused && (restored || initialNavigation)) selectedRow = "requests" }
+                                    .onPreviewKeyEvent { headerDown(it) }
+                            ) { Text(requestsLabel) }
+                        }
                         if (onCustomize != null) {
                             Button(
                                 enabled = app.pictureshow.core.canOpenHomeEditor(state.preferencesReady),
@@ -687,7 +714,7 @@ fun CatalogHome(
             // card intent pending until a real row arrives, unless the user deliberately chose profile.
             withFrameNanos { }
             val focused = when {
-                restoreAction in listOf("account", "search", "settings", "customize", "live-tv") -> {
+                restoreAction in listOf("account", "search", "settings", "customize", "live-tv", "requests") -> {
                     focusAction(
                         "header",
                         0,
@@ -695,6 +722,7 @@ fun CatalogHome(
                             "account" -> accountFocus
                             "settings" -> settingsFocus
                             "live-tv" -> liveFocus
+                            "requests" -> requestsFocus
                             "customize" -> customizeFocus
                             else -> search
                         }
@@ -727,7 +755,7 @@ fun CatalogHome(
             }
         } else if (!state.loading &&
             restored &&
-            savedRow !in listOf("account", "profile", "search", "settings", "live-tv", "customize") &&
+            savedRow !in listOf("account", "profile", "search", "settings", "live-tv", "requests", "customize") &&
             savedItem.isNotEmpty() &&
             rows.none { row -> row.key == savedRow && row.items.any { it.id == savedItem } }
         ) {
@@ -1497,7 +1525,9 @@ fun CatalogDetail(
     onDownload: ((MediaItem, String?, String?) -> Unit)? = null,
     /** Trailers, Extras and More like this under the title (CAT-30..32); they arrive after the page and never hold it. */
     discovery: List<DiscoveryRow> = emptyList(),
-    onDiscovery: (DiscoveryEntry) -> Unit = {}
+    onDiscovery: (DiscoveryEntry) -> Unit = {},
+    /** SUB-DL: open the subtitle download panel for this title; null hides Find subtitles. */
+    onSubtitleDownload: ((MediaItem) -> Unit)? = null
 ) {
     val lifecycleState by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
     DisposableEffect(Unit) {
@@ -2556,7 +2586,10 @@ fun CatalogDetail(
                                             }
                                         },
                                         blocked = recoveryActive || (playbackWaiting && pendingActions == null),
-                                        onWrapped = { if (it) actionsWrapped = true }
+                                        onWrapped = { if (it) actionsWrapped = true },
+                                        onSubtitles = onSubtitleDownload
+                                            ?.takeIf { subtitleDownloadOffered(item.type) && !item.isMissing }
+                                            ?.let { open -> { open(item) } }
                                     ) {
                                         if (trackSelection) selectedSection = "header"
                                     }
@@ -3140,6 +3173,8 @@ private fun DetailActions(
     blocked: Boolean = false,
     onDownload: (() -> Unit)? = null,
     onWrapped: (Boolean) -> Unit = {},
+    /** SUB-DL: Find subtitles, on titles the server can attach a subtitle file to. */
+    onSubtitles: (() -> Unit)? = null,
     onFocus: () -> Unit
 ) {
     val bringIntoView = remember { BringIntoViewRequester() }
@@ -3563,6 +3598,28 @@ private fun DetailActions(
                     }
                 }
             }
+            if (onSubtitles != null && pending == null && !compact) {
+                key("subtitles") {
+                    Button(
+                        onClick = { if (!blocked) onSubtitles() },
+                        enabled = !blocked,
+                        modifier = Modifier.testTag("detail:subtitles").then(
+                            if (stableLayout) {
+                                Modifier.width(detailStableWidth("subtitles")).heightIn(min = DETAIL_STABLE_HEIGHT)
+                            } else {
+                                Modifier
+                            }
+                        )
+                    ) {
+                        // TV Button leaves content at top start; the stable label centres it like its siblings.
+                        DetailActionLabel(
+                            androidx.compose.ui.res.stringResource(R.string.subtitle_find_action),
+                            if (stableLayout) "subtitles" else null,
+                            Modifier.testTag("detail:subtitles-label")
+                        )
+                    }
+                }
+            }
             // After playback Play from start keeps its last place, so the pending handoff and the ready row agree on Right
             // from the primary landing on Mark watched (CAT-08..12); the shorter hero keeps a wrapped second row on screen (T-8).
             if (offersFromStart && stableLayout) {
@@ -3754,7 +3811,9 @@ internal fun CatalogCard(
     /** Replaces the line under the title: Home's "Show · Library · Next · S1:E2" (HOME-12, HOME-13). */
     subtitle: String? = null,
     /** Reads [subtitle] after the card's own announcement, where the line says what the card is (a trailer's source). */
-    announceSubtitle: Boolean = false
+    announceSubtitle: Boolean = false,
+    /** Art from outside the server (a Seerr title's TMDB poster), loaded without any server credentials. */
+    artworkUrl: String? = null
 ) {
     var focused by remember { mutableStateOf(false) }
     // A missing episode says so wherever its card appears (CAT-21).
@@ -3850,7 +3909,7 @@ internal fun CatalogCard(
                 )
             ) {
                 Box(Modifier.fillMaxWidth().aspectRatio(if (wide) 16f / 9f else 2f / 3f)) {
-                    CatalogArtwork(item, account, wide, Modifier.fillMaxSize(), placeholderName = !nameInArtwork)
+                    CatalogArtwork(item, account, wide, Modifier.fillMaxSize(), placeholderName = !nameInArtwork, artworkUrl = artworkUrl)
                     if (nameInArtwork) {
                         Text(
                             item.name,
@@ -3940,14 +3999,16 @@ internal fun CatalogArtwork(
     modifier: Modifier = Modifier,
     alignment: Alignment = Alignment.Center,
     showPlaceholder: Boolean = true,
-    placeholderName: Boolean = true
+    placeholderName: Boolean = true,
+    artworkUrl: String? = null
 ) {
     BoxWithConstraints(
         modifier.clearAndSetSemantics {}.then(if (showPlaceholder) Modifier.background(Color(0xFF262D3D)) else Modifier),
         contentAlignment = Alignment.Center
     ) {
         val pixels = with(LocalDensity.current) { maxWidth.roundToPx() }
-        val url = imageUrl(account.server, item, pixels, wide = wide)
+        // Outside art never falls back to the server: an empty override means none (a Seerr title without a poster).
+        val url = if (artworkUrl != null) artworkUrl.takeIf(String::isNotBlank) else imageUrl(account.server, item, pixels, wide = wide)
         var loaded by remember(url) { mutableStateOf(false) }
         if (!loaded && showPlaceholder && placeholderName) {
             Text(item.name, modifier = Modifier.padding(14.dp), maxLines = 4, overflow = TextOverflow.Ellipsis)

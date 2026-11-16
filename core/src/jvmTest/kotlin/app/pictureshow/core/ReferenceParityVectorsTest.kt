@@ -90,6 +90,8 @@ class ReferenceParityVectorsTest {
                         "application",
                         // Real account persistence traces run in AccountSignOutVectorsTest.
                         "account-sign-out",
+                        // SubtitleDownloadVectorsTest executes SUB-DL-01..04.
+                        "subtitle-download",
                         "recovery",
                         "playback-information",
                         "playback-formats", "catalog-return",
@@ -102,7 +104,9 @@ class ReferenceParityVectorsTest {
                         "settings-presentation",
                         "playback-settings-layout",
                         "frame-rate-match",
-                        "playback-start"
+                        "playback-start",
+                        // SeerrVectorsTest executes the Seerr request rules.
+                        "seerr"
                     )
             ) {
                 "Unhandled suite $suite in ${file.name}"

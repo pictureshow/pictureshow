@@ -43,7 +43,7 @@ class PlayerEmptyTrackMenuTest {
 
     @Test fun theEmptyPanelPutsFocusOnCloseAndCloses() {
         var closed = false
-        compose.setContent { EmptyTrackPanel("This video has no subtitles.") { closed = true } }
+        compose.setContent { EmptyTrackPanel("This video has no subtitles.", onClose = { closed = true }) }
         compose.waitForIdle()
         compose.onNodeWithText("This video has no subtitles.").assertExists()
         compose.onNodeWithText("Close").assertIsFocused()

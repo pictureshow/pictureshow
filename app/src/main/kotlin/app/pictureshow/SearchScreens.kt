@@ -78,6 +78,7 @@ import androidx.tv.material3.Button
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import app.pictureshow.core.Account
+import app.pictureshow.core.HomeRow
 import app.pictureshow.core.MediaItem
 import app.pictureshow.core.fixedHeadCollapses
 import app.pictureshow.core.fixedHeadInList
@@ -113,8 +114,13 @@ fun SearchScreen(
     onClear: () -> Unit,
     onRetry: () -> Unit,
     onOpen: (MediaItem) -> Unit,
-    keyboardRequest: Int = 0
+    keyboardRequest: Int = 0,
+    /** Rows after the library's own, such as Seerr's "Not in your library". */
+    extraRows: List<HomeRow> = emptyList(),
+    /** A card's art from outside the server (Seerr's TMDB posters); null uses the server's image. */
+    artwork: (MediaItem) -> String? = { null }
 ) {
+    val rows = state.rows + extraRows
     val lifecycleState by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
     val field = remember { FocusRequester() }
     val retry = remember { FocusRequester() }
@@ -133,12 +139,12 @@ fun SearchScreen(
     var restored by remember { mutableStateOf(false) }
     val returning = remember { selected.isNotEmpty() }
     var interacted by remember { mutableStateOf(false) }
-    val returnRowIndex = state.rows.indexOfFirst { row -> row.key == selected.substringBefore(':') }.coerceAtLeast(0)
-    val returnRow = state.rows.getOrNull(returnRowIndex)
+    val returnRowIndex = rows.indexOfFirst { row -> row.key == selected.substringBefore(':') }.coerceAtLeast(0)
+    val returnRow = rows.getOrNull(returnRowIndex)
     val returnItem = returnRow?.items?.let { items -> items.firstOrNull { "${returnRow.key}:${it.id}" == selected } ?: items.firstOrNull() }
     val returnTarget = returnItem?.let { "${returnRow.key}:${it.id}" }
-    val returningToField = state.rows.isEmpty() && state.completed && !state.allFailed
-    val returningToRetry = state.rows.isEmpty() && state.allFailed
+    val returningToField = rows.isEmpty() && state.completed && !state.allFailed
+    val returningToRetry = rows.isEmpty() && state.allFailed
     val returnLabel = returnItem?.let(::catalogAnnouncement) ?: when {
         returningToRetry -> "Retry"
         returningToField -> "Search your video library"
@@ -158,7 +164,7 @@ fun SearchScreen(
     var handledKeyboardRequest by rememberSaveable { mutableStateOf(keyboardRequest) }
     val requests = mutableMapOf<String, FocusRequester>()
     val rowStates = mutableMapOf<String, LazyListState>()
-    state.rows.forEach { row ->
+    rows.forEach { row ->
         key(row.key) {
             rowStates[row.key] = rememberLazyListState()
             row.items.forEach { item -> key(item.id) { requests["${row.key}:${item.id}"] = remember { FocusRequester() } } }
@@ -186,7 +192,7 @@ fun SearchScreen(
         focusInHead(field)
     }
     suspend fun focusRow(index: Int, target: String? = null): Boolean {
-        val row = state.rows.getOrNull(index) ?: return false
+        val row = rows.getOrNull(index) ?: return false
         val itemIndex = row.items.indexOfFirst { "${row.key}:${it.id}" == (target ?: selections[row.key]) }.coerceAtLeast(0)
         val position = index + headItems
         // The first row stays under the head while the card fits there.
@@ -214,7 +220,7 @@ fun SearchScreen(
         keyboard?.hide()
         when {
             state.allFailed || state.someFailed -> retry.requestFocus()
-            state.rows.isNotEmpty() -> scope.launch { focusRow(0) }
+            rows.isNotEmpty() -> scope.launch { focusRow(0) }
             normalizeSearch(state.query).isEmpty() && state.recent.isNotEmpty() -> recentFirst.requestFocus()
         }
     }
@@ -506,7 +512,7 @@ fun SearchScreen(
                 verticalArrangement = Arrangement.spacedBy(24.dp)
             ) {
                 if (headInList) item(key = "search:head") { head() }
-                state.rows.forEachIndexed { rowIndex, row ->
+                rows.forEachIndexed { rowIndex, row ->
                     item(key = row.key) {
                         val section = remember { ShelfSection() }
                         Column(
@@ -584,7 +590,7 @@ fun SearchScreen(
 
                                                                     Key.DirectionDown -> {
                                                                         if (rowIndex <
-                                                                            state.rows.lastIndex
+                                                                            rows.lastIndex
                                                                         ) {
                                                                             scope.launch { focusRow(rowIndex + 1) }
                                                                         }
@@ -596,7 +602,8 @@ fun SearchScreen(
                                                             }
                                                         },
                                                     // CAT-14a: two results with the same card text name their library (TV review T-12).
-                                                    subtitle = homeRowSubtitle(row, item)
+                                                    subtitle = homeRowSubtitle(row, item),
+                                                    artworkUrl = artwork(item)
                                                 )
                                             }
                                         }
@@ -622,9 +629,9 @@ fun SearchScreen(
             awaitCatalogFocus(field)
         }
     }
-    LaunchedEffect(lifecycleState, state.completed, state.allFailed, state.rows, focusResults) {
+    LaunchedEffect(lifecycleState, state.completed, state.allFailed, rows, focusResults) {
         if (lifecycleState != Lifecycle.State.RESUMED) return@LaunchedEffect
-        if (state.rows.isNotEmpty() && (!restored || focusResults)) {
+        if (rows.isNotEmpty() && (!restored || focusResults)) {
             val focused = if (selected.isNotEmpty() || focusResults) focusRow(returnRowIndex, returnTarget) else true
             focusResults = false
             restored = focused

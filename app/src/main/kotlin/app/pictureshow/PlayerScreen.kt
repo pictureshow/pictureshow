@@ -190,6 +190,8 @@ internal fun PlayerItemScreen(
     val player by host::player
     val speedState by output.speed.collectAsState()
     var extraPanel by remember { mutableStateOf<String?>(null) }
+    // SUB-DL: the Download subtitles panel, opened from the Subtitles chooser.
+    var subtitleDownloadOpen by remember { mutableStateOf(false) }
     val foreground by output.foreground.collectAsState()
     val pauseIntent by output.pauseIntent.collectAsState()
     val setupError by host::setupError
@@ -1026,8 +1028,19 @@ internal fun PlayerItemScreen(
                         }, onClose = { close(closeChooser) })
                         return@PlayerPanel
                     }
+                    val offersDownload = type == MediaStreamType.Subtitle && offline == null && !host.isLive
+                    val openDownload: () -> Unit = {
+                        close {
+                            closeChooser()
+                            subtitleDownloadOpen = true
+                        }
+                    }
                     menu.emptyNotice?.let { notice ->
-                        EmptyTrackPanel(notice, onClose = { close(closeChooser) })
+                        EmptyTrackPanel(
+                            notice,
+                            onClose = { close(closeChooser) },
+                            action = if (offersDownload) stringResource(R.string.subtitle_download_open) to openDownload else null
+                        )
                         return@PlayerPanel
                     }
                     TrackChoices(
@@ -1070,6 +1083,44 @@ internal fun PlayerItemScreen(
                                 subtitleDelayMs = it
                                 output.setSubtitleDelayMs(it)
                             }
+                            if (offersDownload) {
+                                Button(onClick = openDownload, modifier = Modifier.testTag("player:subtitle-download")) {
+                                    Text(stringResource(R.string.subtitle_download_open))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if (subtitleDownloadOpen && error == null && !switching && !exitRequested) {
+                val closeDownload: () -> Unit = {
+                    subtitleDownloadOpen = false
+                    returnFocus = subtitleFocus
+                }
+                val search = rememberRemoteSubtitleSearch(account)
+                PlayerPanel(stringResource(R.string.subtitle_download_title), closeDownload, scrollable = false) {
+                    val decision = state.decision
+                    if (search != null && decision != null) {
+                        val target = remember(decision.mediaSourceId) {
+                            app.pictureshow.core.subtitles.RemoteSubtitleTarget(
+                                item.id,
+                                item.type,
+                                playable = true,
+                                mediaSourceId = decision.mediaSourceId,
+                                streams = decision.mediaSource?.mediaStreams.orEmpty(),
+                                selectedAudio = state.audioIndex
+                            )
+                        }
+                        Column(Modifier.background(Color(0xF510131C)).padding(32.dp).widthIn(max = 720.dp)) {
+                            TvSubtitleDownloadContent(
+                                search,
+                                target,
+                                onAdopted = { adopted ->
+                                    controller?.adoptDownloadedSubtitle(adopted.audioIndex, adopted.subtitleIndex)
+                                    interaction++
+                                },
+                                onClose = { close(closeDownload) }
+                            )
                         }
                     }
                 }

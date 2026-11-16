@@ -112,6 +112,7 @@ import app.pictureshow.core.detailRetryDescription
 import app.pictureshow.core.episodeLabel
 import app.pictureshow.core.homeNotice
 import app.pictureshow.core.homeRowDestination
+import app.pictureshow.core.isMissing
 import app.pictureshow.core.missingItemLabel
 import app.pictureshow.core.runtimeLabel
 import app.pictureshow.core.showDetailEmptyState
@@ -539,7 +540,9 @@ internal fun TouchCatalogDetail(
     download: TouchDetailDownload? = null,
     /** Trailers, Extras and More like this (CAT-30..32): they arrive after the page and never hold it. */
     discovery: List<DiscoveryRow> = emptyList(),
-    onDiscovery: (DiscoveryEntry) -> Unit = {}
+    onDiscovery: (DiscoveryEntry) -> Unit = {},
+    /** SUB-DL: open the subtitle download dialog; null hides Find subtitles. */
+    onSubtitleDownload: ((MediaItem) -> Unit)? = null
 ) {
     val page = rememberTouchDetailPresentation(
         state,
@@ -624,6 +627,13 @@ internal fun TouchCatalogDetail(
                                                 enabled = !state.busy && !state.loading,
                                                 modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("touch:detail:download")
                                             ) { Text("Download") }
+                                        }
+                                        if (onSubtitleDownload != null && subtitleDownloadOffered(item.type) && !item.isMissing) {
+                                            OutlinedButton(
+                                                onClick = { onSubtitleDownload(item) },
+                                                enabled = !state.loading,
+                                                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("touch:detail:subtitles")
+                                            ) { Text(androidx.compose.ui.res.stringResource(R.string.subtitle_find_action)) }
                                         }
                                     }
                                     item.overview?.takeIf(String::isNotBlank)?.let { Text(it, Modifier.widthIn(max = 640.dp)) }

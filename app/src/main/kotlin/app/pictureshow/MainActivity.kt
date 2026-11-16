@@ -996,6 +996,7 @@ internal fun Pictureshow(
                         }
                     }
                     val watchDownloads = rememberHomeDownloadsOffer(screen, account.key) { nav.navigate(OFFLINE_DOWNLOADS_ROUTE) }
+                    val seerrConnected = rememberSeerrConnection(account.key) != null
                     if (editing) HomeCustomization(screen, account, catalogService, vm::customize) { editing = false }
                     CatalogHome(
                         screen.copy(
@@ -1029,7 +1030,12 @@ internal fun Pictureshow(
                         },
                         onLiveTv = { nav.navigate("live-tv") },
                         onDownloads = { nav.navigate(OFFLINE_DOWNLOADS_ROUTE) },
-                        onWatchDownloads = watchDownloads
+                        onWatchDownloads = watchDownloads,
+                        onRequests = if (seerrConnected) {
+                            { nav.navigate(SEERR_ROUTE) }
+                        } else {
+                            null
+                        }
                     )
                 }
             }
@@ -1045,6 +1051,7 @@ internal fun Pictureshow(
         offlineTvScreens(nav, { state.snapshot.currentAccount }, { catalog }, music::beforeVideo)
         aboutScreens(nav)
         supporterScreen(nav)
+        seerrTvScreens(nav) { state.snapshot.currentAccount?.takeUnless { it.expired } }
         composable("this-tv") {
             ThisTvScreen(koinInject()) { nav.popBackStack() }
         }
@@ -1085,7 +1092,9 @@ internal fun Pictureshow(
                     onSignOut = profile::signOut,
                     signingOut = profileState.busy,
                     separateNextUp = separateNextUp.first,
-                    onSeparateNextUp = separateNextUp.second
+                    onSeparateNextUp = separateNextUp.second,
+                    seerrUser = rememberSeerrConnection(account.key)?.user?.name.orEmpty(),
+                    onSeerr = { nav.navigate(SEERR_CONNECT_ROUTE) }
                 )
             }
         }
@@ -1110,14 +1119,17 @@ internal fun Pictureshow(
                 }
                 // Search is the only field a controller can type into; sign-in and Quick Connect never register.
                 RemoteTextDestination(remoteTarget::setSearchField) { vm.query(it, immediate = true) }
+                val offers = rememberSeerrOffers(account, screen)
                 SearchScreen(
                     screen, account, entry.arguments?.getBoolean("keyboard") ?: true,
                     vm::query, vm::submit, { vm.query(it, immediate = true) }, vm::clearRecent, vm::retry,
                     onOpen = {
                         vm.opened()
-                        nav.navigate(itemRoute(it))
+                        nav.navigate(seerrTitleRoute(it) ?: itemRoute(it))
                     },
-                    keyboardRequest = searchKeyboardRequest
+                    keyboardRequest = searchKeyboardRequest,
+                    extraRows = offers.rows,
+                    artwork = offers.artwork
                 )
             }
         }
@@ -1244,6 +1256,7 @@ internal fun Pictureshow(
                     val discoveryVm: DetailDiscoveryViewModel = koinViewModel(parameters = { parametersOf(account, item, catalog) })
                     val discovery by discoveryVm.state.collectAsStateWithLifecycle()
                     val context = LocalContext.current
+                    var subtitleTarget by remember { mutableStateOf<MediaItem?>(null) }
                     LaunchedEffect(entry) {
                         entry.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
                             vm.resumed()
@@ -1273,8 +1286,12 @@ internal fun Pictureshow(
                             offlineDownloadRoute(shown, season, seasonName)?.let { nav.navigate(it) }
                         },
                         discovery = discoveryRows(screen.item ?: item, discovery),
-                        onDiscovery = { chosen -> openDiscovery(context, chosen, { nav.navigate(it) }) { nav.navigate(itemRoute(it)) } }
+                        onDiscovery = { chosen -> openDiscovery(context, chosen, { nav.navigate(it) }) { nav.navigate(itemRoute(it)) } },
+                        onSubtitleDownload = { subtitleTarget = it }
                     )
+                    subtitleTarget?.let { target ->
+                        TvSubtitleDownloadDialog(account, target) { subtitleTarget = null }
+                    }
                 }
             }
         }
@@ -1318,7 +1335,12 @@ private fun ServerDiscoveryPage(modifier: Modifier = Modifier, content: @Composa
 }
 
 @Composable
-private fun Page(title: String, modifier: Modifier = Modifier, announceTitle: Boolean = true, content: @Composable ColumnScope.() -> Unit) {
+internal fun Page(
+    title: String,
+    modifier: Modifier = Modifier,
+    announceTitle: Boolean = true,
+    content: @Composable ColumnScope.() -> Unit
+) {
     val restoring = LocalRestoringConfirmationFocus.current
     Box(modifier.fillMaxSize().background(Color(0xFF10131C)).padding(horizontal = 48.dp, vertical = 32.dp)) {
         Column(
@@ -1338,7 +1360,7 @@ private fun Page(title: String, modifier: Modifier = Modifier, announceTitle: Bo
 }
 
 @Composable
-private fun Action(label: String, modifier: Modifier = Modifier, initial: Boolean = false, enabled: Boolean = true, onClick: () -> Unit) {
+internal fun Action(label: String, modifier: Modifier = Modifier, initial: Boolean = false, enabled: Boolean = true, onClick: () -> Unit) {
     val focus = remember { FocusRequester() }
     val restoring = LocalRestoringConfirmationFocus.current
     Button(
@@ -1360,7 +1382,7 @@ private fun Action(label: String, modifier: Modifier = Modifier, initial: Boolea
 }
 
 @Composable
-private fun Message(message: String?) {
+internal fun Message(message: String?) {
     if (message != null) StatusLine(message, color = Color(0xFFFFCCB8))
 }
 
