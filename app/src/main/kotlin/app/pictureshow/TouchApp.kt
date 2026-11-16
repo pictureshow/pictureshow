@@ -88,6 +88,9 @@ internal fun TouchPictureshow(
         }
         return
     }
+    // AUTH-16: see the TV host. Nothing below (rows, deep links, playback entries) composes while locked.
+    var pendingPassword by remember { mutableStateOf<app.pictureshow.core.Account?>(null) }
+    if (profileLockGate(state.snapshot, accounts, tv = false) { pendingPassword = it }) return
     // Navigation restores its own stack. Save the identity that installed it too: the first
     // composition after recreation is not an account change. Do not put credentials in saved state.
     var landingApplied by rememberSaveable(state.snapshot.currentKey) { mutableStateOf(false) }
@@ -217,6 +220,10 @@ internal fun TouchPictureshow(
                 popUpTo(nav.graph.id) { inclusive = true }
                 launchSingleTop = true
             }
+            pendingPassword?.takeIf { key == null }?.let {
+                pendingPassword = null
+                nav.navigate(serverRoute("login", it.server) + "&username=${Uri.encode(it.user.name)}")
+            }
         }
         // Account bootstrap above installs the normal graph first. An entry never waits for a future login.
         LaunchedEffect(entrySequence, state.snapshot.currentKey, state.snapshot.currentAccount?.accessToken) {
@@ -292,6 +299,25 @@ internal fun TouchPictureshow(
             }
             composable("accounts") { entry ->
                 val vm: AccountsViewModel = koinViewModel()
+                val pinStore = remember { org.koin.mp.KoinPlatform.getKoinOrNull()?.getOrNull<app.pictureshow.core.ProfileLockStore>() }
+                var pinFor by remember { mutableStateOf<app.pictureshow.core.Account?>(null) }
+                pinFor?.takeIf { pinStore != null }?.let { target ->
+                    ProfilePinDialog(
+                        pinStore!!,
+                        target.key,
+                        target.user.name,
+                        tv = false,
+                        onUnlocked = {
+                            pinFor = null
+                            vm.select(target.key)
+                        },
+                        onPassword = {
+                            pinFor = null
+                            nav.navigate(serverRoute("login", target.server) + "&username=${Uri.encode(target.user.name)}")
+                        },
+                        onCancel = { pinFor = null }
+                    )
+                }
                 val screen by vm.state.collectAsStateWithLifecycle()
                 SignInCompletion(screen.selected, entry.id, nav, state.snapshot, installedKey, installedExpired, accounts)
                 TouchAccounts(
@@ -300,6 +326,8 @@ internal fun TouchPictureshow(
                     onSelect = { account ->
                         if (account.expired || account.signedOut) {
                             nav.navigate(serverRoute("login", account.server) + "&username=${Uri.encode(account.user.name)}")
+                        } else if (profilePinOnSwitch(pinStore, account.key, state.snapshot.currentKey)) {
+                            pinFor = account
                         } else {
                             vm.select(account.key)
                         }

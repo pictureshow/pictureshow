@@ -170,6 +170,12 @@ internal fun TouchRemoteScreen(state: RemoteControllerUi, host: RemoteController
                 }
             }
             if (target == null) {
+                // P-16: say what this screen is for before asking for a TV.
+                Text(
+                    androidx.compose.ui.res.stringResource(R.string.remote_intro),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.testTag("remote:intro")
+                )
                 Button(onClick = onChoose, modifier = Modifier.heightIn(min = 48.dp).testTag("remote:choose")) { Text("Choose a TV") }
                 return@Column
             }

@@ -19,6 +19,7 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.compose.currentStateAsState
 import app.pictureshow.core.ApiTimeouts
 import app.pictureshow.core.DETAIL_PENDING_LABEL_GRACE_MILLIS
@@ -477,18 +478,29 @@ internal fun rememberTouchDetailPresentation(
     }
     val favoriteEnabled = if (pendingEnabled) captureOpen else fresh && currentItem != null
     val stateKnown = fresh && currentItem != null
+    // P-15: in a Watch together group, a plain Play starts the item for everyone, so it says so.
+    val syncGroup = syncGroupForPlay()
+    val groupPlay = syncGroup?.let { androidx.compose.ui.res.stringResource(R.string.sync_play_with, it) }
     val actions = buildList {
         add(
             TouchDetailAction(
                 target = "primary",
                 label = when {
                     local != null -> if (local.startTicks > 0) resumeLabel(local.startTicks) else "Play"
-                    !pendingEnabled -> primaryFresh
+                    !pendingEnabled -> if (groupPlay != null && primaryFresh == "Play") groupPlay else primaryFresh
                     playQueued != null && playQueued != "primary" -> plain("primary")
                     else -> label("primary", playQueued == "primary", primaryPending)
                 },
                 // The longest resume wording stands in for any position, so fresh data arriving moves nothing.
-                reserve = listOf("Play", "Resume from 0:00:00", primaryFresh, "Play when ready", "Play requested", "Play unavailable"),
+                reserve = listOfNotNull(
+                    "Play",
+                    "Resume from 0:00:00",
+                    primaryFresh,
+                    "Play when ready",
+                    "Play requested",
+                    "Play unavailable",
+                    groupPlay
+                ),
                 enabled = local != null || if (pendingEnabled) playOpen("primary") else canFreshPlay,
                 state = TOUCH_OTHER_PLAY_REQUESTED.takeIf {
                     local == null && pendingEnabled && playQueued != null && playQueued != "primary"
@@ -759,4 +771,13 @@ internal fun rememberTouchDetailPresentation(
         },
         abandon = ::abandon
     )
+}
+
+/** The joined Watch together group's name, shortened for a button, or null when not in one. */
+@Composable
+private fun syncGroupForPlay(): String? {
+    val host = org.koin.mp.KoinPlatform.getKoinOrNull()?.getOrNull<SyncPlayHost>() ?: return null
+    val sync by host.state.collectAsStateWithLifecycle()
+    val name = sync.groupName?.takeIf { sync.groupId != null }?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    return if (name.length > 20) name.take(19).trimEnd() + "…" else name
 }

@@ -323,6 +323,11 @@ internal sealed interface OfflinePreviewState {
     data class Ready(val preview: OfflinePreview) : OfflinePreviewState
 }
 
+/** One quality's size for its row: exact when the server knows every file's size, an estimate otherwise. */
+internal fun offlineChoiceSize(choice: OfflinePresetChoice): String? = choice.estimateBytes?.takeIf { it > 0 }?.let {
+    if (choice.exactSize) offlineBytes(it) else "About ${offlineBytes(it)}"
+}
+
 /** Size text: exact only when every item's size is exact. */
 internal fun offlineSizeText(items: List<OfflineApiItem>, preset: OfflinePreset, estimate: (OfflineApiItem) -> Long?): String {
     val selection = offlineSelect(items.map(OfflineApiItem::candidate), preset)

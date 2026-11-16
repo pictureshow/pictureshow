@@ -184,7 +184,7 @@ internal fun SyncPlayPanel(
     val joined = state.groupId != null
     val uncertain = !joined && state.phase == "Reconnecting"
     val bodyScroll = key(state.server, state.viewer, state.groupId, uncertain) { rememberScrollState() }
-    val canCreate = !joined && !uncertain && state.accessAllowed && state.policy == "CreateAndJoinGroups"
+    val canCreate = !joined && !uncertain && state.groupList.canCreate
     val usable = joined && !state.busy && state.phase !in setOf("Joining", "Reconnecting", "Leaving", "Error")
     val transport = syncTransportAvailable(usable, state.queue.size)
     val notice = effectiveSyncNotice(state)
@@ -740,7 +740,7 @@ private fun SyncGroups(
     refreshFocus: FocusRequester,
     joinFocus: FocusRequester
 ) {
-    val canCreate = state.accessAllowed && state.policy == "CreateAndJoinGroups"
+    val canCreate = state.groupList.canCreate
     val primaryGroup = state.groups.firstOrNull()?.id.takeIf { state.accessAllowed && !state.busy }
     val namePrimary = primaryGroup == null && state.accessAllowed && !state.busy && canCreate
     val fieldReveal = remember { BringIntoViewRequester() }
@@ -852,9 +852,17 @@ private fun SyncGroups(
                     refreshIcon = true
                 )
             }
-            if (!state.busy && state.accessAllowed && state.groups.isEmpty()) {
-                if (tv) Spacer(Modifier.height(12.dp))
-                SyncText(stringResource(R.string.sync_empty), tv, Modifier.testTag("sync:empty"), small = tv)
+            when (state.groupList.state) {
+                app.pictureshow.core.sync.SyncGroupListState.EMPTY -> {
+                    if (tv) Spacer(Modifier.height(12.dp))
+                    SyncText(stringResource(R.string.sync_empty), tv, Modifier.testTag("sync:empty"), small = tv)
+                }
+                // The error notice says the same thing when it is still up; this line stays once it's dismissed.
+                app.pictureshow.core.sync.SyncGroupListState.FAILED -> if (state.notice?.kind != SyncNoticeKind.GROUPS_FAILED) {
+                    if (tv) Spacer(Modifier.height(12.dp))
+                    SyncText(stringResource(R.string.sync_groups_unreachable), tv, Modifier.testTag("sync:groups-failed"), small = tv)
+                }
+                else -> Unit
             }
             if (state.accessAllowed) {
                 Column {

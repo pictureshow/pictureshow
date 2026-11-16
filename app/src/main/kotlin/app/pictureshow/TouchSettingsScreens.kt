@@ -82,6 +82,13 @@ internal fun TouchSettings(
     TouchPage("Settings", onBack) {
         TouchSection {
             TouchNavRow("Accounts", onClick = onAccounts)
+            ProfilePinSettings(
+                tv = false,
+                row = { title, supporting, tag, onClick ->
+                    Box(Modifier.testTag("touch:$tag")) { TouchNavRow(title, supporting, onClick = onClick) }
+                },
+                toggle = { title, supporting, checked, tag, onChange -> TouchSwitchRow(title, supporting, checked, "touch:$tag", onChange) }
+            )
             onApproveSignIn?.let {
                 TouchNavRow(
                     androidx.compose.ui.res.stringResource(R.string.qc_approve_title),

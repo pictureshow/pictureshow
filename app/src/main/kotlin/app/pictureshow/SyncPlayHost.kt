@@ -338,6 +338,7 @@ internal class SyncPlayHost(
                 policyKnown = false,
                 policyFailed = false,
                 groups = emptyList(),
+                groupsFailed = false,
                 status = "",
                 notice = null
             )
@@ -371,7 +372,7 @@ internal class SyncPlayHost(
                 }
 
                 is ClientResult.Failure -> if (current(target, version)) {
-                    mutable.value = mutable.value.copy(busy = false)
+                    mutable.value = mutable.value.copy(busy = false, groupsFailed = true)
                     note(groups.error.message, SyncNoticeKind.GROUPS_FAILED, SyncNoticeTone.ERROR, SyncNoticeAction.REFRESH)
                 }
             }

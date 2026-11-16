@@ -59,6 +59,8 @@ internal data class SyncPlayPresentation(
     val groupId: String? = null,
     val groupName: String? = null,
     val groups: List<SyncPlayGroupRow> = emptyList(),
+    /** P-2: the last group list request failed, so an empty [groups] means "unknown", not "none". */
+    val groupsFailed: Boolean = false,
     val participants: List<String> = emptyList(),
     val queue: List<SyncPlayQueueRow> = emptyList(),
     val ignoreWait: Boolean = false,
@@ -71,6 +73,7 @@ internal data class SyncPlayPresentation(
     val access get() = syncAccessPresentation(policy, policyKnown, busy, policyFailed)
     val accessAllowed: Boolean get() = access.canJoin
     val canRefresh: Boolean get() = access.canRefresh
+    val groupList get() = app.pictureshow.core.sync.syncGroupList(accessAllowed, policy, busy, groupsFailed, groups.size)
 
     /** Legacy diagnostic accessor used by protocol regression checks, never rendered by the panel. */
     val accessNotice: String? get() = when (access.notice) {
