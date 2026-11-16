@@ -70,15 +70,17 @@ class MpvHttpProxyTest {
     private fun secretPath() = URL(requireNotNull(proxy.local(upstream.url("/Videos/1/stream").toString()))).path
 
     /** The first response line, or null when the proxy closed the connection without answering. */
-    private fun statusLine(socket: Socket): String? =
-        socket.getInputStream().bufferedReader(Charsets.ISO_8859_1).readLine()
+    private fun statusLine(socket: Socket): String? = socket.getInputStream().bufferedReader(Charsets.ISO_8859_1).readLine()
 
     @Test
     fun aWrongSecretIsRefusedOnItsRequestLineBeforeAnyHeaderArrives() {
         Socket("127.0.0.1", port()).use { socket ->
             socket.soTimeout = 2_000
             // Headers never finish: an answer can only come from checking the request line alone.
-            socket.getOutputStream().apply { write("GET /Videos/1/stream HTTP/1.1\r\nHost: x\r\n".toByteArray()); flush() }
+            socket.getOutputStream().apply {
+                write("GET /Videos/1/stream HTTP/1.1\r\nHost: x\r\n".toByteArray())
+                flush()
+            }
             assertEquals("HTTP/1.1 404 Not Found", statusLine(socket))
         }
         assertEquals(0, upstream.requestCount)
@@ -104,7 +106,10 @@ class MpvHttpProxyTest {
     fun aClientThatStopsMidHeadersIsDroppedAtTheDeadline() {
         Socket("127.0.0.1", port()).use { socket ->
             socket.soTimeout = 10_000
-            socket.getOutputStream().apply { write("GET ${secretPath()} HTTP/1.1\r\nRange: bytes=0-\r\n".toByteArray()); flush() }
+            socket.getOutputStream().apply {
+                write("GET ${secretPath()} HTTP/1.1\r\nRange: bytes=0-\r\n".toByteArray())
+                flush()
+            }
             val started = System.nanoTime()
             assertNull(statusLine(socket))
             val waitedMs = (System.nanoTime() - started) / 1_000_000
@@ -119,7 +124,9 @@ class MpvHttpProxyTest {
         val held = (1..12).map { Socket("127.0.0.1", port()).apply { getOutputStream().write("GET ".toByteArray()) } }
         try {
             upstream.enqueue(MockResponse().setBody("ok"))
-            val connection = URL(requireNotNull(proxy.local(upstream.url("/Videos/1/stream").toString()))).openConnection() as HttpURLConnection
+            val connection = URL(
+                requireNotNull(proxy.local(upstream.url("/Videos/1/stream").toString()))
+            ).openConnection() as HttpURLConnection
             connection.readTimeout = 2_000
             assertEquals(200, connection.responseCode)
             assertEquals("ok", connection.inputStream.readBytes().decodeToString())
@@ -132,7 +139,10 @@ class MpvHttpProxyTest {
     fun aSilentConnectionIsDroppedWithinTheRequestLineDeadline() {
         Socket("127.0.0.1", port()).use { socket ->
             socket.soTimeout = 5_000
-            socket.getOutputStream().apply { write("GET /".toByteArray()); flush() }
+            socket.getOutputStream().apply {
+                write("GET /".toByteArray())
+                flush()
+            }
             val started = System.nanoTime()
             assertNull(statusLine(socket))
             assertTrue((System.nanoTime() - started) / 1_000_000 < 2_000)

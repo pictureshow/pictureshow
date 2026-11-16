@@ -708,7 +708,11 @@ internal class Media3PlaybackOutput(
         }
         mpv = next
         next.subtitleDelayMs(subtitleDelay.milliseconds)
-        PlaybackDiagnostics.write(decision, "open", "requestedMs=$positionMs method=${decision.method} engine=mpv spdif=${spdif.joinToString(",")}")
+        PlaybackDiagnostics.write(
+            decision,
+            "open",
+            "requestedMs=$positionMs method=${decision.method} engine=mpv spdif=${spdif.joinToString(",")}"
+        )
         next.selectStream(MediaStreamType.Audio, audio)
         next.selectStream(MediaStreamType.Subtitle, subtitle)
         val managed = ReopeningPlayer(next, ::playIntent)
@@ -753,7 +757,11 @@ internal class Media3PlaybackOutput(
 
             override fun onPlayerError(error: PlaybackException) {
                 if (mpv !== next) return
-                PlaybackDiagnostics.write(decision, "player-error", "engine=mpv code=${error.errorCode} positionMs=${position().milliseconds}")
+                PlaybackDiagnostics.write(
+                    decision,
+                    "player-error",
+                    "engine=mpv code=${error.errorCode} positionMs=${position().milliseconds}"
+                )
                 onFailure(false, decision)
             }
         }.also(exposed::addListener)

@@ -88,7 +88,11 @@ class PlaybackEngineGatewayTest {
     }
 
     @Test fun automaticKeepsTheBuiltInPlayerWhenMpvWouldConvertToo() {
-        val (requests, outcome) = run(PlaybackEngineChoice.Automatic, true, listOf(converting("ContainerNotSupported"), converting("ContainerNotSupported")))
+        val (requests, outcome) = run(
+            PlaybackEngineChoice.Automatic,
+            true,
+            listOf(converting("ContainerNotSupported"), converting("ContainerNotSupported"))
+        )
         assertEquals(2, requests.size)
         assertEquals(PlaybackEngine.Media3, outcome.decision.engine)
     }

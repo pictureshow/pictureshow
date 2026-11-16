@@ -833,7 +833,13 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState, video
                                     text = {
                                         Text(
                                             androidx.compose.ui.res.stringResource(
-                                                if (next == app.pictureshow.core.playback.PlaybackEngineChoice.Mpv) R.string.engine_switch_mpv else R.string.engine_switch_automatic
+                                                if (next ==
+                                                    app.pictureshow.core.playback.PlaybackEngineChoice.Mpv
+                                                ) {
+                                                    R.string.engine_switch_mpv
+                                                } else {
+                                                    R.string.engine_switch_automatic
+                                                }
                                             )
                                         )
                                     },

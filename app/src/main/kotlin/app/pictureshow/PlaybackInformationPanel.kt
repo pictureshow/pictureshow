@@ -77,19 +77,31 @@ internal fun PlaybackInformationContent(
         Button(onClick = onClose, scale = playerButtonScale(), modifier = Modifier.focusRequester(closeFocus).playerTouchClick(onClose)) {
             Text("Close")
         }
-        if (decision != null) engineChoice?.let { choice ->
-            val next = if (choice == app.pictureshow.core.playback.PlaybackEngineChoice.Mpv) {
-                app.pictureshow.core.playback.PlaybackEngineChoice.Automatic
-            } else {
-                app.pictureshow.core.playback.PlaybackEngineChoice.Mpv
-            }
-            val switch = { onEngine(next) }
-            Button(onClick = switch, scale = playerButtonScale(), modifier = Modifier.testTag("playback:engine-switch").playerTouchClick(switch)) {
-                Text(
-                    androidx.compose.ui.res.stringResource(
-                        if (next == app.pictureshow.core.playback.PlaybackEngineChoice.Mpv) R.string.engine_switch_mpv else R.string.engine_switch_automatic
+        if (decision != null) {
+            engineChoice?.let { choice ->
+                val next = if (choice == app.pictureshow.core.playback.PlaybackEngineChoice.Mpv) {
+                    app.pictureshow.core.playback.PlaybackEngineChoice.Automatic
+                } else {
+                    app.pictureshow.core.playback.PlaybackEngineChoice.Mpv
+                }
+                val switch = { onEngine(next) }
+                Button(
+                    onClick = switch,
+                    scale = playerButtonScale(),
+                    modifier = Modifier.testTag("playback:engine-switch").playerTouchClick(switch)
+                ) {
+                    Text(
+                        androidx.compose.ui.res.stringResource(
+                            if (next ==
+                                app.pictureshow.core.playback.PlaybackEngineChoice.Mpv
+                            ) {
+                                R.string.engine_switch_mpv
+                            } else {
+                                R.string.engine_switch_automatic
+                            }
+                        )
                     )
-                )
+                }
             }
         }
     }

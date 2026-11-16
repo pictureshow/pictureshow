@@ -85,7 +85,9 @@ internal class ServerPlaybackGateway(
                     PlaybackDiagnostics.line(
                         decision,
                         "engine",
-                        "choice=${context.choice} eligible=${retry.mpvEligible} reasons=${decision.transcodeReasons.joinToString(",")} retry=false"
+                        "choice=${context.choice} eligible=${retry.mpvEligible} reasons=${decision.transcodeReasons.joinToString(
+                            ","
+                        )} retry=false"
                     )
                 )
             }
@@ -96,7 +98,11 @@ internal class ServerPlaybackGateway(
         val mpvDecision = ((mpv as? ClientResult.Success)?.value as? PlayOutcome.Play)?.decision ?: return prepared
         val keep = PlaybackEngineRule.keepMpv(mpvDecision.method)
         diagnostic(
-            PlaybackDiagnostics.line(mpvDecision, "engine", "choice=${context.choice} retry=true mpvMethod=${mpvDecision.method} keepMpv=$keep")
+            PlaybackDiagnostics.line(
+                mpvDecision,
+                "engine",
+                "choice=${context.choice} retry=true mpvMethod=${mpvDecision.method} keepMpv=$keep"
+            )
         )
         return if (keep) mpv else prepared
     }

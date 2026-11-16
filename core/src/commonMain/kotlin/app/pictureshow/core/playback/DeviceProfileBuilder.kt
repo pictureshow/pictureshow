@@ -68,7 +68,12 @@ object DeviceProfileBuilder {
             ),
             codecProfiles = base.codecProfiles.filter { profile ->
                 profile.type == CodecType.Video &&
-                    !(profile.codec.orEmpty().split(',').filter(String::isNotBlank).let { it.isNotEmpty() && it.all { codec -> codec in software } })
+                    !(
+                        profile.codec.orEmpty().split(',').filter(String::isNotBlank).let {
+                            it.isNotEmpty() &&
+                                it.all { codec -> codec in software }
+                        }
+                        )
             } + softwareGuard,
             subtitleProfiles = mpvSubtitleProfiles(detected.settings.tuning.subtitleBurnIn)
         )
@@ -610,9 +615,21 @@ object DeviceProfileBuilder {
     private fun number(value: Double): String = if (value % 1.0 == 0.0) value.toLong().toString() else value.toString()
 
     private const val FULL_HD_HEIGHT = 1080
-    private const val MPV_CONTAINERS = "mkv,webm,mp4,m4v,mov,ts,mpegts,m2ts,mts,avi,mpeg,mpg,vob,flv,asf,wmv,ogg,ogv,3gp,3g2,wtv,dvr-ms,rm,rmvb"
+    private const val MPV_CONTAINERS =
+        "mkv,webm,mp4,m4v,mov,ts,mpegts,m2ts,mts,avi,mpeg,mpg,vob,flv,asf,wmv,ogg,ogv,3gp,3g2,wtv,dvr-ms,rm,rmvb"
     private val MPV_SOFTWARE_VIDEO = listOf(
-        "mpeg1video", "mpeg2video", "mpeg4", "msmpeg4v1", "msmpeg4v2", "msmpeg4v3", "h263", "vc1", "wmv1", "wmv2", "wmv3", "theora"
+        "mpeg1video",
+        "mpeg2video",
+        "mpeg4",
+        "msmpeg4v1",
+        "msmpeg4v2",
+        "msmpeg4v3",
+        "h263",
+        "vc1",
+        "wmv1",
+        "wmv2",
+        "wmv3",
+        "theora"
     )
     private val MPV_TEXT_SUBTITLES =
         listOf("srt", "subrip", "ass", "ssa", "vtt", "webvtt", "ttml", "mov_text", "microdvd", "sub", "smi", "sami", "mpl2")

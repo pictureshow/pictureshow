@@ -68,7 +68,8 @@ internal object MpvAvailability {
                 |  <cachedir>${directory.absolutePath}/cache</cachedir>
                 |  <alias><family>sans-serif</family><prefer><family>Roboto</family></prefer></alias>
                 |</fontconfig>
-                |""".trimMargin()
+                |
+                """.trimMargin()
             )
         }
         Os.setenv("FONTCONFIG_FILE", config.absolutePath, true)
@@ -580,7 +581,14 @@ internal class MpvPlayer(context: Context, private val source: MpvSource) : Simp
         surface = null
     }
 
-    private data class MpvTrack(val id: Int, val type: String, val external: Boolean, val selected: Boolean, val ffIndex: Int?, val codec: String?)
+    private data class MpvTrack(
+        val id: Int,
+        val type: String,
+        val external: Boolean,
+        val selected: Boolean,
+        val ffIndex: Int?,
+        val codec: String?
+    )
 
     companion object {
         private const val TAG = "PictureshowMpv"

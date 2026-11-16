@@ -135,7 +135,8 @@ internal class PlaybackHostState(
     }
 
     /** Whether the player offers the per-title switch: mpv loaded and this viewing is one it may play. */
-    val engineSwitchable get() = !localCopy && engineContext().copy(choice = app.pictureshow.core.playback.PlaybackEngineChoice.Mpv).mpvEligible &&
+    val engineSwitchable get() = !localCopy &&
+        engineContext().copy(choice = app.pictureshow.core.playback.PlaybackEngineChoice.Mpv).mpvEligible &&
         state.decision?.isLive != true
 
     fun engineContext() = app.pictureshow.core.playback.PlaybackEngineContext(
