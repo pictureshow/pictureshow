@@ -15,7 +15,7 @@ enum PendingSpecCaseManifest {
         "cast-handoff": Suite(count: 2, reason: "System commands and receiver intent reconciliation await the Apple sender port."),
         "cast-queue": Suite(count: 11, reason: "DMR queue identity and audio reload contracts await the Apple sender port."),
         "account-sign-out": Suite(count: 7, reason: "Merged on main after the Apple core was last synced; the account store lives in the app, whose AccountBookTests.testAccountSignOutVectors executes all seven."),
-        "application": Suite(count: 62, reason: "Additional main contracts lack an Apple executor; existing active contracts in this suite continue to execute."),
+        "application": Suite(count: 95, reason: "Additional main contracts lack an Apple executor; existing active contracts in this suite continue to execute."),
         "catalog-return": Suite(count: 10, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
         "frame-rate-match": Suite(count: 6, reason: "Display-mode policy and native display qualification are not ported to Apple."),
         "home-browse": Suite(count: 174, reason: "Newly merged main policy or presentation contracts are not ported to Apple; native acceptance remains owed."),
@@ -2225,6 +2225,39 @@ enum PendingSpecCaseManifest {
         controls-last-action-too-late|application/controls-restore-last-action
         controls-last-action-never-hidden|application/controls-restore-last-action
         controls-last-action-clock-backwards|application/controls-restore-last-action
+        touch-back-sheet-first|application/touch-player-back
+        touch-back-menu-next|application/touch-player-back
+        touch-back-controls-showing-exits|application/touch-player-back
+        touch-pip-playing-video|application/touch-pip-allowed
+        touch-pip-never-on-tv|application/touch-pip-allowed
+        touch-pip-device-without-feature|application/touch-pip-allowed
+        touch-pip-no-video-yet|application/touch-pip-allowed
+        touch-pip-error-card|application/touch-pip-allowed
+        touch-pip-loading-next|application/touch-pip-allowed
+        touch-pip-leaving|application/touch-pip-allowed
+        touch-pip-finished|application/touch-pip-allowed
+        touch-pip-handed-off|application/touch-pip-allowed
+        touch-pip-actions-playing|application/touch-pip-actions
+        touch-pip-actions-paused|application/touch-pip-actions
+        touch-pip-actions-live-no-timeshift|application/touch-pip-actions
+        touch-pip-actions-live-at-edge|application/touch-pip-actions
+        touch-pip-aspect-1080p|application/touch-pip-aspect
+        touch-pip-aspect-unknown|application/touch-pip-aspect
+        touch-pip-aspect-scope-clamped|application/touch-pip-aspect
+        touch-pip-aspect-tall-clamped|application/touch-pip-aspect
+        touch-pip-aspect-anamorphic-dvd|application/touch-pip-aspect
+        touch-pip-aspect-4x3|application/touch-pip-aspect
+        quick-connect-code-pasted-with-spaces|application/quick-connect-code
+        quick-connect-code-too-short|application/quick-connect-code
+        quick-connect-code-too-long|application/quick-connect-code
+        quick-connect-code-punctuation-not-guessed|application/quick-connect-code
+        quick-connect-code-non-ascii-letter|application/quick-connect-code
+        quick-connect-approval-approved|application/quick-connect-approval-result
+        quick-connect-approval-server-said-no|application/quick-connect-approval-result
+        quick-connect-approval-unknown-code|application/quick-connect-approval-result
+        quick-connect-approval-token-refused|application/quick-connect-approval-result
+        quick-connect-approval-server-error|application/quick-connect-approval-result
+        quick-connect-approval-unreadable-body|application/quick-connect-approval-result
         home-notice-unreachable-keeps-page-and-names-server|home-browse/home-notice
         home-notice-unreachable-keeps-page-offers-downloads|home-browse/home-notice
         home-notice-unnamed-server|home-browse/home-notice

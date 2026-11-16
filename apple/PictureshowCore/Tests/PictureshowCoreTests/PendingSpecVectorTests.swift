@@ -5,7 +5,7 @@ import XCTest
 /// Explicit unported work from the main merge. These are skips, never successful policy executions.
 final class PendingSpecVectorTests: XCTestCase {
     func testPendingCastQueue11Cases() throws { try pending("cast-queue") }
-    func testPendingApplication11Cases() throws { try pending("application") }
+    func testPendingApplication44Cases() throws { try pending("application") }
     func testPendingHomeBrowse142Cases() throws { try pending("home-browse") }
     func testPendingLiveDvr22Cases() throws { try pending("live-dvr") }
     func testPendingLiveGuide25Cases() throws { try pending("live-guide") }

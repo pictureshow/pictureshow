@@ -80,6 +80,52 @@ class ApplicationParityVectorsTest {
                             input.getValue("nowMs").jsonPrimitive.content.toLong()
                         )
                     )
+                    "touch-player-back" -> JsonPrimitive(
+                        app.pictureshow.core.playback.touchPlayerBack(
+                            input.getValue("sheetOpen").jsonPrimitive.boolean,
+                            input.getValue("menuOpen").jsonPrimitive.boolean
+                        )
+                    )
+                    "touch-pip-allowed" -> JsonPrimitive(
+                        app.pictureshow.core.playback.pictureInPictureAllowed(
+                            app.pictureshow.core.playback.PictureInPictureState(
+                                tvInterface = input.getValue("tvInterface").jsonPrimitive.boolean,
+                                deviceSupports = input.getValue("deviceSupports").jsonPrimitive.boolean,
+                                hasVideo = input.getValue("hasVideo").jsonPrimitive.boolean,
+                                error = input.getValue("error").jsonPrimitive.boolean,
+                                switching = input.getValue("switching").jsonPrimitive.boolean,
+                                exiting = input.getValue("exiting").jsonPrimitive.boolean,
+                                atEnd = input.getValue("atEnd").jsonPrimitive.boolean,
+                                handedOff = input.getValue("handedOff").jsonPrimitive.boolean
+                            )
+                        )
+                    )
+                    "touch-pip-actions" -> JsonArray(
+                        app.pictureshow.core.playback.pictureInPictureActions(
+                            input.getValue("primary").jsonPrimitive.contentOrNull,
+                            input.getValue("canSeekBack").jsonPrimitive.boolean,
+                            input.getValue("canSeekForward").jsonPrimitive.boolean
+                        ).map { JsonObject(mapOf("action" to JsonPrimitive(it.action), "enabled" to JsonPrimitive(it.enabled))) }
+                    )
+                    "touch-pip-aspect" -> app.pictureshow.core.playback.pictureInPictureAspect(
+                        input.getValue("width").jsonPrimitive.int,
+                        input.getValue("height").jsonPrimitive.int,
+                        input.getValue("pixelRatio").jsonPrimitive.double
+                    ).let { JsonArray(listOf(JsonPrimitive(it.first), JsonPrimitive(it.second))) }
+                    "quick-connect-code" -> input.getValue("input").jsonPrimitive.content.let { code ->
+                        JsonObject(
+                            mapOf(
+                                "normalized" to JsonPrimitive(normalizeQuickConnectCode(code)),
+                                "valid" to JsonPrimitive(validQuickConnectCode(code))
+                            )
+                        )
+                    }
+                    "quick-connect-approval-result" -> JsonPrimitive(
+                        quickConnectApprovalResult(
+                            input.getValue("status").jsonPrimitive.int,
+                            input.getValue("approved").jsonPrimitive.booleanOrNull
+                        ).name
+                    )
                     "track-menu-empty" -> app.pictureshow.core.playback.trackMenuEmptyNotice(
                         app.pictureshow.core.playback.MediaStreamType.valueOf(input.getValue("type").jsonPrimitive.content),
                         input.getValue("tracks").jsonPrimitive.content.toInt()

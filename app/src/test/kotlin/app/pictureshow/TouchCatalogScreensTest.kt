@@ -12,6 +12,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -19,6 +20,7 @@ import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -203,6 +205,25 @@ class TouchCatalogScreensTest {
         assertEquals(true, resume)
         compose.onNodeWithText("Play from start").performScrollTo().performClick()
         assertEquals(false, resume)
+    }
+
+    // CAT-14a (phone review P-9): two "Sintel, 2010" cards from different libraries say which is which, aloud too.
+    @Test fun sameNameSearchResultsNameTheirLibrary() {
+        val first = MediaItem("a", "Sintel", "Movie", productionYear = 2010)
+        val second = MediaItem("b", "Sintel", "Movie", productionYear = 2010)
+        val row = app.pictureshow.core.HomeRow(
+            "Movie",
+            "Movies",
+            listOf(first, second),
+            libraryNames = mapOf("a" to "Movies", "b" to "Open Movies")
+        )
+        compose.setContent {
+            MaterialTheme {
+                TouchSearchScreen(SearchState(query = "Sintel", rows = listOf(row), completed = true), account, {}, {}, {}, {}, {}, {})
+            }
+        }
+        compose.onNodeWithText("Open Movies", substring = true).assertExists()
+        compose.onAllNodesWithContentDescription("Open Movies", substring = true).assertCountEquals(1)
     }
 
     @Test fun pendingPlaybackKeepsThePageAndWithholdsStaleResumeUntilFresh() {
