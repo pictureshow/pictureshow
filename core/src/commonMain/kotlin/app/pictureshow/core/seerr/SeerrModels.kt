@@ -90,7 +90,9 @@ data class SeerrTitle(
  */
 fun seerrPosterUrl(path: String?, width: Int = 342): String? {
     val file = path?.takeIf {
-        it.length > 1 && it.startsWith("/") && ".." !in it &&
+        it.length > 1 &&
+            it.startsWith("/") &&
+            ".." !in it &&
             it.drop(1).all { c -> c in 'a'..'z' || c in 'A'..'Z' || c in '0'..'9' || c in "._-" }
     } ?: return null
     return "https://image.tmdb.org/t/p/w$width$file"
