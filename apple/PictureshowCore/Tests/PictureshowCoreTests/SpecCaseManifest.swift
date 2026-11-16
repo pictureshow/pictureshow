@@ -2472,6 +2472,31 @@ enum SpecCaseManifest {
         create-timeout|sync-membership-registration/case
         join-route|sync-membership-registration/case
         create-route|sync-membership-registration/case
+        sync-completion-reporting.current-decision|sync-completion-reporting/video-completion
+        sync-completion-reporting.obsolete-decision|sync-completion-reporting/video-completion
+        sync-completion-reporting.earlier-current-decision|sync-completion-reporting/video-completion
+        sync-completion-reporting.earlier-obsolete-decision|sync-completion-reporting/video-completion
+        sync-completion-reporting.repeat-one-current-decision|sync-completion-reporting/video-completion
+        sync-completion-reporting.repeat-one-obsolete-decision|sync-completion-reporting/video-completion
+        consent-account|sync-route-consent/case
+        consent-token|sync-route-consent/case
+        consent-logout|sync-route-consent/case
+        consent-same|sync-route-consent/case
+        stale-confirm|sync-route-consent/case
+        stale-cancel|sync-route-consent/case
+        wrong-scope-confirm|sync-route-consent/case
+        wrong-scope-cancel|sync-route-consent/case
+        duplicate|sync-route-consent/case
+        scope-change-during-leave|sync-route-consent/case
+        remote-only-picker|sync-group-social-summary-and-picker-role/case
+        media-play-picker|sync-group-social-summary-and-picker-role/case
+        native-direction-none-single|sync-group-social-summary-and-picker-role/case
+        native-direction-none-first|sync-group-social-summary-and-picker-role/case
+        native-direction-none-last|sync-group-social-summary-and-picker-role/case
+        native-direction-one-single|sync-group-social-summary-and-picker-role/case
+        native-direction-all-single|sync-group-social-summary-and-picker-role/case
+        tv-roster-lifecycle-font-one|sync-tv-player-coherence/case
+        tv-roster-lifecycle-large-font|sync-tv-player-coherence/case
         existing-membership-rejoin-cancel|sync-membership-registration/case
         confirmed-server-left-clears-membership|sync-membership-registration/case
         definite-denial-clears-unsent-cancellation|sync-membership-registration/case

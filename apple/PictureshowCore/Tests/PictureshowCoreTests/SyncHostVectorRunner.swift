@@ -25,9 +25,25 @@ final class SyncFakeWorld: SyncEngineTransport, SyncEngineClock, SyncEngineSched
 
     var operations: [String] { posted.map { String($0.path.dropFirst("SyncPlay/".count)) } }
 
+    /// When set, answers wait in `held` until `release()`, as a slow server would.
+    var holdAnswers = false
+    var held: [() -> Void] = []
+
     func post(_ request: SyncRequest, completion: @escaping (SyncPostOutcome) -> Void) {
         posted.append(request)
-        completion(outcome)
+        if holdAnswers { held.append { [unowned self] in completion(self.outcome) } } else { completion(outcome) }
+    }
+
+    func release() {
+        let answers = held
+        held.removeAll(); holdAnswers = false
+        answers.forEach { $0() }
+    }
+
+    func engine(scope: Int64) -> SyncSessionEngine {
+        let engine = SyncSessionEngine(transport: self, clock: self, scheduler: self, scope: scope)
+        engine.host = self
+        return engine
     }
 
     func utcTime(completion: @escaping ((receivedMillis: Int64, transmittedMillis: Int64)?) -> Void) {

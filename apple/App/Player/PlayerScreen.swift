@@ -424,9 +424,12 @@ struct PlayerContent: View {
                 SyncGroupChip(sync: controller.app.syncPlay) { showingGroup = true }
             }
             trackMenu
-            // SYN-10: AirPlay can't follow a group's timeline at launch; it returns once the viewer leaves.
-            if !(controller.sync != nil && controller.app.syncPlay.participating) {
-                RoutePicker().frame(width: 44, height: 44).accessibilityLabel("AirPlay")
+            // SYN-10: AirPlay can't follow a group's timeline; the viewer is asked to leave the group first.
+            if controller.sync != nil && controller.app.syncPlay.participating {
+                SyncAirPlayButton(sync: controller.app.syncPlay) { [weak controller] in controller?.airPlayAfterLeaving() }
+            } else {
+                RoutePicker(open: controller.routePickerPending) { controller.routePickerPending = false }
+                    .frame(width: 44, height: 44).accessibilityLabel("AirPlay")
             }
         }
         .sheet(isPresented: $showingGroup) {
@@ -554,13 +557,23 @@ struct VideoSurface: UIViewRepresentable {
 }
 
 struct RoutePicker: UIViewRepresentable {
+    /// Opens the system route list once (after leaving a group for AirPlay); `opened` clears the request.
+    var open = false
+    var opened: () -> Void = {}
     func makeUIView(context: Context) -> AVRoutePickerView {
         let view = AVRoutePickerView()
         view.tintColor = .white
         view.prioritizesVideoDevices = true
         return view
     }
-    func updateUIView(_ view: AVRoutePickerView, context: Context) {}
+    func updateUIView(_ view: AVRoutePickerView, context: Context) {
+        guard open else { return }
+        DispatchQueue.main.async {
+            // AVRoutePickerView has no API to open its list; its own button does that.
+            (view.subviews.first { $0 is UIButton } as? UIButton)?.sendActions(for: .touchUpInside)
+            opened()
+        }
+    }
 }
 #endif
 

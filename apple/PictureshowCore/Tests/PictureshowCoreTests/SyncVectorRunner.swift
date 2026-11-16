@@ -10,7 +10,7 @@ enum SyncVectorRunner {
     static let suites: Set<String> = Set([
         "sync-state", "sync-queue", "sync-clock", "sync-drift", "sync-presentation", "sync-departure", "sync-stay",
         "sync-local-display", "sync-chip-name", "sync-source", "sync-completion", "sync-player-intent-presentation"
-    ] as [String]).union(hostSuites)
+    ] as [String]).union(hostSuites).union(adapterSuites)
 
     struct Failure: Error, CustomStringConvertible { let description: String }
     static func fail(_ message: String) -> Failure { Failure(description: message) }
@@ -40,6 +40,7 @@ enum SyncVectorRunner {
     static func run(suite: String, row c: SyncJSON) throws -> Int {
         let id = c["id"]?.content ?? "?"
         if hostSuites.contains(suite) { return try host(suite: suite, c, id) }
+        if adapterSuites.contains(suite) { return try adapter(suite: suite, c, id) }
         switch suite {
         case "sync-state", "sync-queue": return try membershipSuite(c, id)
         case "sync-clock": return try clock(c, id)
