@@ -19,6 +19,8 @@ import org.koin.core.module.Module
  * Group scenarios provide their own gateway instead of silently succeeding here.
  */
 internal fun Module.syncPlayFixture() {
+    // Every minimal UI graph that mounts the shell also mounts Home, Settings and Search, which ask for Seerr.
+    seerrFixture()
     single {
         SyncPlayHost(
             CoroutineScope(SupervisorJob() + Dispatchers.Unconfined),
