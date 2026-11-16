@@ -84,7 +84,7 @@ struct RootView: View {
     }
 }
 
-enum MainTab: Hashable { case home, libraries, search, downloads, settings }
+enum MainTab: Hashable { case home, libraries, requests, search, downloads, settings }
 
 /// Tab bar on iPhone and Apple TV; on iPad the same tabs adapt into a sidebar.
 struct MainShell: View {
@@ -98,6 +98,12 @@ struct MainShell: View {
             }
             Tab("Libraries", systemImage: "rectangle.stack", value: MainTab.libraries) {
                 RoutedStack { LibrariesView() }
+            }
+            // SEERR-05: only while this account has connected Seerr.
+            if app.seerr.config(app.account?.key) != nil {
+                Tab("Requests", systemImage: "plus.rectangle.on.rectangle", value: MainTab.requests) {
+                    RoutedStack { SeerrHubView() }.id(app.account?.key)
+                }
             }
             Tab(value: MainTab.search, role: .search) {
                 RoutedStack { SearchView() }
@@ -121,6 +127,7 @@ struct MainShell: View {
         }
         .onChange(of: app.showingDownloads) { _, show in if show { tab = .downloads; app.showingDownloads = false } }
         #endif
+        .onChange(of: app.seerr.config(app.account?.key) == nil) { _, gone in if gone && tab == .requests { tab = .home } }
     }
 }
 
@@ -145,6 +152,7 @@ struct RoutedStack<Root: View>: View {
                     case .person(let id, let name): PersonView(personID: id, name: name)
                     }
                 }
+                .navigationDestination(for: SeerrTitleRoute.self) { SeerrTitleView(route: $0) }
         }
     }
 }

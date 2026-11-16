@@ -60,7 +60,7 @@ public enum SeerrHTTP {
 /// One viewer's connection to Seerr. Calls go through `transport` only (see `SeerrHTTP`): the Jellyfin token never goes
 /// to Seerr, and Seerr's cookie or key never goes anywhere else.
 public actor SeerrClient {
-    public let config: SeerrConfig
+    public nonisolated let config: SeerrConfig
     private var secret: SeerrSecret
     private let transport: SeerrTransport
     /// Called with the secret a renewal replaced and the renewed one; the store saves it only while the connection exists.
