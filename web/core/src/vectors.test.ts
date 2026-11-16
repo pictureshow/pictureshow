@@ -144,6 +144,8 @@ const pendingPortSuites = new Set([
     "touch-player-director-clearance-paint-edges",
     // Native seek/orientation ink and TV overflow paint remain owed UI adapters.
     "player-control-affordances",
+    // SUB-DL-01..04 remote subtitle search and stream adoption (Android leg 163): web port owed.
+    "subtitle-download",
 ]);
 // Desktop slice 1 added these shared application policies. Their web adapters/UI
 // are still owed; list exact case IDs rather than accepting unknown operations.

@@ -1214,6 +1214,7 @@ internal fun Pictureshow(
                     val discoveryVm: DetailDiscoveryViewModel = koinViewModel(parameters = { parametersOf(account, item, catalog) })
                     val discovery by discoveryVm.state.collectAsStateWithLifecycle()
                     val context = LocalContext.current
+                    var subtitleTarget by remember { mutableStateOf<MediaItem?>(null) }
                     LaunchedEffect(entry) {
                         entry.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
                             vm.resumed()
@@ -1243,8 +1244,12 @@ internal fun Pictureshow(
                             offlineDownloadRoute(shown, season, seasonName)?.let { nav.navigate(it) }
                         },
                         discovery = discoveryRows(screen.item ?: item, discovery),
-                        onDiscovery = { chosen -> openDiscovery(context, chosen, { nav.navigate(it) }) { nav.navigate(itemRoute(it)) } }
+                        onDiscovery = { chosen -> openDiscovery(context, chosen, { nav.navigate(it) }) { nav.navigate(itemRoute(it)) } },
+                        onSubtitleDownload = { subtitleTarget = it }
                     )
+                    subtitleTarget?.let { target ->
+                        TvSubtitleDownloadDialog(account, target) { subtitleTarget = null }
+                    }
                 }
             }
         }

@@ -77,6 +77,7 @@ enum PendingSpecCaseManifest {
         "sync-tv-structure-discovery": Suite(count: 11, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
         "sync-tv-surfaces": Suite(count: 15, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
         "touch-player-director-clearance-paint-edges": Suite(count: 13, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
+        "subtitle-download": Suite(count: 18, reason: "SUB-DL remote subtitle search and stream adoption are new Android contracts; not ported to Apple yet."),
     ]
     static let contracts: [String: String] = {
         let rows = """
@@ -2316,6 +2317,24 @@ enum PendingSpecCaseManifest {
         sync-stay.denial.library-denial-is-not-an-ended-group|sync-stay/case
         sync-stay.open.following-opens-new-entries|sync-stay/case
         sync-stay.open.stayed-device-waits-for-watch|sync-stay/case
+        sub-dl-01.offline-copy-unavailable|subtitle-download/access
+        sub-dl-01.no-permission-before-provider|subtitle-download/access
+        sub-dl-01.admin-without-flag-allowed|subtitle-download/access
+        sub-dl-01.no-provider|subtitle-download/access
+        sub-dl-01.unknown-reads-allow-search|subtitle-download/access
+        sub-dl-01.status-meanings|subtitle-download/failure
+        sub-dl-02.subtitle-preference-first|subtitle-download/initial-language
+        sub-dl-02.alternate-code-maps-to-search-code|subtitle-download/initial-language
+        sub-dl-02.device-language-two-letter|subtitle-download/initial-language
+        sub-dl-02.unknown-preference-skipped|subtitle-download/initial-language
+        sub-dl-02.choices-preferred-then-common-then-by-name|subtitle-download/language-choices
+        sub-dl-03.order-hash-human-downloads-rating|subtitle-download/order
+        sub-dl-03.details-tokens|subtitle-download/details
+        sub-dl-03.title-falls-back-to-provider-format|subtitle-download/title
+        sub-dl-04.external-first-renumbering|subtitle-download/adopt
+        sub-dl-04.existing-external-kept-apart-from-new|subtitle-download/adopt
+        sub-dl-04.not-listed-yet|subtitle-download/adopt
+        sub-dl-04.prefers-requested-language-among-new|subtitle-download/adopt
         """
         return Dictionary(uniqueKeysWithValues: rows.split(separator: "\n").map {
             let pair = $0.split(separator: "|", maxSplits: 1)

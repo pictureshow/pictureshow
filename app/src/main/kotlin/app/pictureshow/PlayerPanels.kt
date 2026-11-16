@@ -567,13 +567,17 @@ internal fun SeekPanel(positionMs: Long, durationMs: Long, onSeekBy: (Long) -> U
  * always has somewhere to land and Back or OK leaves.
  */
 @Composable
-internal fun EmptyTrackPanel(notice: String, onClose: () -> Unit) {
+internal fun EmptyTrackPanel(notice: String, onClose: () -> Unit, action: Pair<String, () -> Unit>? = null) {
     val close = remember { FocusRequester() }
     Column(
         Modifier.background(Color(0xF510131C)).padding(32.dp).testTag("player:track-empty"),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Text(notice, style = MaterialTheme.typography.titleMedium)
+        // SUB-DL: a subtitle panel with nothing to pick can still offer to find one.
+        action?.let { (label, onAction) ->
+            Button(onClick = onAction, modifier = Modifier.testTag("player:track-empty-action")) { Text(label) }
+        }
         Button(onClick = onClose, modifier = Modifier.focusRequester(close)) { Text("Close") }
     }
     LaunchedEffect(Unit) { runCatching { close.requestFocus() } }

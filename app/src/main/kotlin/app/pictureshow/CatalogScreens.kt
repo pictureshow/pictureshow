@@ -1497,7 +1497,9 @@ fun CatalogDetail(
     onDownload: ((MediaItem, String?, String?) -> Unit)? = null,
     /** Trailers, Extras and More like this under the title (CAT-30..32); they arrive after the page and never hold it. */
     discovery: List<DiscoveryRow> = emptyList(),
-    onDiscovery: (DiscoveryEntry) -> Unit = {}
+    onDiscovery: (DiscoveryEntry) -> Unit = {},
+    /** SUB-DL: open the subtitle download panel for this title; null hides Find subtitles. */
+    onSubtitleDownload: ((MediaItem) -> Unit)? = null
 ) {
     val lifecycleState by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
     DisposableEffect(Unit) {
@@ -2556,7 +2558,10 @@ fun CatalogDetail(
                                             }
                                         },
                                         blocked = recoveryActive || (playbackWaiting && pendingActions == null),
-                                        onWrapped = { if (it) actionsWrapped = true }
+                                        onWrapped = { if (it) actionsWrapped = true },
+                                        onSubtitles = onSubtitleDownload
+                                            ?.takeIf { subtitleDownloadOffered(item.type) && !item.isMissing }
+                                            ?.let { open -> { open(item) } }
                                     ) {
                                         if (trackSelection) selectedSection = "header"
                                     }
@@ -3140,6 +3145,8 @@ private fun DetailActions(
     blocked: Boolean = false,
     onDownload: (() -> Unit)? = null,
     onWrapped: (Boolean) -> Unit = {},
+    /** SUB-DL: Find subtitles, on titles the server can attach a subtitle file to. */
+    onSubtitles: (() -> Unit)? = null,
     onFocus: () -> Unit
 ) {
     val bringIntoView = remember { BringIntoViewRequester() }
@@ -3560,6 +3567,28 @@ private fun DetailActions(
                         } else {
                             Text("Download")
                         }
+                    }
+                }
+            }
+            if (onSubtitles != null && pending == null && !compact) {
+                key("subtitles") {
+                    Button(
+                        onClick = { if (!blocked) onSubtitles() },
+                        enabled = !blocked,
+                        modifier = Modifier.testTag("detail:subtitles").then(
+                            if (stableLayout) {
+                                Modifier.width(detailStableWidth("subtitles")).heightIn(min = DETAIL_STABLE_HEIGHT)
+                            } else {
+                                Modifier
+                            }
+                        )
+                    ) {
+                        // TV Button leaves content at top start; the stable label centres it like its siblings.
+                        DetailActionLabel(
+                            androidx.compose.ui.res.stringResource(R.string.subtitle_find_action),
+                            if (stableLayout) "subtitles" else null,
+                            Modifier.testTag("detail:subtitles-label")
+                        )
                     }
                 }
             }

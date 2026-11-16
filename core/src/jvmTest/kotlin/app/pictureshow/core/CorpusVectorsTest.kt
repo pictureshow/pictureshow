@@ -41,7 +41,9 @@ class CorpusVectorsTest {
                     "quality-auto-floor",
                     "playback-info-reasons",
                     "settings-presentation",
-                    "recovery"
+                    "recovery",
+                    // SubtitleDownloadVectorsTest executes SUB-DL-01..04.
+                    "subtitle-download"
                 ),
             "control-vectors" to
                 setOf(

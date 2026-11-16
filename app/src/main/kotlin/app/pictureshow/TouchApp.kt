@@ -589,6 +589,7 @@ internal fun TouchPictureshow(
                             }
                         }
                         // A ready download is what this page plays, with or without the server (offline.md, the detail page).
+                        var subtitleTarget by remember { mutableStateOf<MediaItem?>(null) }
                         val download = rememberTouchDetailDownload(
                             account,
                             item.id,
@@ -644,8 +645,12 @@ internal fun TouchPictureshow(
                             discovery = discoveryRows(screen.item ?: item, discovery),
                             onDiscovery = { chosen ->
                                 openDiscovery(context, chosen, { nav.navigate(it) }) { nav.navigate(itemRoute(it)) }
-                            }
+                            },
+                            onSubtitleDownload = { subtitleTarget = it }
                         )
+                        subtitleTarget?.let { target ->
+                            TouchSubtitleDownloadDialog(account, target) { subtitleTarget = null }
+                        }
                     }
                 }
             }

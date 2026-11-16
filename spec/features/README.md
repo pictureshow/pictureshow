@@ -10,6 +10,7 @@ This is a manifest of observable behavior, with stable feature IDs for platform 
 | Server discovery, sign-in, Quick Connect, saved accounts | [Accounts](accounts.md) |
 | Home, libraries, details, search, people | [Catalog](catalog.md), [Viewer home and library browsing](home-browse.md) |
 | Playback, tracks, captions, chapters, segments, continuation | [Player](player.md) |
+| Finding and downloading subtitles through the server | [Subtitle download (launch draft)](subtitle-download.md) |
 | Settings and server-side preference honor matrix | [Settings](settings.md) |
 | Device report, About, licenses, Supporter | [Information and support](information.md) |
 | Phone/tablet adaptation and additions | [Touch](touch.md) |

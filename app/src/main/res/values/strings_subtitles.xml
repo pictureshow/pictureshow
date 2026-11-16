@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SUB-DL: finding and downloading subtitles through the server. -->
+<resources>
+    <string name="subtitle_download_open">Download subtitles</string>
+    <string name="subtitle_download_title">Download subtitles</string>
+    <string name="subtitle_download_checking">Checking what your server can do…</string>
+    <string name="subtitle_download_language">Language: %1$s</string>
+    <string name="subtitle_download_choose_language">Choose a language</string>
+    <string name="subtitle_download_searching">Searching for %1$s subtitles…</string>
+    <string name="subtitle_download_no_matches">No %1$s subtitles were found for this title. Try another language.</string>
+    <string name="subtitle_download_no_provider">Your server has no subtitle provider, so it can\'t search for subtitles. A server admin can install one, such as the OpenSubtitles plugin, from Dashboard, Plugins, Catalog in Jellyfin.</string>
+    <string name="subtitle_download_not_allowed">Your account isn\'t allowed to download subtitles. A server admin can turn on \"Allow subtitle management\" for you in Jellyfin\'s Dashboard, Users.</string>
+    <string name="subtitle_download_unavailable">Subtitles can only be downloaded for titles played from your server.</string>
+    <string name="subtitle_download_failed">The server couldn\'t finish that. Try again, or pick another result.</string>
+    <string name="subtitle_download_unreachable">Couldn\'t reach your server. Check your connection and try again.</string>
+    <string name="subtitle_download_downloading">Downloading %1$s…</string>
+    <string name="subtitle_download_added_player">Added. Subtitles switched to %1$s.</string>
+    <string name="subtitle_download_added_detail">Added. Choose it from Subtitles when you play this title.</string>
+    <string name="subtitle_download_not_listed">The server downloaded the file but hasn\'t listed it yet. It will appear under Subtitles once the server finishes scanning the title.</string>
+    <string name="subtitle_download_retry">Try again</string>
+    <string name="subtitle_download_close">Close</string>
+    <string name="subtitle_download_back">Back</string>
+    <string name="subtitle_download_result_count">%1$d results</string>
+    <string name="subtitle_detail_hash_match">Made for this video</string>
+    <string name="subtitle_detail_hearing_impaired">Hearing impaired</string>
+    <string name="subtitle_detail_forced">Forced</string>
+    <string name="subtitle_detail_machine">Machine translated</string>
+    <plurals name="subtitle_detail_downloads">
+        <item quantity="one">%1$s download</item>
+        <item quantity="other">%1$s downloads</item>
+    </plurals>
+    <string name="subtitle_find_action">Find subtitles</string>
+</resources>

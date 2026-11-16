@@ -90,6 +90,8 @@ class ReferenceParityVectorsTest {
                         "application",
                         // Real account persistence traces run in AccountSignOutVectorsTest.
                         "account-sign-out",
+                        // SubtitleDownloadVectorsTest executes SUB-DL-01..04.
+                        "subtitle-download",
                         "recovery",
                         "playback-information",
                         "playback-formats", "catalog-return",
