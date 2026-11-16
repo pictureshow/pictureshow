@@ -102,6 +102,19 @@ class PlaybackSettingsTest {
             chooseNext()
             assertEquals(app.pictureshow.core.SegmentMode.Automatic, state.local.segmentModes[type])
         }
+        // SAVER-01: the screensaver rows sit on this page, between skipping segments and the server preferences.
+        val screensaver = ScreensaverSettings.of(compose.activity)
+        val minutes = screensaver.minutes
+        down("settings:screensaver")
+        chooseNext()
+        assertEquals(ScreensaverSettings.MINUTES[ScreensaverSettings.MINUTES.indexOf(minutes) + 1], screensaver.minutes)
+        val ages = listOf<Int?>(null) + ScreensaverSettings.AGES
+        val age = screensaver.maxAge
+        down("settings:screensaver-ratings")
+        chooseNext()
+        assertEquals(ages[ages.indexOf(age) + 1], screensaver.maxAge)
+        screensaver.minutes(minutes)
+        screensaver.maxAge(age)
         down("settings:audio-language")
         chooseNext()
         assertEquals("spa", state.configuration!!.audioLanguage)

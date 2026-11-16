@@ -36,6 +36,10 @@ import org.robolectric.annotation.LooperMode
 @Config(sdk = [30], application = Application::class, qualifiers = "w400dp-h800dp-port-xhdpi")
 @LooperMode(LooperMode.Mode.PAUSED)
 class TouchContinuationTest {
+    // The still-watching count (PLAY-30) is process-wide; each test starts as a viewer who just pressed something.
+    @org.junit.Before
+    fun freshViewer() = ViewerInput.input()
+
     @get:Rule(order = -2)
     val timeLimit = PerTestTimeLimit(180)
 
