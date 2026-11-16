@@ -23,6 +23,25 @@ public enum PlaybackTrackLabels {
     }
     private static func same(_ lhs: String, _ rhs: String) -> Bool { lhs.caseInsensitiveCompare(rhs) == .orderedSame }
 
+    /// Muxer handler names (spec/features/track-labels.md): whole-string, case-insensitive, untrimmed.
+    private static let handlerNames: Set<String> = Set([
+        "Core Media Audio", "Core Media Video", "Core Media Text", "Core Media Subtitle", "Core Media Closed Caption",
+        "Core Media Metadata", "DataHandler", "PictureHandler", "VideoHandler", "SoundHandler", "ClosedCaptionHandler",
+        "SubtitleHandler", "HintHandler", "TimeCodeHandler", "GoPro MET", "CAM meta", "CAM dbgi",
+        "GPAC ISO Video Handler", "GPAC ISO Auxiliary Video Handler", "GPAC ISO Picture Sequence Handler",
+        "GPAC ISO Audio Handler", "GPAC ISO Hint Handler", "GPAC Timed MetaData Handler", "GPAC MPEG-4 OD Handler",
+        "GPAC MPEG-4 OCR Handler", "GPAC MPEG-4 Scene Description Handler", "GPAC MPEG-4 MPEG-7 Handler",
+        "GPAC MPEG-4 OCI Handler", "GPAC MPEG-4 IPMP Handler", "GPAC MPEG-4 MPEG-J Handler", "GPAC Streaming Text Handler",
+        "GPAC MPEG Subtitle Handler", "GPAC DIMS Handler", "GPAC TMCD Handler", "GPAC IsoMedia Handler", "Lavf"
+    ].map { $0.lowercased() })
+    private static let lavfVersion = try! NSRegularExpression(pattern: #"\Alavf[0-9]+\.[0-9]+\.[0-9]+\z"#, options: [.caseInsensitive])
+
+    /// A handler name written by a muxer is not a viewer's title.
+    public static func isHandlerName(_ title: String) -> Bool {
+        if handlerNames.contains(title.lowercased()) { return true }
+        return lavfVersion.firstMatch(in: title, range: NSRange(title.startIndex..., in: title)) != nil
+    }
+
     public static func label(_ stream: MediaStream, trackNumber: Int? = nil, showDefault: Bool = true) -> String {
         let codecs = ["eac3":"E-AC-3", "ac3":"AC-3", "truehd":"TrueHD", "dts":"DTS", "subrip":"SRT", "srt":"SRT", "hdmv_pgs_subtitle":"PGS", "pgssub":"PGS", "pgs":"PGS", "dvd_subtitle":"VobSub", "dvdsub":"VobSub", "vobsub":"VobSub", "mov_text":"mov_text", "opus":"Opus"]
         let codec = stream.codec.map { codecs[$0.lowercased()] ?? $0.uppercased() } ?? "Unknown format"
@@ -32,7 +51,7 @@ public enum PlaybackTrackLabels {
         }
         let format = codec + channels
         let lang = language(stream.language)
-        let title = stream.title.flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 }
+        let title = stream.title.flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isHandlerName($0) ? nil : $0 }
         let name: String?
         if let lang, let title, names(title, lang) { name = title } else { name = lang ?? title }
         var parts: [String] = []
@@ -51,7 +70,7 @@ public enum PlaybackTrackLabels {
 
     public static func labels(_ streams: [MediaStream]) -> [String] {
         let informativeDefault = streams.count > 1 && streams.filter(\.isDefault).count == 1
-        var result = streams.map { label($0, showDefault: informativeDefault) }
+        var result = streams.enumerated().map { label($1, trackNumber: $0 + 1, showDefault: informativeDefault) }
         while Set(result).count != result.count {
             let counts = Dictionary(grouping: result, by: { $0 }).mapValues(\.count)
             result = result.enumerated().map { counts[$0.element, default: 0] > 1 ? "\($0.element) · Track \($0.offset + 1)" : $0.element }

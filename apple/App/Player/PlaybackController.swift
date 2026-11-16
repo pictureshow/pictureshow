@@ -69,7 +69,12 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
     var selectedAudio: Int? { decision?.audioIndex ?? source?.defaultAudioStreamIndex }
     var selectedSubtitle: Int { decision?.subtitleIndex ?? -1 }
 
-    func label(_ stream: MediaStream) -> String { PlaybackTrackLabels.label(stream, showDefault: false) }
+    /// Labels come from the whole chooser list, so untitled tracks get their menu number and duplicates stay distinct.
+    func label(_ stream: MediaStream) -> String {
+        let list = stream.type == "Audio" ? audioStreams : subtitleStreams
+        guard let position = list.firstIndex(where: { $0.index == stream.index }) else { return PlaybackTrackLabels.label(stream, showDefault: false) }
+        return PlaybackTrackLabels.labels(list)[position]
+    }
 
     // MARK: Lifecycle
 

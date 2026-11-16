@@ -2,7 +2,7 @@
 // Copyright (c) Legitimate LLC.
 import Foundation
 
-/// Known main case identities at f64875a1. No expected results are stored here.
+/// Known main case identities at fc36d647. No expected results are stored here.
 /// Adding, renaming or removing a contract case requires explicit adapter review.
 enum SpecCaseManifest {
     static let contracts: [String: String] = {
@@ -33,7 +33,6 @@ enum SpecCaseManifest {
         settings.validation.5|application/validate-bitrate
         audio.server-wins|application/default-stream
         audio.server-language-index|application/default-stream
-        audio.server-minus-one|application/default-stream
         audio.default-before-language|application/default-stream
         audio.language-fallback|application/default-stream
         audio.iso3-region-fallback|application/default-stream
@@ -1449,6 +1448,17 @@ enum SpecCaseManifest {
         remote-queue.play-next-episode-after-an-added-movie-keeps-the-series-after-the-movie|remote-queue/queue
         session-command.play-now-waits-for-the-title-to-start|session-command/command
         session-command.play-now-unconfirmed-after-its-window|session-command/command
+        track-label-forced|application/track-labels
+        track-label-distinct|application/track-labels
+        track-label-server-display-title-ignored|application/track-labels
+        track-label-three-letter-language-channels|application/track-labels
+        track-label-apple-handlers|application/track-labels
+        track-label-ffmpeg-handlers|application/track-labels
+        track-label-gpac-handlers|application/track-labels
+        track-label-lavf-identifiers|application/track-labels
+        track-label-handlers-case-insensitive-with-language|application/track-labels
+        track-label-real-titles-and-near-matches|application/track-labels
+        track-label-handler-fallback-retains-format-number-and-badges|application/track-labels
         """
         return Dictionary(uniqueKeysWithValues: rows.split(separator: "\n").map {
             let pair = $0.split(separator: "|", maxSplits: 1)

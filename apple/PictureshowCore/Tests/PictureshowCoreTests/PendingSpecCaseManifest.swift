@@ -10,16 +10,17 @@ enum PendingSpecCaseManifest {
         let reason: String
     }
     static let suites: [String: Suite] = [
-        "account-sign-out": Suite(count: 7, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
-        "application": Suite(count: 32, reason: "Additional main contracts lack an Apple executor; existing active contracts in this suite continue to execute."),
+        "account-sign-out": Suite(count: 7, reason: "Merged on main after the Apple core was last synced; the account store lives in the app, whose AccountBookTests.testAccountSignOutVectors executes all seven."),
+        "application": Suite(count: 53, reason: "Additional main contracts lack an Apple executor; existing active contracts in this suite continue to execute."),
         "catalog-return": Suite(count: 10, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
         "frame-rate-match": Suite(count: 6, reason: "Display-mode policy and native display qualification are not ported to Apple."),
-        "home-browse": Suite(count: 160, reason: "Newly merged main policy or presentation contracts are not ported to Apple; native acceptance remains owed."),
+        "home-browse": Suite(count: 174, reason: "Newly merged main policy or presentation contracts are not ported to Apple; native acceptance remains owed."),
         "live-dvr": Suite(count: 22, reason: "Newly merged main policy or presentation contracts are not ported to Apple; native acceptance remains owed."),
         "live-guide": Suite(count: 14, reason: "Newly merged main policy or presentation contracts are not ported to Apple; native acceptance remains owed."),
         "live-presentation": Suite(count: 366, reason: "Newly merged main policy or presentation contracts are not ported to Apple; native acceptance remains owed."),
         "live-source": Suite(count: 11, reason: "Newly merged main policy or presentation contracts are not ported to Apple; native acceptance remains owed."),
         "offline-budget": Suite(count: 40, reason: "The merged offline policy and its Apple runtime integration are not ported."),
+        "offline-detail-source": Suite(count: 20, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
         "offline-fmp4": Suite(count: 43, reason: "The merged offline policy and its Apple runtime integration are not ported."),
         "offline-job": Suite(count: 283, reason: "The merged offline policy and its Apple runtime integration are not ported."),
         "offline-manifest": Suite(count: 98, reason: "The merged offline policy and its Apple runtime integration are not ported."),
@@ -29,13 +30,15 @@ enum PendingSpecCaseManifest {
         "offline-reconnect": Suite(count: 16, reason: "The merged offline policy and its Apple runtime integration are not ported."),
         "offline-resume": Suite(count: 78, reason: "The merged offline policy and its Apple runtime integration are not ported."),
         "playback-formats": Suite(count: 30, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
+        "playback-info-reasons": Suite(count: 12, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
         "playback-information": Suite(count: 19, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
         "playback-settings": Suite(count: 68, reason: "The merged playback tuning, network and preference policies are not ported to Apple."),
-        "playback-settings-layout": Suite(count: 7, reason: "These seven measured Android Compose layouts require native Apple UI acceptance; a pure core answer would not prove them."),
+        "playback-settings-layout": Suite(count: 8, reason: "These eight measured Android Compose layouts require native Apple UI acceptance; a pure core answer would not prove them."),
         "playback-start": Suite(count: 5, reason: "The merged start-origin and rewind policy is not ported to Apple."),
         "player-control-affordances": Suite(count: 4, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
         "player-overlay-layout": Suite(count: 8, reason: "Newly merged main policy or presentation contracts are not ported to Apple; native acceptance remains owed."),
         "player-quality": Suite(count: 14, reason: "The merged per-viewing quality selection policy is not ported to Apple."),
+        "quality-auto-floor": Suite(count: 14, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
         "reference": Suite(count: 19, reason: "Additional main contracts lack an Apple executor; existing active contracts in this suite continue to execute."),
         "search-presentation": Suite(count: 11, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
         "settings-presentation": Suite(count: 65, reason: "The merged advanced playback setting labels and consequences are not ported to Apple."),
@@ -63,6 +66,7 @@ enum PendingSpecCaseManifest {
         "sync-source": Suite(count: 21, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
         "sync-speed-intent-origin": Suite(count: 4, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
         "sync-state": Suite(count: 64, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
+        "sync-stay": Suite(count: 29, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
         "sync-tv-attention": Suite(count: 6, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
         "sync-tv-player-coherence": Suite(count: 6, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
         "sync-tv-rhythm": Suite(count: 3, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
@@ -77,8 +81,6 @@ enum PendingSpecCaseManifest {
         detail-primary-all-played|application/detail-play-item
         detail-primary-empty|application/detail-play-item
         detail-primary-container|application/detail-play-item
-        track-label-forced|application/track-labels
-        track-label-distinct|application/track-labels
         catalog-announcement-episode|application/catalog-announcement
         catalog-announcement-season-count|application/catalog-announcement
         catalog-announcement-empty|application/catalog-announcement
@@ -1475,7 +1477,6 @@ enum PendingSpecCaseManifest {
         player-quality.remote-context|player-quality/context
         player-quality.retry-auto|player-quality/choose
         player-quality.return-auto|player-quality/choose
-        player-quality.small-reduction|player-quality/notice
         player-quality.unchanged|player-quality/notice
         settings-presentation.always-burn-viewer-consequence|settings-presentation/burn-consequence
         settings-presentation.capability-consequence.Detected.23|settings-presentation/capability-consequence
@@ -1549,8 +1550,6 @@ enum PendingSpecCaseManifest {
         auth10.sign-in-replaces-kept-card|account-sign-out/case
         auth10.missing-sign-out-keeps-everything|account-sign-out/case
         auth10.both-sign-out-retain-both-cards|account-sign-out/case
-        track-label-server-display-title-ignored|application/track-labels
-        track-label-three-letter-language-channels|application/track-labels
         runtime-label-under-minute|application/runtime-label
         runtime-label-tiny|application/runtime-label
         runtime-label-just-under-minute|application/runtime-label
@@ -2162,6 +2161,122 @@ enum PendingSpecCaseManifest {
         group-chip-next-episode-landscape-rtl|touch-player-director-clearance-paint-edges/case
         group-chip-next-episode-portrait-large-font-rtl|touch-player-director-clearance-paint-edges/case
         conversion-notice-reserved-action-band|touch-player-director-clearance-paint-edges/case
+        audio.server-minus-one-falls-back|application/default-stream
+        audio-track-legacy-off|application/audio-track-index
+        audio-track-server-off|application/audio-track-index
+        audio-track-both-off|application/audio-track-index
+        audio-track-first-audio|application/audio-track-index
+        audio-track-silent-file|application/audio-track-index
+        audio-track-zero-is-valid|application/audio-track-index
+        audio-track-viewer-choice|application/audio-track-index
+        audio-default-off-uses-default-track|application/default-stream
+        media-badges-uhd-hdr10-51|application/media-badges
+        media-badges-sdr-stereo-empty|application/media-badges
+        media-badges-scope-4k-dolby-vision-atmos|application/media-badges
+        media-badges-hdr10plus|application/media-badges
+        media-badges-hlg|application/media-badges
+        media-badges-invalid-dolby-vision-claims-nothing|application/media-badges
+        media-badges-default-audio-track-wins|application/media-badges
+        media-badges-older-server-profile-dtsx|application/media-badges
+        media-badges-spatial-format-none-overrides-profile|application/media-badges
+        media-badges-no-source|application/media-badges
+        detail-play-label-series-next|application/detail-play-label
+        detail-play-label-series-resume|application/detail-play-label
+        detail-play-label-season-untitled|application/detail-play-label
+        detail-play-label-movie|application/detail-play-label
+        detail-play-label-movie-resume|application/detail-play-label
+        detail-play-label-series-nothing-to-play|application/detail-play-label
+        home-notice-unreachable-keeps-page-and-names-server|home-browse/home-notice
+        home-notice-unreachable-keeps-page-offers-downloads|home-browse/home-notice
+        home-notice-unnamed-server|home-browse/home-notice
+        home-notice-empty-page-downloads-first|home-browse/home-notice
+        home-notice-empty-page-no-downloads-is-the-error|home-browse/home-notice
+        home-notice-refusal-is-not-out-of-reach|home-browse/home-notice
+        home-notice-healthy-says-nothing|home-browse/home-notice
+        home-row-destination-libraries|home-browse/home-row-destination
+        home-row-destination-latest-movies-1|home-browse/home-row-destination
+        home-row-destination-latest-empty|home-browse/home-row-destination
+        home-row-destination-resume|home-browse/home-row-destination
+        home-row-destination-nextup|home-browse/home-row-destination
+        home-row-destination-watching|home-browse/home-row-destination
+        home-row-destination-pin-collection-c1|home-browse/home-row-destination
+        offline-detail-source.ready-plays-local-online|offline-detail-source/detail-source
+        offline-detail-source.ready-plays-local-unreachable|offline-detail-source/detail-source
+        offline-detail-source.ready-plays-local-unknown|offline-detail-source/detail-source
+        offline-detail-source.stream-instead-is-deliberate|offline-detail-source/detail-source
+        offline-detail-source.stream-instead-unknown-tries|offline-detail-source/detail-source
+        offline-detail-source.stream-instead-unreachable-explains|offline-detail-source/detail-source
+        offline-detail-source.no-download-streams|offline-detail-source/detail-source
+        offline-detail-source.no-download-unknown-tries|offline-detail-source/detail-source
+        offline-detail-source.no-download-unreachable-explains|offline-detail-source/detail-source
+        offline-detail-source.start-from-start|offline-detail-source/detail-start
+        offline-detail-source.start-unsent-local-wins|offline-detail-source/detail-start
+        offline-detail-source.start-unsent-played-is-zero|offline-detail-source/detail-start
+        offline-detail-source.start-synced-takes-fresh-server|offline-detail-source/detail-start
+        offline-detail-source.start-no-outbox-takes-fresh-server|offline-detail-source/detail-start
+        offline-detail-source.start-server-played-is-zero|offline-detail-source/detail-start
+        offline-detail-source.start-conflict-takes-fresh-server|offline-detail-source/detail-start
+        offline-detail-source.start-conflict-offline-takes-last-known|offline-detail-source/detail-start
+        offline-detail-source.start-offline-last-known|offline-detail-source/detail-start
+        offline-detail-source.start-offline-unsent|offline-detail-source/detail-start
+        offline-detail-source.start-nothing-known|offline-detail-source/detail-start
+        playback-info-reasons.unreported-scaling|playback-info-reasons/case
+        playback-info-reasons.server-covers-scaling|playback-info-reasons/case
+        playback-info-reasons.named-video-codec|playback-info-reasons/case
+        playback-info-reasons.named-audio-codec|playback-info-reasons/case
+        playback-info-reasons.unreported-codec|playback-info-reasons/case
+        playback-info-reasons.missing-received|playback-info-reasons/case
+        playback-info-reasons.codec-alias|playback-info-reasons/case
+        playback-info-reasons.direct-device|playback-info-reasons/case
+        playback-info-reasons.direct-receiver|playback-info-reasons/case
+        playback-info-reasons.one-dimension-changed|playback-info-reasons/case
+        playback-info-reasons.named-codec-constraints|playback-info-reasons/case
+        playback-info-reasons.codec-tag-covers-change|playback-info-reasons/case
+        playback-settings-layout.tv-main-settings-groups|playback-settings-layout/main-settings-tv-groups
+        player-quality.unknown-stream|player-quality/notice
+        quality-auto-floor.tiny-estimate|quality-auto-floor/case
+        quality-auto-floor.floor|quality-auto-floor/case
+        quality-auto-floor.above-short-clip|quality-auto-floor/case
+        quality-auto-floor.equal-stream|quality-auto-floor/case
+        quality-auto-floor.unknown-stream|quality-auto-floor/case
+        quality-auto-floor.at-floor|quality-auto-floor/case
+        quality-auto-floor.server-ceiling|quality-auto-floor/case
+        quality-auto-floor.invalid-estimate|quality-auto-floor/case
+        quality-auto-floor.ladder-rounding|quality-auto-floor/case
+        quality-auto-floor.url-ceiling-cannot-inflate-clock|quality-auto-floor/stream-bitrate
+        quality-auto-floor.converted-cap-below-source|quality-auto-floor/stream-bitrate
+        quality-auto-floor.unknown-source-not-a-measured-rate|quality-auto-floor/stream-bitrate
+        quality-auto-floor.remux-may-omit-audio-tracks|quality-auto-floor/stream-bitrate
+        quality-auto-floor.audio-conversion-copied-video-bound|quality-auto-floor/stream-bitrate
+        sync-stay.close.back-stays-and-stops-holding-the-wait|sync-stay/case
+        sync-stay.close.close-button-stays-and-stops-holding-the-wait|sync-stay/case
+        sync-stay.close.stop-button-stays-and-stops-holding-the-wait|sync-stay/case
+        sync-stay.close.error-back-stays-and-stops-holding-the-wait|sync-stay/case
+        sync-stay.close.natural-end-stays-and-stops-holding-the-wait|sync-stay/case
+        sync-stay.close.back-after-earlier-stay-sends-nothing-new|sync-stay/case
+        sync-stay.close.not-participating-is-untouched|sync-stay/case
+        sync-stay.close.background-on-home-keeps-membership|sync-stay/case
+        sync-stay.close.background-while-rendering-keeps-leave-once|sync-stay/case
+        sync-stay.close.cast-handoff-leaves|sync-stay/case
+        sync-stay.close.explicit-leave-leaves|sync-stay/case
+        sync-stay.close.sign-out-leaves-without-a-retained-fact|sync-stay/case
+        sync-stay.reminder.stayed-with-queue-offers-watch-and-leave|sync-stay/case
+        sync-stay.reminder.playing-group-offers-watch|sync-stay/case
+        sync-stay.reminder.open-player-has-the-chip-instead|sync-stay/case
+        sync-stay.reminder.no-membership-shows-nothing|sync-stay/case
+        sync-stay.reminder.group-ended-by-server-clears|sync-stay/case
+        sync-stay.reminder.blank-name-falls-back|sync-stay/case
+        sync-stay.reminder.empty-queue-offers-leave-only|sync-stay/case
+        sync-stay.reminder.disconnected-offers-leave-only|sync-stay/case
+        sync-stay.reminder.reconnecting-offers-leave-only|sync-stay/case
+        sync-stay.reminder.error-offers-leave-only|sync-stay/case
+        sync-stay.reminder.unconfirmed-leave-stays-visible|sync-stay/case
+        sync-stay.denial.not-in-group-ends-stayed-membership|sync-stay/case
+        sync-stay.denial.missing-group-ends-stayed-membership|sync-stay/case
+        sync-stay.denial.open-player-keeps-its-recovery|sync-stay/case
+        sync-stay.denial.library-denial-is-not-an-ended-group|sync-stay/case
+        sync-stay.open.following-opens-new-entries|sync-stay/case
+        sync-stay.open.stayed-device-waits-for-watch|sync-stay/case
         """
         return Dictionary(uniqueKeysWithValues: rows.split(separator: "\n").map {
             let pair = $0.split(separator: "|", maxSplits: 1)
