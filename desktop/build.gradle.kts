@@ -18,6 +18,8 @@ dependencies {
     implementation(libs.coil.network.okhttp)
     implementation(libs.ktor.client.core)
     implementation(libs.ktor.client.okhttp)
+    // Stream E: the remote-control and Watch-together socket (RemoteTargetHost), as on Android.
+    implementation(libs.okhttp)
     implementation(libs.serialization.json)
     implementation(libs.coroutines.core)
     testImplementation(libs.kotlin.test.junit)
