@@ -6,8 +6,10 @@
 package app.pictureshow
 
 import android.content.Context
+import android.content.SharedPreferences
 import android.os.SystemClock
 import android.util.Log
+import androidx.core.content.edit
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.PlaybackException
@@ -20,6 +22,7 @@ import androidx.media3.exoplayer.RenderersFactory
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.extractor.DefaultExtractorsFactory
 import app.pictureshow.core.Server
+import app.pictureshow.core.playback.FirstFrameAction
 import app.pictureshow.core.playback.MediaStreamType
 import app.pictureshow.core.playback.PlayDecision
 import app.pictureshow.core.playback.PlayMethod
@@ -104,6 +107,12 @@ internal class Media3PlaybackOutput(
     var onEnded: (PlayDecision) -> Unit = {}
     var onStop: () -> Unit = {}
     var onBandwidthEstimate: (Long, Long) -> Unit = { _, _ -> }
+
+    /**
+     * PLAY-61: mpv showed no picture. The host reopens the viewing where it is: on mpv with audio decoded
+     * ([FirstFrameAction.WithoutPassthrough]), or on the built-in player ([FirstFrameAction.Platform]).
+     */
+    var onEngineStalled: (FirstFrameAction) -> Unit = {}
     var matchFrameRate: Boolean = false
     var disabledPassthrough: Set<app.pictureshow.core.playback.PassthroughEncoding> = emptySet()
     private val fdDiagnostics = PlaybackFdDiagnostics()
@@ -684,7 +693,14 @@ internal class Media3PlaybackOutput(
             val delivery = app.pictureshow.core.playback.PlayDecisions.resolve(server, requireNotNull(stream.deliveryUrl))
             proxy.local(delivery)?.let { stream to it }
         }
-        val spdif = if (passthroughEnabled) mpvPassthrough(context, disabledPassthrough) else emptyList()
+        // PLAY-61: after passthrough showed no picture, the rest of this viewing decodes its audio, and later viewings
+        // decode the format that stalled, in this run and later ones.
+        val spdif = if (passthroughEnabled && decodedAudioFor != decision.itemId) {
+            MpvPassthroughStalls.load(context)
+            mpvPassthrough(context, disabledPassthrough) - MpvPassthroughStalls.formats
+        } else {
+            emptyList()
+        }
         val source = MpvSource(
             url = url,
             title = title,
@@ -713,6 +729,21 @@ internal class Media3PlaybackOutput(
             "open",
             "requestedMs=$positionMs method=${decision.method} engine=mpv spdif=${spdif.joinToString(",")}"
         )
+        next.onFirstFrameAction = { action ->
+            if (mpv === next) {
+                val at = position()
+                PlaybackDiagnostics.write(
+                    decision,
+                    "engine-watchdog",
+                    "action=$action hwdec=${next.hwdec} codec=${next.videoCodec} positionMs=${at.milliseconds}"
+                )
+                if (action == FirstFrameAction.WithoutPassthrough) {
+                    decodedAudioFor = decision.itemId
+                    MpvPassthroughStalls.stalled(next.audioCodec)
+                }
+                onEngineStalled(action)
+            }
+        }
         next.selectStream(MediaStreamType.Audio, audio)
         next.selectStream(MediaStreamType.Subtitle, subtitle)
         val managed = ReopeningPlayer(next, ::playIntent)
@@ -781,6 +812,9 @@ internal class Media3PlaybackOutput(
             existingSession.replacePlayer(exposed)
         }
     }
+
+    /** PLAY-61: the item whose mpv opens decode audio, after passthrough showed no picture. */
+    private var decodedAudioFor: String? = null
 
     /** SET-15's subtitle look, which mpv draws itself (see [mpvSubtitleOptions]). */
     var mpvSubtitles: SubtitleAppearance = SubtitleAppearance()
@@ -953,6 +987,61 @@ internal class PlaybackEndSignal(private val currentPlayer: () -> Player?, priva
         if (!canEnd()) return
         sent = true
         onEnd(reason)
+    }
+}
+
+/**
+ * PLAY-61: passthrough formats that left mpv without a picture on this device, in mpv's `audio-spdif` names. On the
+ * household projector AC-3 passes through but E-AC-3 (a 192 kHz IEC 61937 stream) never starts (OBSERVED), so only the
+ * format that stalled is decoded from then on. Kept across app runs, so each new run doesn't wait out the watchdog
+ * again, and forgotten when the app's version changes (a new build may carry a fixed mpv).
+ */
+internal object MpvPassthroughStalls {
+    private const val PREFS = "mpv-passthrough-stalls"
+    private const val KEY_VERSION = "version"
+    private const val KEY_FORMATS = "formats"
+
+    @Volatile var formats: Set<String> = emptySet()
+        private set
+
+    @Volatile private var stored: SharedPreferences? = null
+
+    /** Reads the stalls this device remembered, once per run; [version] identifies the app build. */
+    @Synchronized
+    fun load(context: Context, version: String = "${BuildConfig.VERSION_NAME}+${BuildConfig.VERSION_CODE}") {
+        if (stored != null) return
+        val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        if (prefs.getString(KEY_VERSION, null) == version) {
+            formats = formats + prefs.getStringSet(KEY_FORMATS, emptySet()).orEmpty()
+        }
+        prefs.edit {
+            putString(KEY_VERSION, version)
+            putStringSet(KEY_FORMATS, formats)
+        }
+        stored = prefs
+    }
+
+    /** mpv's `audio-spdif` names that carry an audio track of [codec]; DTS covers DTS-HD, which mpv reports as dts. */
+    fun spdifNames(codec: String?): Set<String> = when (codec?.lowercase()) {
+        "ac3" -> setOf("ac3")
+        "eac3" -> setOf("eac3")
+        "dts" -> setOf("dts", "dts-hd")
+        "truehd" -> setOf("truehd")
+        else -> emptySet()
+    }
+
+    /** [codec] is mpv's name for the audio track that stalled. */
+    @Synchronized
+    fun stalled(codec: String?) {
+        formats = formats + spdifNames(codec)
+        stored?.edit { putStringSet(KEY_FORMATS, formats) }
+    }
+
+    /** Forgets this run's state (tests); what the device stored stays. */
+    @Synchronized
+    fun clear() {
+        formats = emptySet()
+        stored = null
     }
 }
 

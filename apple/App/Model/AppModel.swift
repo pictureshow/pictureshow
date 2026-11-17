@@ -16,7 +16,11 @@ import PictureshowCore
     @Published var addingAccount = false
     @Published var player: PlayerRequest? {
         // Every teardown (closing, a relock, signing out, "Switch user") clears the viewing, and the window with it.
-        didSet { if player == nil { pictureInPictureMoved(active: false, playing: false) } }
+        didSet {
+            if player == nil { pictureInPictureMoved(active: false, playing: false) }
+            // MUS-11: music stops once before any video opens, whichever route opened it, and keeps its queue.
+            else { music?.beforeVideo() }
+        }
     }
     /// AUTH-18 with TOUCH-15: whether a picture-in-picture window is up and whether its viewing plays, and the scene's
     /// last phase. Together they decide whether the time away runs (`ProfileLocks.swift`).
@@ -43,6 +47,8 @@ import PictureshowCore
     private(set) var remote: RemoteControl!
     /// Watch together for the selected viewer (SYN-01..11).
     private(set) var syncPlay: SyncPlaySession!
+    /// Music for the selected viewer (MUS-01..11): its queue, output and lock-screen controls.
+    private(set) var music: MusicHost!
     /// Each account's Seerr connection (SEERR-01..07); its changes redraw whatever reads it through the app.
     let seerr = SeerrConnections()
     private var seerrChanges: AnyCancellable?
@@ -67,10 +73,16 @@ import PictureshowCore
         remoteTarget = RemoteTarget(app: self)
         remote = RemoteControl(app: self)
         syncPlay = SyncPlaySession(app: self)
+        music = MusicHost(gateway: JellyfinMusicGateway(client: { [unowned self] in self.client(for: $0) }), store: FileMusicQueueStore())
+        music.admitted = { [unowned self] in self.pastPinGate($0) }
+        music.expire = { [unowned self] in self.expire($0) }
+        music.client = { [unowned self] in self.client(for: $0) }
+        music.metered = { MusicNetwork.shared.metered }
         pins.load(keys: snapshot.accounts.map(\.key))
         seerr.load(keys: snapshot.accounts.filter { !$0.signedOut }.map(\.key))
         seerrChanges = seerr.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
         socket.follow(account)
+        music.bind(account, known: musicOwners)
         Task.detached(priority: .utility) { await AppleHEVCQualification.shared.warmUp() }
     }
 
@@ -229,7 +241,11 @@ import PictureshowCore
         remoteTarget.accountChanged()
         remote.accountChanged()
         syncPlay?.accountChanged()
+        music?.bind(account, known: musicOwners)
     }
+
+    /// The viewers whose saved music queue stays: every one still saved here and not signed out (MUS-08, AUTH-10).
+    private var musicOwners: Set<String> { Set(snapshot.accounts.filter { !$0.signedOut }.map(\.key)) }
 
     func persist() {
         do { try store.save(snapshot); storageError = nil }

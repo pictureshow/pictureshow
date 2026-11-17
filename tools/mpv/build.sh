@@ -127,7 +127,9 @@ EOF
   echo "== ffmpeg ${VERSION[ffmpeg]} for $ABI"
   unpack ffmpeg "$BUILD/ffmpeg"
   # avcodec_configuration() embeds this line, so it names no local path (pkg-config finds dav1d through the
-  # environment). Protocols: what the loopback http:// URLs and mpv's stream layer need.
+  # environment). Protocols: what the loopback http:// URLs and mpv's stream layer need. Muxers: image2 for
+  # screenshots, and spdif, which mpv's audio passthrough (ad_spdif) wraps AC-3, E-AC-3, DTS and TrueHD in. Without
+  # it passthrough fails silently and mpv waits forever for audio, so no picture ever shows (PLAY-61).
   (cd "$BUILD/ffmpeg" && ./configure "${FFARCH[@]}" \
       --target-os=android --enable-cross-compile \
       --cc="${TRIPLE}${ANDROID_API}-clang" --cxx="${TRIPLE}${ANDROID_API}-clang++" \
@@ -135,7 +137,7 @@ EOF
       --pkg-config-flags=--static --extra-cflags="$CFLAGS" --extra-ldflags="$LDFLAGS" \
       --prefix=$PREFIX --build-suffix=_mpv --enable-shared --disable-static --disable-symver \
       --disable-doc --disable-programs --disable-autodetect --disable-avdevice --disable-devices \
-      --disable-encoders --disable-muxers --enable-encoder=mjpeg,png --enable-muxer=image2 \
+      --disable-encoders --disable-muxers --enable-encoder=mjpeg,png --enable-muxer=image2,spdif \
       --disable-protocols --enable-protocol=file,http,tcp,crypto,data,hls,subfile,concat,concatf,pipe \
       --enable-network --enable-zlib --enable-jni --enable-mediacodec --enable-libdav1d \
       --disable-vulkan --disable-v4l2-m2m --disable-debug > "$LOG/ffmpeg.configure.log" 2>&1 &&

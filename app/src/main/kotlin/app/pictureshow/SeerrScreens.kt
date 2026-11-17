@@ -36,6 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
@@ -376,7 +377,8 @@ private fun SeerrTvConnect(vm: SeerrViewModel, account: Account, onRequests: () 
         Page(stringResource(R.string.seerr_connect_title)) { StatusLine(stringResource(R.string.seerr_loading)) }
         return
     }
-    Page(stringResource(R.string.seerr_connect_title)) {
+    val scroll = androidx.compose.foundation.rememberScrollState()
+    Page(stringResource(R.string.seerr_connect_title), scroll = scroll) {
         if (config != null) {
             Text(stringResource(R.string.seerr_connected_as, config.url.substringAfter("://"), config.user.name))
             val requester = seerrCanRequest(config.user.permissions, "movie") || seerrCanRequest(config.user.permissions, "tv")
@@ -395,7 +397,24 @@ private fun SeerrTvConnect(vm: SeerrViewModel, account: Account, onRequests: () 
         var key by remember { mutableStateOf("") }
         fun connect() = vm.connect(address, key.takeIf { useKey }, username, password)
         Text(stringResource(R.string.seerr_connect_intro), Modifier.widthIn(max = 720.dp))
-        RemoteField(stringResource(R.string.seerr_connect_address), address, { address = it }, initial = true, enabled = !state.connecting)
+        // The address field is the first stop and sits near the top: when it takes focus the text field scrolls itself
+        // into view by a few pixels and clipped the heading (rc38 on the projector), so the page goes back to its top.
+        var addressFocused by remember { mutableStateOf(false) }
+        LaunchedEffect(addressFocused) {
+            if (addressFocused) {
+                withFrameNanos { }
+                scroll.animateScrollTo(0)
+            }
+        }
+        Box(Modifier.onFocusChanged { addressFocused = it.hasFocus }) {
+            RemoteField(
+                stringResource(R.string.seerr_connect_address),
+                address,
+                { address = it },
+                initial = true,
+                enabled = !state.connecting
+            )
+        }
         StatusLine(stringResource(R.string.seerr_connect_address_hint), announce = false)
         Column(Modifier.widthIn(max = 640.dp)) {
             TvSettingsRow(

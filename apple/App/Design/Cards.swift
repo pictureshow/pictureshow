@@ -12,6 +12,8 @@ enum Route: Hashable {
     case photo(MediaItem, sortBy: String, descending: Bool)
     /// LIVE-01: the Live TV destination (Channels, Guide, Recordings, Schedules), never an item grid.
     case liveTV
+    /// MUS-01, MUS-02: a music library or an album, artist, genre, playlist or song page.
+    case music(MusicRoute)
 }
 
 extension MediaItem: @retroactive Hashable {
@@ -21,6 +23,7 @@ extension MediaItem: @retroactive Hashable {
 extension MediaItem {
     var route: Route {
         if isLiveTvLibrary { return .liveTV }
+        if let music = musicRoute { return .music(music) }
         if type == "CollectionFolder" || type == "UserView" || (collectionType != nil && type != "BoxSet") { return .library(self) }
         if type == "Person" { return .person(id: id, name: name) }
         if type == "Photo" { return .photo(self, sortBy: "SortName", descending: false) }

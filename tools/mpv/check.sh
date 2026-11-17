@@ -61,6 +61,10 @@ for ABI in $ABIS; do
       || bad "$ABI/$lib: license string is not 'LGPL version 2.1 or later'"
   done
 
+  # mpv's audio passthrough needs FFmpeg's spdif muxer; its options are named only in the muxer (spdifenc.c).
+  [ "$(strings -n 8 "$d/libavformat_mpv.so" | grep -cx -e 'dtshd_rate' -e 'spdif_flags')" = 2 ] \
+    || bad "$ABI: libavformat_mpv.so lacks the spdif muxer (mpv's audio passthrough)"
+
   # libmpv embeds its meson options (the "configuration" property): -Dgpl=false must be among them. The enabled
   # features come from meson's own summary, which build.sh keeps as $FEATURES/mpv-features-<abi>.txt; a GPL build
   # lists "gpl" there.

@@ -23,6 +23,8 @@ import androidx.media3.common.TrackGroup
 import androidx.media3.common.Tracks
 import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
+import app.pictureshow.core.playback.EngineFirstFrame
+import app.pictureshow.core.playback.FirstFrameAction
 import app.pictureshow.core.playback.MediaStream
 import app.pictureshow.core.playback.MediaStreamType
 import app.pictureshow.core.playback.SubtitleBackground
@@ -215,8 +217,18 @@ internal object NativeMpvApi : MpvApi {
  * [DETACH_WAIT_MS], because mpv must stop drawing before Android takes the Surface away.
  */
 @UnstableApi
-internal class MpvPlayer(context: Context, private val source: MpvSource, private val api: MpvApi = NativeMpvApi) :
-    SimpleBasePlayer(Looper.getMainLooper()) {
+internal class MpvPlayer(
+    context: Context,
+    private val source: MpvSource,
+    private val api: MpvApi = NativeMpvApi,
+    private val now: () -> Long = android.os.SystemClock::uptimeMillis
+) : SimpleBasePlayer(Looper.getMainLooper()) {
+    /** PLAY-61: called once, on the main looper, when no picture came ([EngineFirstFrame]). */
+    var onFirstFrameAction: ((FirstFrameAction) -> Unit)? = null
+    private var loadedAt: Long? = null
+    private var dataReadyAt: Long? = null
+    private var watchdogDone = false
+
     private val main = Handler(Looper.getMainLooper())
     private val commands = Executors.newSingleThreadExecutor { task -> Thread(task, "mpv-commands").apply { isDaemon = true } }
     private val handle: Long
@@ -240,6 +252,7 @@ internal class MpvPlayer(context: Context, private val source: MpvSource, privat
     private var frameRate = -1f
     private var firstFrame = false
     private var firstFramePending = false
+    private var videoDecoded = false
     private var speed = 1f
     private var error: PlaybackException? = null
     private var pendingSeek: SettableFuture<*>? = null
@@ -339,6 +352,10 @@ internal class MpvPlayer(context: Context, private val source: MpvSource, privat
             }
             MpvEvent.FILE_LOADED -> {
                 loaded = true
+                if (loadedAt == null) {
+                    loadedAt = now()
+                    main.postDelayed(watchdog, WATCHDOG_TICK_MS)
+                }
                 val known = externalIds.toMap()
                 onMpv { addExternalSubtitles(known) }
             }
@@ -347,10 +364,7 @@ internal class MpvPlayer(context: Context, private val source: MpvSource, privat
                 buffering = false
                 pendingSeek?.set(null)
                 pendingSeek = null
-                if (!firstFrame && width > 0) {
-                    firstFrame = true
-                    firstFramePending = true
-                }
+                checkFirstFrame()
             }
             MpvEvent.SEEK -> buffering = true
             MpvEvent.VIDEO_RECONFIG -> refreshVideo()
@@ -374,7 +388,10 @@ internal class MpvPlayer(context: Context, private val source: MpvSource, privat
             "paused-for-cache" -> buffering = event.longValue != 0L && !none
             "eof-reached" -> if (event.longValue != 0L && !none) ended = true
             "seekable" -> if (!none) seekable = event.longValue != 0L
-            "demuxer-cache-duration" -> cacheMs = if (none || event.doubleValue.isNaN()) 0 else (event.doubleValue * 1000).toLong()
+            "demuxer-cache-duration" -> {
+                cacheMs = if (none || event.doubleValue.isNaN()) 0 else (event.doubleValue * 1000).toLong()
+                if (cacheMs >= EngineFirstFrame.DATA_MS && dataReadyAt == null) dataReadyAt = now()
+            }
             "track-list/count" -> refreshTracks()
             "hwdec-current" -> hwdec = event.stringValue
             "video-params/gamma" -> gamma = event.stringValue
@@ -389,10 +406,48 @@ internal class MpvPlayer(context: Context, private val source: MpvSource, privat
         }
     }
 
+    /**
+     * PLAY-61's watchdog, on the main looper until the first picture. Time without a surface (the app in the
+     * background) doesn't count: nothing could be shown then.
+     */
+    private val watchdog = object : Runnable {
+        override fun run() {
+            if (released || firstFrame || watchdogDone) return
+            val time = now()
+            if (surface == null) {
+                loadedAt = loadedAt?.let { time }
+                dataReadyAt = dataReadyAt?.let { time }
+            }
+            val action = EngineFirstFrame.action(
+                loaded = loaded,
+                firstFrame = firstFrame,
+                dataReadyForMs = dataReadyAt?.let { time - it },
+                loadedForMs = loadedAt?.let { time - it } ?: 0,
+                // Only a selected track that is passed through can be what stalls; AAC or a decoded track can't.
+                passthrough = MpvPassthroughStalls.spdifNames(audioCodec).any { it in source.spdif }
+            )
+            if (action == FirstFrameAction.Wait) {
+                main.postDelayed(this, WATCHDOG_TICK_MS)
+                return
+            }
+            watchdogDone = true
+            Log.w(
+                TAG,
+                "first-frame watchdog action=$action spdif=${source.spdif.joinToString(",")} audio=$audioCodec " +
+                    "hwdec=$hwdec codec=$videoCodec " +
+                    "loadedForMs=${loadedAt?.let { time - it }} dataReadyForMs=${dataReadyAt?.let { time - it }} cacheMs=$cacheMs"
+            )
+            onFirstFrameAction?.invoke(action)
+        }
+    }
+
     private fun refreshVideo() = onMpv {
         val w = api.getPropertyLong(handle, "dwidth")
         val h = api.getPropertyLong(handle, "dheight")
+        // The decoder's own output size: with no decoded video, mpv's forced window still has a display size.
+        val decoded = api.getPropertyLong(handle, "video-params/w") > 0
         onMain {
+            videoDecoded = decoded
             useVideoSize(w, h)
             invalidateState()
         }
@@ -404,7 +459,12 @@ internal class MpvPlayer(context: Context, private val source: MpvSource, privat
             height = h.toInt()
             tracksRevision++
         }
-        if (!firstFrame && width > 0 && restarted) {
+        checkFirstFrame()
+    }
+
+    /** PLAY-61: a picture means mpv restarted with a decoded video frame, not only an (empty) window. */
+    private fun checkFirstFrame() {
+        if (!firstFrame && width > 0 && videoDecoded && restarted) {
             firstFrame = true
             firstFramePending = true
         }
@@ -637,6 +697,7 @@ internal class MpvPlayer(context: Context, private val source: MpvSource, privat
         pendingSeek = null
         holder?.removeCallback(surfaceCallback)
         holder = null
+        main.removeCallbacks(watchdog)
         // The reader thread destroys the handle once mpv reports its shutdown. Queued behind any call mpv is still
         // stuck in, so nothing here waits on it; a decoder that never lets go keeps that one handle.
         onMpv { api.command(handle, arrayOf("quit")) }
@@ -729,6 +790,7 @@ internal class MpvPlayer(context: Context, private val source: MpvSource, privat
         private const val TAG = "PictureshowMpv"
         private const val SEEK_STEP_MS = 10_000L
         const val DETACH_WAIT_MS = 1_000L
+        const val WATCHDOG_TICK_MS = 500L
         private const val MPV_ERROR_LOADING_FAILED = -13
         private const val MPV_ERROR_UNKNOWN_FORMAT = -17
         private const val PLACEHOLDER_URI = "about:mpv"
