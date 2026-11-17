@@ -9,6 +9,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.os.SystemClock
 import android.util.Log
+import androidx.core.content.edit
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.PlaybackException
@@ -1013,7 +1014,10 @@ internal object MpvPassthroughStalls {
         if (prefs.getString(KEY_VERSION, null) == version) {
             formats = formats + prefs.getStringSet(KEY_FORMATS, emptySet()).orEmpty()
         }
-        prefs.edit().putString(KEY_VERSION, version).putStringSet(KEY_FORMATS, formats).apply()
+        prefs.edit {
+            putString(KEY_VERSION, version)
+            putStringSet(KEY_FORMATS, formats)
+        }
         stored = prefs
     }
 
@@ -1030,7 +1034,7 @@ internal object MpvPassthroughStalls {
     @Synchronized
     fun stalled(codec: String?) {
         formats = formats + spdifNames(codec)
-        stored?.edit()?.putStringSet(KEY_FORMATS, formats)?.apply()
+        stored?.edit { putStringSet(KEY_FORMATS, formats) }
     }
 
     /** Forgets this run's state (tests); what the device stored stays. */
