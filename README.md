@@ -1,10 +1,10 @@
 # Pictureshow
 
-Pictureshow is a free, open-source Jellyfin client for Android TV from Legitimate LLC, licensed under MPL-2.0. Copyright © 2026 Legitimate LLC.
+Pictureshow is a free, open-source Jellyfin client from Legitimate LLC, licensed under MPL-2.0. Copyright © 2026 Legitimate LLC. It is built natively for each platform: Android TV, Google TV and Fire TV, Android phones and tablets, iPhone, iPad and Apple TV, Windows, macOS and Linux, and the web.
 
-Status: early development. Server discovery, password sign-in, Quick Connect, remembered accounts, home rows, paged library browsing, item details, video-library search and Media3 playback are implemented. Playback still needs acceptance on a range of Android TV hardware.
+Status: in development, not yet released. Android is the reference app and goes to users first; Apple, desktop and web follow as each is ready. The Android app has server discovery, password and Quick Connect sign-in, saved accounts and profile PINs, Home, libraries, search, playback with Media3 or an optional MPV engine, downloads and offline playback, music, Live TV and recordings, Watch together (SyncPlay), casting, subtitle search and Seerr requests. All platforms share one behaviour contract in [`spec/`](spec/): feature rules and JSON test vectors every platform runs.
 
-Pictureshow is developed with AI assistance and tested on real Android TV hardware.
+Pictureshow is developed with AI assistance and tested on real devices.
 
 Planned work, platform by platform, is in [ROADMAP.md](ROADMAP.md).
 
