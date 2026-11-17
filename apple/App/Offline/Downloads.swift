@@ -365,6 +365,109 @@ struct DownloadOptions {
         pump(account.key)
     }
 
+    // MARK: Albums and playlists (MUS-02, MUS-10)
+
+    func manifest(_ account: Account?) -> OfflineManifest? { account.flatMap { viewers[$0.key]?.manifest } }
+
+    /// The viewer's rights and every track's size, from the server, before an album or playlist download asks anything.
+    func trackFacts(account: Account, ids: [String]) async throws -> (allowed: Bool, tracks: [OfflineAPI.TrackFacts]) {
+        let policy = try await api.policy(account)
+        return (policy.downloads && policy.playback, try await api.tracks(account, ids: ids))
+    }
+
+    /// Queues every track of an album or playlist not already here, in Original quality, and keeps the collection's order as it
+    /// was (MUS-10). A track another collection already brought is shared, not fetched twice. False when nothing could start.
+    @discardableResult
+    func downloadCollection(account: Account, collection: OfflineCollection, tracks: [OfflineAPI.TrackFacts], cellular: Bool = false) -> Bool {
+        guard Self.supported, var v = viewer(for: account) else { return false }
+        if v.manifest.budget.capBytes == nil {
+            v.manifest.budget.capBytes = offlineDefaultCap(quotaBytes: OfflineFiles.totalBytes())
+        }
+        var seen = Set<String>(), again: [String] = []
+        for track in tracks where seen.insert(track.item.id).inserted {
+            let id = offlineEntryId(itemId: track.item.id, preset: collection.preset)
+            if let existing = v.manifest.entries.first(where: { $0.id == id }) {
+                if existing.job.phase == .failed || existing.job.phase == .missing { again.append(existing.id) }
+                continue
+            }
+            let entry = Self.trackEntry(track, preset: collection.preset, cellular: cellular, sequence: v.manifest.nextSequence)
+            v.manifest.entries.append(entry)
+            v.manifest.nextSequence += 1
+            if v.lastKnown[track.item.id] == nil {
+                v.lastKnown[track.item.id] = OfflineUserData(positionTicks: track.item.userData.playbackPositionTicks, played: track.item.isWatched)
+            }
+            estimates[account.key + "|" + id] = track.size ?? estimate(item: track.item, preset: collection.preset)
+        }
+        var snapshot = collection
+        snapshot.createdSequence = v.manifest.nextSequence
+        v.manifest = v.manifest.withCollection(snapshot)
+        v.manifest.nextSequence += 1
+        viewers[account.key] = v
+        saveManifest(account.key); saveLastKnown(account.key)
+        for id in again { redownload(account, id) }
+        pump(account.key)
+        return true
+    }
+
+    /// One track of a collection as a download entry: the original file and the album's cover beside it.
+    nonisolated static func trackEntry(_ track: OfflineAPI.TrackFacts, preset: OfflinePreset, cellular: Bool, sequence: Int64) -> OfflineEntry {
+        let item = track.item, source = item.mediaSources.first
+        let resources = [
+            OfflineResource(id: "media", role: .media, path: "media.\(OriginalSupport.fileExtension(source?.container))", required: true, mimeType: nil),
+            OfflineResource(id: "art", role: .artwork, path: "art.jpg", required: false, mimeType: "image/jpeg"),
+        ]
+        let tracks = (source?.mediaStreams ?? []).filter { $0.type == "Audio" }.map {
+            OfflineTrack(serverIndex: $0.index, type: "audio", label: $0.displayTitle ?? $0.language ?? "Audio", language: $0.language,
+                         isDefault: $0.isDefault, isForced: false, codec: $0.codec, resourceId: nil, available: true)
+        }
+        // A track's index numbers are its disc and track, not a season and episode.
+        let labels = OfflineLabels(title: item.name, album: track.album, albumId: track.albumId, artist: track.artist,
+                                   trackNumber: item.indexNumber, discNumber: item.parentIndexNumber, year: item.productionYear)
+        return OfflineEntry(id: offlineEntryId(itemId: item.id, preset: preset), itemId: item.id, kind: .audio, sourceId: source?.id, sourceETag: source?.eTag,
+                            container: source?.container, preset: preset, runtimeTicks: item.runTimeTicks ?? source?.runTimeTicks, labels: labels,
+                            resources: resources, tracks: tracks, job: OfflineJob(cellularAllowed: cellular), createdSequence: sequence)
+    }
+
+    /// Removes an album or playlist: its tracks go, except those another downloaded album or playlist still holds.
+    func deleteCollection(_ account: Account, _ collectionID: String) {
+        guard var v = viewers[account.key] else { return }
+        let doomed = v.manifest.collectionRemoval(collectionID)
+        v.manifest.collections.removeAll { $0.id == collectionID }
+        viewers[account.key] = v
+        saveManifest(account.key)
+        for id in doomed { delete(account, id) }
+    }
+
+    /// The ready download of a track, Original first.
+    func readyTrack(_ account: Account, media: String) -> OfflineEntry? {
+        viewers[account.key]?.manifest.entries
+            .filter { $0.itemId == media && $0.kind == .audio && $0.job.phase == .ready }
+            .min { ($0.preset == .original ? 0 : 1) < ($1.preset == .original ? 0 : 1) }
+    }
+
+    /// Tracks this viewer has ready on this device.
+    func downloadedTracks(_ account: Account) -> Set<String> {
+        Set(viewers[account.key]?.manifest.entries.filter { $0.kind == .audio && $0.job.phase == .ready }.map(\.itemId) ?? [])
+    }
+
+    /// The saved cover of a downloaded track, when it has one.
+    func savedArt(_ key: String, _ entry: OfflineEntry) -> URL? {
+        guard let files = viewers[key]?.files, let art = entry.resources.first(where: { $0.role == .artwork && $0.complete }) else { return nil }
+        let url = files.resourceURL(entry.id, art)
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
+    }
+
+    /// The file a downloaded track plays from, when it's whole and still there.
+    func trackFile(_ account: Account, media: String) -> (entry: OfflineEntry, url: URL)? {
+        guard let entry = readyTrack(account, media: media), let files = viewers[account.key]?.files,
+              let resource = entry.resources.first(where: { $0.role == .media && $0.complete }) else { return nil }
+        let url = files.resourceURL(entry.id, resource)
+        return FileManager.default.fileExists(atPath: url.path) ? (entry, url) : nil
+    }
+
+    /// Something to sync after a local listen ends; quietly nothing when the server is still away.
+    func syncSoon(_ key: String) { Task { await sync(key) } }
+
     private var estimates: [String: Int64] = [:]
 
     private func estimate(item: MediaItem, preset: OfflinePreset) -> Int64 {
@@ -559,7 +662,7 @@ struct DownloadOptions {
             if event.op != "network-back" { log.debug("job \(event.op, privacy: .public) ignored: \(ignored, privacy: .public)") }
             return
         }
-        if let job = result.job { v.manifest.entries[index].job = job } else { v.manifest.entries.remove(at: index) }
+        if let job = result.job { v.manifest.entries[index].job = job } else { v.manifest.entries.remove(at: index); v.manifest = v.manifest.prunedCollections() }
         viewers[key] = v
         saveManifest(key)
         let entry = v.manifest.entries.first { $0.id == entryID } ?? before
@@ -663,7 +766,9 @@ struct DownloadOptions {
                 guard let index = resource.serverStreamIndex, let source = entry.sourceId else { continue }
                 url = try? requestURL(account.server, offlineSubtitleRequest(itemId: entry.itemId, sourceId: source, streamIndex: index))
             case .artwork:
-                url = try? ServerURLs.endpoint(account.server, path: "Items/\(entry.itemId)/Images/Primary", query: [URLQueryItem(name: "maxWidth", value: "600")])
+                // A track's cover is its album's: tracks rarely carry an image of their own.
+                let owner = entry.kind == .audio ? (entry.labels.albumId ?? entry.itemId) : entry.itemId
+                url = try? ServerURLs.endpoint(account.server, path: "Items/\(owner)/Images/Primary", query: [URLQueryItem(name: "maxWidth", value: "600")])
             default: url = nil
             }
             guard let url else { continue }

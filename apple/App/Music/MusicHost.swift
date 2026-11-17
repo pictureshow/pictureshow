@@ -13,6 +13,25 @@ struct MusicPlay {
     var shuffle = false
 }
 
+/// Downloaded tracks, as the queue sees them (MUS-10): a file to play instead of a stream, the saved cover, and the outbox
+/// a listen is written to until the server can hear about it.
+@MainActor protocol MusicLocal: AnyObject {
+    /// A ready, whole download of this track, as something to play; nil when it isn't on this device.
+    func decision(_ account: Account, media: String) -> PlayDecision?
+    /// Tracks this viewer has ready here.
+    func downloaded(_ account: Account) -> Set<String>
+    func art(_ account: Account, media: String) -> URL?
+    /// A local listen's report ("start", "progress" or "stopped"), into the same outbox video downloads use.
+    func report(_ account: Account, media: String, serial: String, report: String, ticks: Int64, runtimeTicks: Int64?)
+}
+
+/// A queue entry's source: a server stream, or (local) a downloaded file that asks the server nothing.
+struct PreparedTrack {
+    var decision: PlayDecision
+    var media: String
+    var local = false
+}
+
 struct MusicPrompt: Identifiable {
     let id = UUID()
     var play: MusicPlay
@@ -41,6 +60,8 @@ struct MusicPrompt: Identifiable {
     @Published private(set) var canRetrySave = false
     @Published var prompt: MusicPrompt?
     @Published var showingNowPlaying = false
+    /// Tracks downloaded for this viewer, as last read; their art is the saved file.
+    @Published private(set) var downloadedNow: Set<String> = []
 
     // Collaborators.
     private let gateway: MusicGateway
@@ -56,6 +77,8 @@ struct MusicPrompt: Identifiable {
     /// For artwork on the lock screen.
     var client: ((Account) -> JellyfinClient)?
     let nowPlaying: MusicNowPlaying
+    /// Downloads, where the device has them (not Apple TV).
+    var local: MusicLocal?
 
     // The queue.
     private var queueStore: [String: Any] = [:]
@@ -68,7 +91,7 @@ struct MusicPrompt: Identifiable {
 
     // The output.
     private(set) var engine: MusicEngine?
-    private var prepared: [String: (decision: PlayDecision, media: String)] = [:]
+    private var prepared: [String: PreparedTrack] = [:]
     private var preparing: Task<Void, Never>?
     private var ceiling = 0
     private var ticker: Task<Void, Never>?
@@ -76,7 +99,7 @@ struct MusicPrompt: Identifiable {
 
     // Reports.
     private var reports: [String: Any] = [:]
-    private var viewings: [String: (decision: PlayDecision, media: String)] = [:]
+    private var viewings: [String: PreparedTrack] = [:]
     private var reportTail: Task<Void, Never>?
 
     init(gateway: MusicGateway, store: MusicQueueStore, makeEngine: @escaping @MainActor () -> MusicEngine = { @MainActor in QueuePlayerEngine() },
@@ -100,7 +123,13 @@ struct MusicPrompt: Identifiable {
     private var entryMedia: [String: String] {
         Dictionary((committed["entries"] as? [[String: Any]] ?? []).compactMap { e in (e["id"] as? String).map { ($0, e["media"] as? String ?? "") } }, uniquingKeysWith: { a, _ in a })
     }
-    func card(entry: String?) -> MusicCard? { entry.flatMap { entryMedia[$0] }.flatMap { cards[$0] } }
+    /// A queued track as the screens and the lock screen show it: a downloaded one's art is its saved file, so it shows with no
+    /// server wherever it was queued from (MUS-10). What's saved with the queue keeps the server's address.
+    func card(entry: String?) -> MusicCard? {
+        guard let media = entry.flatMap({ entryMedia[$0] }), var card = cards[media] else { return nil }
+        if downloadedNow.contains(media), let account, let art = local?.art(account, media: media) { card.art = art }
+        return card
+    }
     var currentCard: MusicCard? { card(entry: current) }
     var upNext: [String] { MusicQueue.upcoming(order: order, current: current) }
     var hasQueue: Bool { current != nil }
@@ -166,6 +195,7 @@ struct MusicPrompt: Identifiable {
         sequence = 0
         cards = [:]
         message = nil; prompt = nil; canRetrySave = false; showingNowPlaying = false
+        downloadedNow = next.flatMap { local?.downloaded($0) } ?? []
         queueStore = ["committed": ["server": next?.server.serverId ?? "", "viewer": next?.userId ?? ""]]
         committed = (try? ControlReducers.reduce(suite: "queue-edit", operation: "store", state: queueStore, event: ["op": "retry-persist"]))?["committed"] as? [String: Any] ?? [:]
         guard let next else { return }
@@ -204,8 +234,19 @@ struct MusicPrompt: Identifiable {
 
     private func renewed() async {
         preparing?.cancel()
+        let before = prepared
         prepared = [:]
         guard let engine else { return }
+        if let playing = engine.playing, let track = before[playing], track.local {
+            // A downloaded file doesn't use the token, so reopening it would only cut into what's heard (MUS-10). It plays on;
+            // what's held after it is let go and asked for again with the new token.
+            prepared[playing] = track
+            let at = engine.held.firstIndex(of: playing) ?? 0
+            if engine.held.count > at + 1 { engine.removeLast(engine.held.count - at - 1) }
+            if at > 0 { engine.removeFirst(at) }
+            sync()
+            return
+        }
         let at = ticks(engine)
         engine.replace([], at: 0)
         if current != nil { await commit(["op": "position", "ticks": String(at)]) }
@@ -500,34 +541,94 @@ struct MusicPrompt: Identifiable {
         }
         let media = entryMedia
         prepared = prepared.filter { target.contains($0.key) }
+        adoptDownloads(active)
         for (index, entry) in target.enumerated() {
             if prepared[entry] == nil {
                 guard let id = media[entry] else { return }
-                do {
-                    let decision = try await gateway.prepare(active, media: id, ceiling: ceiling)
-                    guard !Task.isCancelled else { return }
-                    prepared[entry] = (decision, id)
-                } catch {
-                    guard !Task.isCancelled else { return }
-                    if index > 0 { return applyWindow(target) }
-                    return negotiationFailed(error)
+                // A downloaded track plays from this device and asks the server nothing, connected or not (MUS-10).
+                if let offline = local?.decision(active, media: id) {
+                    prepared[entry] = PreparedTrack(decision: offline, media: id, local: true)
+                } else {
+                    do {
+                        let decision = try await gateway.prepare(active, media: id, ceiling: ceiling)
+                        guard !Task.isCancelled else { return }
+                        // A download that finished while the server was answering wins: it's the same track, from here.
+                        prepared[entry] = local?.decision(active, media: id).map { PreparedTrack(decision: $0, media: id, local: true) }
+                            ?? PreparedTrack(decision: decision, media: id)
+                    } catch {
+                        guard !Task.isCancelled else { return }
+                        if index > 0 { return applyWindow(target) }
+                        return negotiationFailed(error, entry: entry)
+                    }
                 }
             }
             applyWindow(target)
         }
     }
 
-    private func negotiationFailed(_ error: Error) {
+    /// Tracks held as streams that have since finished downloading play from the file instead, the next time they start
+    /// (MUS-10). The track being heard is never swapped: it keeps its stream to its end, and only a later start uses the file.
+    private func adoptDownloads(_ active: Account) {
+        guard let engine, let local else { return }
+        let playing = engine.playing
+        var heldSwapped = false
+        for (entry, held) in prepared where !held.local && entry != playing {
+            guard let file = local.decision(active, media: held.media) else { continue }
+            prepared[entry] = PreparedTrack(decision: file, media: held.media, local: true)
+            if engine.held.contains(entry) { heldSwapped = true }
+        }
+        guard heldSwapped else { return }
+        // What's held after the playing track is let go; the window puts it back from the files.
+        let keep = playing.flatMap { engine.held.firstIndex(of: $0) }.map { $0 + 1 } ?? 0
+        if engine.held.count > keep { engine.removeLast(engine.held.count - keep) }
+    }
+
+    /// The download list changed: tracks that just finished are picked up for their next start, and their art shows.
+    func downloadsChanged() {
+        guard let active = account else { return }
+        let now = local?.downloaded(active) ?? []
+        guard now != downloadedNow else { return }
+        enqueueFor(active.key) {
+            let read = self.local?.downloaded(active) ?? []
+            guard read != self.downloadedNow else { return }
+            self.downloadedNow = read
+            if self.engine != nil { self.sync() } else { self.publishOutput() }
+        }
+    }
+
+    /// The current track needs the server and the server can't be reached, whether that showed while asking for the track or
+    /// while streaming it (MUS-10). With `always` false, a queue with nothing downloaded in it, or a failure of a downloaded
+    /// track itself, is left to the caller. `entry` is the queue entry that failed: once the queue has moved on, the failure is
+    /// old news and changes nothing. Returns whether this handled it.
+    @discardableResult private func unreachable(_ entry: String?, always: Bool) async -> Bool {
+        if let entry, entry != current { return true }
+        let q = committed
+        let media = current.flatMap { entryMedia[$0] }
+        let downloaded = account.flatMap { local?.downloaded($0) } ?? []
+        let anyDownloaded = (q["entries"] as? [[String: Any]] ?? []).contains { downloaded.contains($0["media"] as? String ?? "") }
+        if !always && (media.map(downloaded.contains) == true || !anyDownloaded) { return false }
+        let result = musicUnreachable(queue: q, local: downloaded, title: media.flatMap { cards[$0]?.title } ?? "")
+        // A paused queue isn't moved by a failure the viewer didn't start: it stays put and says why.
+        if result.step == "skip" && !paused {
+            // One skip per track per pass: the reducer marks this one failed, so a queue that comes round again stops.
+            await commit(["op": "error", "completion": committed["completion"] ?? "0", "music": true])
+            message = result.message
+        } else {
+            engine?.setPlaying(false)
+            await commit(["op": "pause"])
+            message = result.step == "skip" ? MUSIC_UNREACHABLE_TEXT : result.message
+        }
+        return true
+    }
+
+    private func negotiationFailed(_ error: Error, entry: String) {
         switch error as? ClientError {
         case .invalidCredentials: enqueue { await self.revoked() }
         case .server(let status) where status == 403 || status == 404: enqueue { await self.failCurrent() }
         case .noCompatibleSource, .serverRefused, .sourceNotFound, .unsafeStreamURL, .invalidResponse: enqueue { await self.failCurrent() }
         default:
-            enqueue {
-                self.engine?.setPlaying(false)
-                await self.commit(["op": "pause"])
-                self.message = "Can't reach the server. Your queue is saved: press Play to try again."
-            }
+            // With nothing downloaded in the queue this pauses with MUSIC_UNREACHABLE_TEXT, as before.
+            enqueue { await self.unreachable(entry, always: true) }
         }
     }
 
@@ -609,13 +710,21 @@ struct MusicPrompt: Identifiable {
         let kind = effect["report"] as? String ?? ""
         let viewing = viewings[serial]
         if kind == "stopped" { viewings[serial] = nil }
-        guard let decision = viewing?.decision else { return }
+        guard let viewing else { return }
+        let decision = viewing.decision
         let ticks = Int64(effect["ticks"] as? String ?? "") ?? 0, paused = effect["paused"] as? Bool ?? false, failed = effect["failed"] as? Bool ?? false
+        let report = kind == "start" ? "start" : kind == "progress" ? "progress" : "stopped"
+        if viewing.local {
+            // A downloaded listen is written down here and synced later, never sent live (MUS-10, OFF-08).
+            local?.report(active, media: viewing.media, serial: serial, report: report, ticks: ticks,
+                          runtimeTicks: decision.source.runTimeTicks ?? cards[viewing.media]?.durationTicks)
+            return
+        }
         let previous = reportTail, gateway = gateway
         // Reports leave in the order they happened, on a line of their own, so a slow server can't hold the player.
         reportTail = Task { @MainActor in
             await previous?.value
-            await gateway.report(active, kind: kind == "start" ? "start" : kind == "progress" ? "progress" : "stopped", decision: decision, ticks: ticks, paused: paused, failed: failed)
+            await gateway.report(active, kind: report, decision: decision, ticks: ticks, paused: paused, failed: failed)
         }
     }
 
@@ -701,6 +810,8 @@ extension MusicHost: MusicEngineEvents {
         case .network:
             enqueue {
                 self.savePosition()
+                // A stream that drops in a queue with downloads in it follows the offline rule, not a bare pause.
+                if await self.unreachable(entry, always: false) { return }
                 self.engine?.setPlaying(false)
                 await self.commit(["op": "pause"])
                 self.message = "Lost the connection. Your place is saved: press Play to try again."

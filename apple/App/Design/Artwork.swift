@@ -23,6 +23,12 @@ actor ArtworkLoader {
 
     func image(_ url: URL, account: Account, client: JellyfinClient) async -> UIImage? {
         if let image = memory.object(forKey: url as NSURL) { return image }
+        // A downloaded track's saved cover (MUS-10): read from this device, never sent anywhere.
+        if url.isFileURL {
+            guard let data = try? Data(contentsOf: url), let image = Self.decode(data) else { return nil }
+            memory.setObject(image, forKey: url as NSURL)
+            return image
+        }
         if let task = inFlight[url] { return await task.value }
         let file = directory.appendingPathComponent(Self.name(url))
         let task = Task<UIImage?, Never> {

@@ -401,3 +401,204 @@ final class MusicAppTests: XCTestCase {
         XCTAssertEqual(MusicRowBody.focusedSecondary, Color.black.opacity(opacity))
     }
 }
+
+// MARK: Offline music (MUS-10)
+
+/// Downloaded tracks as the host sees them: which are files here, and what their listens wrote down.
+@MainActor private final class FakeLocal: MusicLocal {
+    var files: Set<String> = []
+    var reports: [(media: String, report: String, ticks: Int64)] = []
+    func decision(_ account: Account, media: String) -> PlayDecision? {
+        guard files.contains(media) else { return nil }
+        var source = MediaSource(id: media, container: "flac", supportsDirectPlay: true)
+        source.runTimeTicks = 180 * 10_000_000
+        return PlayDecision(itemID: media, url: URL(fileURLWithPath: "/offline/\(media).flac"), method: .directPlay, source: source)
+    }
+    func downloaded(_ account: Account) -> Set<String> { files }
+    func art(_ account: Account, media: String) -> URL? { files.contains(media) ? URL(fileURLWithPath: "/offline/\(media).jpg") : nil }
+    func report(_ account: Account, media: String, serial: String, report: String, ticks: Int64, runtimeTicks: Int64?) {
+        reports.append((media, report, ticks))
+    }
+}
+
+extension MusicAppTests {
+    private func offlineHost(_ files: Set<String>) -> (MusicHost, FakeLocal) {
+        let host = host()
+        let local = FakeLocal()
+        local.files = files
+        host.local = local
+        host.bind(viewer, known: [viewer.key])
+        return (host, local)
+    }
+
+    private var noNetwork: Error { URLError(.notConnectedToInternet) }
+
+    /// The negative check on the offline start path: without the local source, this queue can only pause with "Can't reach".
+    func testDownloadedTracksPlayWithNoServer() async throws {
+        let (host, _) = offlineHost(["song1", "song2", "song3", "song4"])
+        gateway.refuse = noNetwork
+        await playAlbum(host)
+        let engine = try XCTUnwrap(engines.first)
+        XCTAssertFalse(host.paused)
+        XCTAssertNil(host.message)
+        XCTAssertEqual(engine.items.count, 3)
+        XCTAssertTrue(engine.items.allSatisfy(\.url.isFileURL), "\(engine.items.map(\.url))")
+        XCTAssertTrue(gateway.prepared.isEmpty, "a downloaded track asks the server nothing")
+        // Its art is the saved file, wherever the card came from.
+        XCTAssertEqual(host.currentCard?.art, URL(fileURLWithPath: "/offline/song1.jpg"))
+    }
+
+    func testANotDownloadedTrackIsSkippedOnceWhenADownloadedOneIsAhead() async {
+        let (host, _) = offlineHost(["song2"])
+        gateway.refuse = noNetwork
+        await playAlbum(host)
+        XCTAssertEqual(host.currentCard?.id, "song2")
+        XCTAssertFalse(host.paused)
+        XCTAssertEqual(host.message, "Skipped Song 1: it isn't downloaded, and the server can't be reached.")
+        XCTAssertEqual((host.committed["failed"] as? [String])?.count, 1, "marked, so it is skipped once per pass")
+    }
+
+    func testNothingDownloadedAheadStaysPausedAndSaysSo() async {
+        let (host, _) = offlineHost(["song1"])
+        gateway.refuse = noNetwork
+        await playAlbum(host, start: 1)
+        XCTAssertEqual(host.currentCard?.id, "song2")
+        XCTAssertTrue(host.paused)
+        XCTAssertEqual(host.message, "Song 2 isn't downloaded, and the server can't be reached. Nothing after it is downloaded.")
+    }
+
+    func testAQueueWithNothingDownloadedPausesAsBefore() async {
+        let (host, _) = offlineHost([])
+        gateway.refuse = noNetwork
+        await playAlbum(host)
+        XCTAssertTrue(host.paused)
+        XCTAssertEqual(host.message, MUSIC_UNREACHABLE_TEXT)
+    }
+
+    func testRepeatAllSkipsEachMissingTrackOnceThenStops() async {
+        let (host, _) = offlineHost(["song1"])
+        gateway.refuse = noNetwork
+        await playAlbum(host, start: 1)  // song2 isn't here; nothing ahead without the wrap, so it pauses
+        XCTAssertTrue(host.paused)
+        host.cycleRepeat()  // Repeat all: song1 is ahead again, after the wrap
+        host.play()
+        await host.settle()
+        XCTAssertEqual(host.currentCard?.id, "song1", "songs 2, 3 and 4 skipped once each on the way round")
+        XCTAssertFalse(host.paused)
+        engines.last?.finishCurrent()
+        await host.settle()
+        // The next pass meets the same missing tracks: they stay marked and are passed over, so only the downloaded one plays.
+        XCTAssertEqual(host.currentCard?.id, "song1", "\(host.committed)")
+        XCTAssertEqual(Set(host.committed["failed"] as? [String] ?? []), ["m1", "m2", "m3"])
+        XCTAssertFalse(host.paused)
+    }
+
+    func testALateDownloadPlaysFromTheFileNextTimeAndThePlayingTrackIsntSwapped() async throws {
+        let (host, local) = offlineHost([])
+        await playAlbum(host)
+        let engine = try XCTUnwrap(engines.first)
+        XCTAssertFalse(engine.items.contains { $0.url.isFileURL })
+        local.files = ["song1", "song2"]  // the playing track and the next one finish downloading
+        host.downloadsChanged()
+        await host.settle()
+        XCTAssertEqual(engine.playing, host.current)
+        XCTAssertFalse(engine.items[0].url.isFileURL, "no swap in the middle of the track being heard")
+        XCTAssertTrue(engine.items[1].url.isFileURL, "the next start uses the file")
+        XCTAssertEqual(engine.items.count, 3)
+    }
+
+    func testANewTokenLeavesAPlayingDownloadedTrackAlone() async throws {
+        let (host, _) = offlineHost(["song1", "song2", "song3", "song4"])
+        await playAlbum(host)
+        let engine = try XCTUnwrap(engines.first)
+        let before = journal.lines.filter { $0.hasPrefix("engine.replace") }.count
+        var renewed = viewer
+        renewed.accessToken = "t-new"
+        host.bind(renewed, known: [viewer.key])
+        await host.settle()
+        XCTAssertEqual(journal.lines.filter { $0.hasPrefix("engine.replace") }.count, before, "the file plays on; reopening it would cut the sound")
+        XCTAssertEqual(engine.playing, host.current)
+        XCTAssertFalse(host.paused)
+    }
+
+    func testLocalListensAreWrittenDownNotSentLive() async {
+        let (host, local) = offlineHost(["song1", "song2", "song3", "song4"])
+        await playAlbum(host)
+        engines[0].finishCurrent()
+        await host.settle()
+        XCTAssertTrue(gateway.reports.isEmpty, "\(gateway.reports.map(\.kind))")
+        XCTAssertTrue(local.reports.contains { $0.media == "song1" && $0.report == "stopped" && $0.ticks == 180 * 10_000_000 }, "\(local.reports)")
+    }
+
+    func testAStreamThatDropsInAQueueWithDownloadsFollowsTheOfflineRule() async {
+        let (host, _) = offlineHost(["song3"])
+        await playAlbum(host)
+        gateway.refuse = noNetwork
+        engines[0].fail(.network)
+        await host.settle()
+        XCTAssertEqual(host.message, "Skipped Song 1: it isn't downloaded, and the server can't be reached.")
+        XCTAssertEqual(host.currentCard?.id, "song2")
+    }
+
+    // MARK: Downloads' music lines
+
+    private func track(_ id: String, phase: OfflinePhase = .ready, bytes: Int64 = 1_000_000) -> OfflineEntry {
+        OfflineEntry(id: offlineEntryId(itemId: id, preset: .original), itemId: id, kind: .audio, container: "flac", preset: .original,
+                     runtimeTicks: 180 * 10_000_000, labels: OfflineLabels(title: "Title \(id)", album: "Album", albumId: "a", artist: "Artist"),
+                     resources: [OfflineResource(id: "media", role: .media, path: "media.flac", bytes: bytes, complete: phase == .ready)],
+                     job: OfflineJob(phase: phase))
+    }
+
+    private var sharedManifest: OfflineManifest {
+        OfflineManifest(entries: [track("t1"), track("t2"), track("t3")], collections: [
+            OfflineCollection(id: "a", kind: .album, title: "Album", artist: "Artist", itemIds: ["t1", "t2"], createdSequence: 4),
+            OfflineCollection(id: "p", kind: .playlist, title: "Mix", itemIds: ["t2", "t3"], createdSequence: 5),
+        ])
+    }
+
+    func testDownloadsShowsOneLinePerAlbumOrPlaylistAndATrackUnderEach() {
+        let groups = DownloadGroup.groups(sharedManifest)
+        XCTAssertEqual(groups.map(\.id), ["collection:a", "collection:p"])
+        XCTAssertEqual(groups[0].tracks.map(\.itemId), ["t1", "t2"])
+        XCTAssertEqual(groups[1].tracks.map(\.itemId), ["t2", "t3"])
+        XCTAssertTrue(groups.allSatisfy { $0.section == .ready })
+    }
+
+    func testPlayFromADownloadsLineUsesThatLinesAlbumOrPlaylist() throws {
+        let t2 = track("t2")
+        let fromMix = try XCTUnwrap(MusicDownloadWords.play(owner: "k", manifest: sharedManifest, entry: t2, collectionID: "p", art: { _ in nil }))
+        XCTAssertEqual(fromMix.tracks.map(\.id), ["t2", "t3"]); XCTAssertEqual(fromMix.start, 0); XCTAssertEqual(fromMix.context, "Playlist:p")
+        let fromAlbum = try XCTUnwrap(MusicDownloadWords.play(owner: "k", manifest: sharedManifest, entry: t2, collectionID: "a", art: { _ in nil }))
+        XCTAssertEqual(fromAlbum.tracks.map(\.id), ["t1", "t2"]); XCTAssertEqual(fromAlbum.start, 1); XCTAssertEqual(fromAlbum.context, "MusicAlbum:a")
+    }
+
+    func testTheAlbumPageSaysDownloadedWithCountAndSize() {
+        let status = MusicDownloadWords.status(sharedManifest, collectionID: "a")
+        XCTAssertEqual(status?.text, "Downloaded · 2 tracks · \(DownloadWords.bytes(2_000_000))")
+        XCTAssertEqual(status?.ready, true)
+        XCTAssertNil(MusicDownloadWords.status(sharedManifest, collectionID: "artist"))
+    }
+
+    func testDownloadAsksWithTheCountAndSizeInOriginalQuality() {
+        func facts(_ id: String, _ size: Int64) -> OfflineAPI.TrackFacts {
+            OfflineAPI.TrackFacts(item: MediaItem(id: id, name: id, type: "Audio"), size: size, canDownload: true)
+        }
+        let ask = MusicDownloadWords.question(allowed: true, tracks: [facts("x1", 1_000_000), facts("x2", 2_000_000)], manifest: OfflineManifest(), name: "Album")
+        XCTAssertEqual(ask, .confirm("Download 2 tracks (\(DownloadWords.bytes(3_000_000))) in their original quality?", ["x1", "x2"]))
+        XCTAssertEqual(MusicDownloadWords.question(allowed: false, tracks: [], manifest: nil, name: "Album"), .notice("Your account can't download from this server."))
+    }
+
+    func testAListenCountsAsPlayedFromItsLastSecond() {
+        XCTAssertTrue(MusicDownloadWords.listenFinished(ticks: 1_795_000_000, runtimeTicks: 1_800_000_000))
+        XCTAssertFalse(MusicDownloadWords.listenFinished(ticks: 1_000_000_000, runtimeTicks: 1_800_000_000))
+        XCTAssertFalse(MusicDownloadWords.listenFinished(ticks: 5, runtimeTicks: nil))
+    }
+
+    func testATracksDownloadKeepsItsAlbumCover() {
+        let facts = OfflineAPI.TrackFacts(item: MediaItem(id: "x1", name: "One", type: "Audio"), album: "Album", albumId: "alb", artist: "Artist", size: 10, canDownload: true)
+        let entry = Downloads.trackEntry(facts, preset: .original, cellular: false, sequence: 1)
+        XCTAssertEqual(entry.kind, .audio)
+        XCTAssertEqual(entry.labels.albumId, "alb")
+        XCTAssertTrue(entry.resources.contains { $0.role == .artwork })
+    }
+}

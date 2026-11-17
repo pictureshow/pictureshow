@@ -377,6 +377,11 @@ struct MusicRowBody: View {
     init(route: MusicRoute) { self.route = route }
 
     var isPlaylist: Bool { route.kind == "Playlist" }
+    /// Albums and playlists download whole; an artist is a moving target with no fixed list to keep, so it has no Download (MUS-02).
+    var downloadKind: OfflineCollectionKind? {
+        guard Downloads.supported else { return nil }
+        return route.kind == "MusicAlbum" ? .album : route.kind == "Playlist" ? .playlist : nil
+    }
     var playable: [MusicItem] { tracks.filter(\.isAvailable) }
     var discs: [MusicDisc] { route.kind == "MusicAlbum" ? MusicCatalog.discs(tracks.map(\.track)) : [] }
     var editPhase: String { edit["phase"] as? String ?? "idle" }
@@ -518,6 +523,9 @@ struct MusicDetailView: View {
     @State private var picking = false
     @State private var renaming = false
     @State private var newName = ""
+    #if os(iOS)
+    @StateObject private var download = MusicDownloadController()
+    #endif
 
     init(route: MusicRoute) { _model = StateObject(wrappedValue: MusicDetailModel(route: route)) }
 
@@ -525,6 +533,9 @@ struct MusicDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: platformValue(tv: 40, touch: 20)) {
                 header
+                #if os(iOS)
+                if let kind = model.downloadKind { MusicDownloadStatusLine(downloads: app.downloads, collectionID: model.route.id, kind: kind) }
+                #endif
                 actions
                 if let notice = model.notice {
                     Text(notice).font(.callout).foregroundStyle(Theme.muted).accessibilityIdentifier("music:notice")
@@ -540,6 +551,9 @@ struct MusicDetailView: View {
         #endif
         .task { await model.load(app: app) }
         .sheet(isPresented: $picking) { PlaylistPicker(tracks: model.playable).environmentObject(app) }
+        #if os(iOS)
+        .modifier(MusicDownloadAlerts(controller: download, name: model.header?.name ?? model.route.name))
+        #endif
         .alert("Rename playlist", isPresented: $renaming) {
             TextField("Name", text: $newName)
             Button("Rename") { Task { await model.rename(app: app, to: newName) } }
@@ -603,6 +617,9 @@ struct MusicDetailView: View {
                 if model.isPlaylist, model.editPhase == "unknown" {
                     Button { Task { await model.readBack(app: app) } } label: { Text("Check the playlist") }.secondaryAction()
                 }
+                #if os(iOS)
+                if model.downloadKind != nil { MusicDownloadButtons(downloads: app.downloads, model: model, controller: download) }
+                #endif
             }
             .padding(.vertical, platformValue(tv: 24, touch: 2))
         }
@@ -762,3 +779,102 @@ private struct NowPlayingMark: View {
         }
     }
 }
+
+#if os(iOS)
+/// The page's download, in the Downloads screen's words: "Downloaded · 12 tracks · 410 MB", or how far it has got.
+private struct MusicDownloadStatusLine: View {
+    @EnvironmentObject private var app: AppModel
+    @ObservedObject var downloads: Downloads
+    let collectionID: String
+    let kind: OfflineCollectionKind
+
+    var body: some View {
+        if let account = app.account,
+           let status = MusicDownloadWords.status(downloads.manifest(account), collectionID: collectionID,
+                                                  progress: { downloads.progress(account, $0) }, networkUp: downloads.networkUp) {
+            VStack(alignment: .leading, spacing: 6) {
+                Label(status.text, systemImage: status.ready ? "checkmark.circle.fill" : status.error ? "exclamationmark.circle" : "arrow.down.circle")
+                    .font(.subheadline).foregroundStyle(status.error ? Color.red : Theme.muted)
+                if let fraction = status.fraction { ProgressView(value: fraction) }
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("music:download-status")
+        }
+    }
+}
+
+/// Download, or Remove/Stop and the way to Downloads (MUS-02).
+private struct MusicDownloadButtons: View {
+    @EnvironmentObject private var app: AppModel
+    @ObservedObject var downloads: Downloads
+    @ObservedObject var model: MusicDetailModel
+    @ObservedObject var controller: MusicDownloadController
+
+    var body: some View {
+        if let account = app.account, let kind = model.downloadKind {
+            let name = model.header?.name ?? model.route.name
+            if let status = MusicDownloadWords.status(downloads.manifest(account), collectionID: model.route.id) {
+                Button { controller.askRemove(id: model.route.id, name: name, ready: status.ready) } label: {
+                    Label(status.ready ? "Remove download" : "Stop download", systemImage: status.ready ? "trash" : "xmark.circle")
+                }
+                .secondaryAction().accessibilityIdentifier("music:download-remove")
+                Button { app.showingDownloads = true } label: { Label("Open Downloads", systemImage: "arrow.down.circle") }
+                    .secondaryAction().accessibilityIdentifier("music:downloads")
+            } else {
+                Button {
+                    controller.request(downloads: downloads, account: account, kind: kind, id: model.route.id, name: name,
+                                       artist: model.isPlaylist ? nil : model.header?.subtitle, order: model.playable.map(\.id))
+                } label: {
+                    Label(controller.ask == .checking ? "Checking…" : "Download", systemImage: "arrow.down.circle")
+                }
+                .secondaryAction()
+                .disabled(model.playable.isEmpty || model.loading || model.busy || controller.ask == .checking)
+                .accessibilityIdentifier("music:download")
+            }
+        }
+    }
+}
+
+/// The page's download questions. Cancel comes first in each.
+private struct MusicDownloadAlerts: ViewModifier {
+    @EnvironmentObject private var app: AppModel
+    @ObservedObject var controller: MusicDownloadController
+    let name: String
+
+    private var shown: Binding<Bool> {
+        Binding(get: { if case .checking = controller.ask { return false }; return controller.ask != nil },
+                set: { if !$0, controller.ask != .checking { controller.ask = nil } })
+    }
+
+    func body(content: Content) -> some View {
+        content.alert(title, isPresented: shown) {
+            switch controller.ask {
+            case .confirm(_, let wanted):
+                Button("Cancel", role: .cancel) { controller.ask = nil }
+                Button("Download") { if let account = app.account { controller.start(downloads: app.downloads, account: account, wanted: wanted) } }
+            case .remove(_, let confirm):
+                Button("Cancel", role: .cancel) { controller.ask = nil }
+                Button(confirm, role: .destructive) {
+                    controller.ask = nil
+                    if let account = app.account, let id = controller.collectionID { app.downloads.deleteCollection(account, id) }
+                }
+            default:
+                Button("OK", role: .cancel) { controller.ask = nil }
+            }
+        } message: {
+            switch controller.ask {
+            case .confirm(let text, _), .notice(let text), .remove(let text, _): Text(text)
+            default: EmptyView()
+            }
+        }
+    }
+
+    private var title: String {
+        switch controller.ask {
+        case .confirm: "Download \(name)?"
+        case .remove(_, let confirm): confirm == "Remove" ? "Remove download?" : "Stop download?"
+        default: name
+        }
+    }
+}
+#endif

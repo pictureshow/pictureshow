@@ -56,6 +56,7 @@ import PictureshowCore
     /// Each account's Seerr connection (SEERR-01..07); its changes redraw whatever reads it through the app.
     let seerr = SeerrConnections()
     private var seerrChanges: AnyCancellable?
+    private var downloadChanges: AnyCancellable?
     /// Profile PINs on this device (AUTH-16..19); which viewer is unlocked lives only here, in memory.
     let pins: ProfileLockStore
     /// A viewer chosen while its PIN is asked for; it becomes current only once the PIN is right (AUTH-16).
@@ -82,6 +83,9 @@ import PictureshowCore
         music.expire = { [unowned self] in self.expire($0) }
         music.client = { [unowned self] in self.client(for: $0) }
         music.metered = { MusicNetwork.shared.metered }
+        // MUS-10: downloaded tracks play from this device, and a download that finishes is used the next time its track starts.
+        if Downloads.supported { music.local = DownloadsMusicLocal(downloads: downloads) }
+        downloadChanges = downloads.$viewers.receive(on: RunLoop.main).sink { [weak self] _ in self?.music.downloadsChanged() }
         pins.load(keys: snapshot.accounts.map(\.key))
         seerr.load(keys: snapshot.accounts.filter { !$0.signedOut }.map(\.key))
         seerrChanges = seerr.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
