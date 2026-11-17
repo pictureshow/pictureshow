@@ -63,16 +63,27 @@ internal fun touchOwner(route: String?, stored: String?, previous: String?): Pai
 /** The tab to light for the page on screen; see [touchOwner]. */
 @Composable
 internal fun rememberTouchLitTab(entry: NavBackStackEntry?): String? {
-    // The tab lit for the page before this one. Plain memory, not state: it is only read when a page first opens.
-    val last = remember { arrayOfNulls<String>(1) }
+    // The tab lit for the page before this one, its route, and the first page above Home it sits on. Plain memory, not
+    // state: it is only read when a page first opens.
+    val last = remember { arrayOfNulls<String>(3) }
     val handle = entry?.let { runCatching { it.savedStateHandle }.getOrNull() }
-    val (lit, record) = touchOwner(entry?.destination?.route, handle?.get<String>(TOUCH_OWNER_KEY), last[0])
+    val route = entry?.destination?.route
+    val (lit, record) = touchOwner(route, handle?.get<String>(TOUCH_OWNER_KEY), last[0])
     SideEffect {
-        if (record) handle?.set(TOUCH_OWNER_KEY, lit)
+        if (record) {
+            handle?.set(TOUCH_OWNER_KEY, lit)
+            // Home's pages sit right above its root; each remembers the first of them, which brings them all back.
+            if (lit == "home") handle?.set(TOUCH_HOME_FIRST_KEY, if (last[1] == "home") route else last[2])
+        }
         last[0] = lit
+        last[1] = route
+        last[2] = handle?.get<String>(TOUCH_HOME_FIRST_KEY)
     }
     return lit
 }
+
+/** On a page opened inside Home: the route of the first page above Home's root, under which Navigation saves them. */
+private const val TOUCH_HOME_FIRST_KEY = "touch.homeFirst"
 
 internal fun selectTouchTab(nav: NavHostController, tab: String) {
     val destination = if (tab == "search") searchRoute() else tab
@@ -91,9 +102,8 @@ internal fun selectTouchTab(nav: NavHostController, tab: String) {
     // them, so that page's route is what brings them back. Leaving from the root, or reselecting Home, forgets it.
     val homePlace = home?.let { runCatching { it.savedStateHandle.get<String>(TOUCH_HOME_PLACE_KEY) }.getOrNull() }
     if (inHome) {
-        val stack = nav.currentBackStack.value
-        val above = stack.getOrNull(stack.indexOfFirst { it.destination.route == "home" } + 1)
-        home?.savedStateHandle?.set(TOUCH_HOME_PLACE_KEY, if (tab == "home") null else above?.destination?.route)
+        val above = nav.currentBackStackEntry?.let { runCatching { it.savedStateHandle.get<String>(TOUCH_HOME_FIRST_KEY) }.getOrNull() }
+        home?.savedStateHandle?.set(TOUCH_HOME_PLACE_KEY, if (tab == "home") null else above)
     }
     nav.navigate(destination) {
         popUpTo("home") { saveState = true }
