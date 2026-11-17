@@ -11,10 +11,13 @@ import androidx.media3.common.C
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.datasource.HttpDataSource
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.analytics.DefaultAnalyticsCollector
+import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
+import androidx.media3.exoplayer.upstream.DefaultBandwidthMeter
 import androidx.media3.test.utils.FakeAudioRenderer
 import androidx.media3.test.utils.FakeClock
-import androidx.media3.test.utils.TestExoPlayerBuilder
 import app.pictureshow.core.Account
 import app.pictureshow.core.AccountStore
 import app.pictureshow.core.ClientResult
@@ -99,6 +102,8 @@ class MusicHostTest {
     private var gone = emptySet<String>()
     private var remote: String? = null
     private var services = 0
+
+    @Volatile private var audioDelayMs = 0L
 
     private val tokens = java.util.Collections.synchronizedList(mutableListOf<String>())
     private val reportedTo = java.util.Collections.synchronizedList(mutableListOf<String>())
@@ -193,13 +198,26 @@ class MusicHostTest {
         return clock
     }
 
+    // TestExoPlayerBuilder's settings, plus Media3's stuck-player watchdogs switched off. Those time out against the
+    // player clock, and an auto clock runs through ten "minutes" of buffering in about a real second while a real HTTP
+    // read is in flight, so a slow CI runner turned an ordinary load into STUCK_BUFFERING_NO_PROGRESS ("Lost the
+    // connection") at random. aSlowServerReplyIsWaitedForNotCalledStuck holds the reply to show it.
     private fun player(context: Context): ExoPlayer {
         val clock = playerClock()
-        return TestExoPlayerBuilder(context)
+        return ExoPlayer.Builder(context) { handler, _, audio, _, _ ->
+            arrayOf(FakeAudioRenderer(clock.createHandler(handler.looper, null), audio))
+        }
             .setClock(clock)
-            .setRenderersFactory { handler, _, audio, _, _ ->
-                arrayOf(FakeAudioRenderer(clock.createHandler(handler.looper, null), audio))
-            }
+            .setAnalyticsCollector(DefaultAnalyticsCollector(clock))
+            .setTrackSelector(DefaultTrackSelector(context))
+            .setLoadControl(DefaultLoadControl())
+            .setBandwidthMeter(DefaultBandwidthMeter.Builder(context).build())
+            .setLooper(android.os.Looper.myLooper()!!)
+            .setDeviceVolumeControlEnabled(false)
+            .setStuckBufferingDetectionTimeoutMs(Int.MAX_VALUE)
+            .setStuckPlayingDetectionTimeoutMs(Int.MAX_VALUE)
+            .setStuckPlayingNotEndingTimeoutMs(Int.MAX_VALUE)
+            .setStuckSuppressedDetectionTimeoutMs(Int.MAX_VALUE)
             .build()
             .also {
                 createdPlayers += it
@@ -247,7 +265,11 @@ class MusicHostTest {
                 val response = when {
                     request.path!!.startsWith("/denied") -> MockResponse().setResponseCode(401)
                     request.path!!.startsWith("/broken") -> MockResponse().setBody("this is not audio at all, not even close".repeat(40))
-                    else -> MockResponse().setHeader("Content-Type", "audio/wav").setBody(Buffer().write(audio))
+                    else ->
+                        MockResponse()
+                            .setHeader("Content-Type", "audio/wav")
+                            .setBody(Buffer().write(audio))
+                            .setHeadersDelay(audioDelayMs, java.util.concurrent.TimeUnit.MILLISECONDS)
                 }
                 val status = response.status.split(' ').getOrNull(1)?.toIntOrNull()
                 fixtureHttp += "${request.method} ${request.path?.substringBefore('?')?.take(120)} status=$status"
@@ -450,6 +472,20 @@ class MusicHostTest {
         assertEquals("1 saved track is no longer available.", restored.message)
         second.play()
         until("the first Play") { "start b" in log }
+    }
+
+    /**
+     * The fixture's own guard: a reply that takes a real second must not read as a stuck player. Under the auto clock
+     * Media3's ten-minute stuck-buffering watchdog fired inside that second, which is how
+     * aRestoredQueueIsPausedSilentAndLeavesOutWhatsGone flaked on slow runners ("Lost the connection").
+     */
+    @Test fun aSlowServerReplyIsWaitedForNotCalledStuck() {
+        val music = host()
+        ready(music)
+        audioDelayMs = 1_500
+        music.request(album("a"))
+        until("the slow first track") { "start a" in log }
+        assertTrue(playerErrors.isEmpty(), "A slow reply is not a player error: $playerErrors")
     }
 
     @Test fun signingOutEndsTheAudioAndForgetsTheQueue() {
