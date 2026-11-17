@@ -167,6 +167,8 @@ const pendingReferenceHttpCases = new Map([
     ["catalog-screensaver-items", "catalog.screensaverItems"],
     ["catalog-parental-ratings", "catalog.parentalRatings"],
     ["catalog-photos", "catalog.photos"],
+    // BROWSE-05 letter rail sort-name read (desktop leg 172): web client port owed.
+    ["catalog-sort-names-letter-rail", "catalog.sortNames"],
     // MUS-01 music search groups (Android and Apple): web search port owed.
     ["search-albums", "search"],
     ["search-artists", "search"],

@@ -6,7 +6,7 @@ package app.pictureshow.desktop
 import app.pictureshow.core.*
 import app.pictureshow.core.playback.*
 
-enum class DesktopRoute { Loading, Servers, Accounts, SignIn, QuickConnect, Home, Search, Person, Library, Detail, Player, Settings, LiveTv,
+enum class DesktopRoute { Loading, Servers, Accounts, SignIn, QuickConnect, Home, Search, Person, Library, Detail, Player, Settings, LiveTv, HomeEditor, Photo,
     /** Stream C2: SEERR-03..06 and INFO-01..08. */
     Requests, SeerrTitle, About, Licenses, License, Supporter, ThisComputer }
 
@@ -102,7 +102,9 @@ data class DesktopState(
     /** PLAY-17: set by Back to title after a genuine end; any other page change clears it. */
     val finished: DesktopFinished? = null,
     val search: DesktopSearchState = DesktopSearchState(),
-    val person: MediaItem? = null
+    val person: MediaItem? = null,
+    /** Stream C1: home layout, library filters and rail, title discovery rows, photos (DesktopCatalogStream.kt). */
+    val catalog: DesktopCatalogState = DesktopCatalogState()
 )
 
 internal const val DESKTOP_ROOT_HOME = "home"

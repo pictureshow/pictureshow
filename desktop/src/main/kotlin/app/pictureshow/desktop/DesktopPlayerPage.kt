@@ -233,7 +233,7 @@ fun PlayerPage(state: DesktopState, c: DesktopController, fullscreen: () -> Unit
                         OutlinedButton(onClick = { infoOpener = "playback-info"; menu = "info" }, enabled = p.ready,
                             shape = RoundedCornerShape(50), modifier = Modifier.heightIn(min = 40.dp).controlFocus().probe("playback-info")) { Text("Playback info") }
                         DesktopTooltip("Fullscreen", above = true) { IconButton(onClick=fullscreen,modifier = Modifier.controlFocus().probe("player-fullscreen")) { Icon(DesktopGlyph.Fullscreen,contentDescription="Fullscreen") } }
-                        if(p.nextEpisode!=null) OutlinedButton(onClick=c::nextEpisode,modifier = Modifier.controlFocus().heightIn(min=40.dp).probe("next-episode")) { Text("Next episode") }
+                        if(p.nextEpisode!=null) OutlinedButton(onClick=c::nextEpisode,modifier = Modifier.controlFocus().heightIn(min=40.dp).probe("next-episode")) { Text(if (c.catalogSession.queue.isNotEmpty()) "Next title" else "Next episode") }
                         DesktopTooltip("Stop playback", above = true) { IconButton(onClick=c::stopPlayback,modifier = Modifier.controlFocus().probe("stop")) { Icon(DesktopGlyph.Stop,contentDescription="Stop playback") } }
                     }
 

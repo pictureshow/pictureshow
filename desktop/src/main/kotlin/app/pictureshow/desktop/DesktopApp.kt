@@ -246,7 +246,7 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                 Row(Modifier.fillMaxWidth().height(52.dp).background(MaterialTheme.colorScheme.surface).padding(start = if(macChrome) 80.dp else 28.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("PICTURESHOW", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.width(20.dp))
-                    if (state.route in setOf(DesktopRoute.SignIn, DesktopRoute.QuickConnect, DesktopRoute.Detail, DesktopRoute.Player, DesktopRoute.Library, DesktopRoute.LiveTv, DesktopRoute.Settings, DesktopRoute.Search, DesktopRoute.Person) || state.route in DESKTOP_ACCOUNTS_ROUTES || (state.route == DesktopRoute.Accounts && state.account != null)) TextButton(onClick = controller::back, modifier = Modifier.controlFocus().probe("back")) { Icon(DesktopGlyph.Back, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Back") }
+                    if (state.route in setOf(DesktopRoute.SignIn, DesktopRoute.QuickConnect, DesktopRoute.Detail, DesktopRoute.Player, DesktopRoute.Library, DesktopRoute.LiveTv, DesktopRoute.Settings, DesktopRoute.Search, DesktopRoute.Person, DesktopRoute.HomeEditor) || state.route in DESKTOP_ACCOUNTS_ROUTES || (state.route == DesktopRoute.Accounts && state.account != null)) TextButton(onClick = controller::back, modifier = Modifier.controlFocus().probe("back")) { Icon(DesktopGlyph.Back, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Back") }
                     Spacer(Modifier.weight(1f))
                     DesktopUtility("Keyboard shortcuts", DesktopGlyph.Keyboard, "shortcuts") { modalReturnFocus = "shortcuts"; help = true }
                     DesktopUtility(if(fullscreen) "Exit fullscreen" else "Fullscreen", DesktopGlyph.Fullscreen, "fullscreen", onFullscreen)
@@ -259,10 +259,10 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                 val pinGate by controller.pins.state.collectAsState()
                 if (pinGate.gate != null && pinGate.gate?.key == state.account?.key) DesktopPinGate(controller, Modifier.weight(1f)) else
                 Row(Modifier.weight(1f).directionalFence()) {
-                    if (sidebarAccount != null && state.route !in listOf(DesktopRoute.Player, DesktopRoute.SignIn, DesktopRoute.QuickConnect, DesktopRoute.Accounts, DesktopRoute.Servers)) {
+                    if (sidebarAccount != null && state.route !in listOf(DesktopRoute.Photo, DesktopRoute.Player, DesktopRoute.SignIn, DesktopRoute.QuickConnect, DesktopRoute.Accounts, DesktopRoute.Servers)) {
                         DesktopSidebar(
                             account = sidebarAccount,
-                            libraries = state.homeRows.filter { it.library }.flatMap { it.items },
+                            libraries = state.sidebarLibraries(),
                             root = state.root,
                             onHome = controller::home,
                             onSearch = controller::search,
@@ -301,6 +301,8 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                                 DesktopRoute.Player -> PlayerPage(state, controller, onFullscreen)
                                 DesktopRoute.Settings -> SettingsPage(state, controller) { modalReturnFocus = "sign-out"; signOut = state.account }
                                 DesktopRoute.Requests, DesktopRoute.SeerrTitle, DesktopRoute.About, DesktopRoute.Licenses, DesktopRoute.License, DesktopRoute.Supporter, DesktopRoute.ThisComputer -> DesktopAccountsPage(state, controller)
+                                DesktopRoute.HomeEditor -> HomeEditorPage(state, controller)
+                                DesktopRoute.Photo -> PhotoViewerPage(state, controller)
                             }
                             }
                             }
@@ -508,6 +510,8 @@ internal fun desktopEntryTarget(state: DesktopState): String? = when(state.route
     DesktopRoute.Detail -> "play"
     DesktopRoute.Home -> state.homeRows.firstOrNull()?.let { row -> row.items.firstOrNull()?.let { "card:${row.key}:${it.id}" } }
     DesktopRoute.Library -> state.items.firstOrNull()?.let { "grid:${it.id}" } ?: "sort"
+    DesktopRoute.HomeEditor -> "editor-first"
+    DesktopRoute.Photo -> "photo-viewer"
     DesktopRoute.Person -> state.items.firstOrNull()?.let { "person:${it.id}" }
     DesktopRoute.Search -> "search-field"
     DesktopRoute.Player -> "player-surface"

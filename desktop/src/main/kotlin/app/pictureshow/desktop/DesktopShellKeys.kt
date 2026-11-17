@@ -21,8 +21,8 @@ internal data class ShellKeyPress(
 /** Pages whose fields take typed text, where letters and ? are never shortcuts. */
 internal val DESKTOP_TYPING_ROUTES = setOf(DesktopRoute.Servers, DesktopRoute.SignIn, DesktopRoute.QuickConnect, DesktopRoute.Search)
 /** Pages that show the sidebar, where the Settings shortcut applies. */
-internal val DESKTOP_SIDEBAR_ROUTES = setOf(DesktopRoute.Home, DesktopRoute.Library, DesktopRoute.Detail, DesktopRoute.Settings, DesktopRoute.Search, DesktopRoute.Person)
-private val ARROW_ROUTES = setOf(DesktopRoute.Home, DesktopRoute.Library, DesktopRoute.Detail, DesktopRoute.Accounts, DesktopRoute.Settings, DesktopRoute.Search, DesktopRoute.Person)
+internal val DESKTOP_SIDEBAR_ROUTES = setOf(DesktopRoute.HomeEditor, DesktopRoute.Home, DesktopRoute.Library, DesktopRoute.Detail, DesktopRoute.Settings, DesktopRoute.Search, DesktopRoute.Person)
+private val ARROW_ROUTES = setOf(DesktopRoute.HomeEditor, DesktopRoute.Home, DesktopRoute.Library, DesktopRoute.Detail, DesktopRoute.Accounts, DesktopRoute.Settings, DesktopRoute.Search, DesktopRoute.Person)
 
 /**
  * The window's fallback key map. It runs only for keys no focused control consumed, so a button's

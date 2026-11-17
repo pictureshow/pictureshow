@@ -75,6 +75,13 @@ internal fun SettingsPage(state:DesktopState,c:DesktopController,onSignOut:()->U
                 Slider(s.volume.toFloat(),{c.saveSettings(s.copy(volume=it.toInt()))},valueRange=0f..100f,modifier=Modifier.controlFocus(RoundedCornerShape(12.dp)).probe("volume").semantics { contentDescription="Volume" })
             }
         }
+        SettingsSection("Home") {
+            // HOME-12: the same setting as the Home editor's Combine switch, saved per viewer.
+            val prefs = state.catalog.preferences
+            SettingRow("Separate Next up row", "Show Next up in its own row instead of inside Continue watching.") {
+                Switch(prefs?.mergeWatching == false, { separate -> c.changeHome { it.copy(mergeWatching = !separate) } }, Modifier.controlFocus().probe("separate-next-up").semantics { contentDescription = "Separate Next up row" }, enabled = prefs != null && !state.catalog.saving)
+            }
+        }
         SettingsSection("Interface") {
             SettingSwitch("Living-room size","Larger text and controls for watching from a distance.",s.largeInterface,"large-interface") { c.saveSettings(s.copy(largeInterface=it)) }
         }

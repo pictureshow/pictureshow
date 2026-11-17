@@ -46,6 +46,12 @@ interface CatalogService {
 
     suspend fun items(account: Account, query: BrowseQuery): ClientResult<ItemPage>
 
+    /**
+     * BROWSE-05: every title's id and sort name under [query]'s scope, filters and sort, in the grid's order, for the
+     * letter rail. No images or user data; the rail never filters, so the grid itself keeps paging normally.
+     */
+    suspend fun sortNames(account: Account, query: BrowseQuery): ClientResult<ItemPage> = ClientResult.Success(ItemPage())
+
     suspend fun item(account: Account, id: String): ClientResult<MediaItem>
 
     suspend fun seasons(account: Account, seriesId: String): ClientResult<ItemPage>
@@ -194,6 +200,22 @@ internal class CatalogClient(private val client: HttpClient, private val identit
         }
     )
 
+    override suspend fun sortNames(account: Account, query: BrowseQuery): ClientResult<ItemPage> = request(
+        account,
+        "Items",
+        mapOf(
+            "parentId" to query.parentId.takeIf { it.isNotBlank() },
+            "recursive" to query.recursive.toString(),
+            "includeItemTypes" to query.includeItemTypes,
+            "sortBy" to query.sortBy,
+            "sortOrder" to if (query.descending) "Descending" else "Ascending",
+            "fields" to "SortName",
+            "enableImages" to "false",
+            "enableUserData" to "false",
+            "limit" to SORT_NAME_LIMIT.toString()
+        ) + query.filters.parameters()
+    )
+
     override suspend fun item(account: Account, id: String): ClientResult<MediaItem> {
         val detail = request<MediaItem>(account, "Items/${id.encodeURLPathPart()}")
         if (detail !is ClientResult.Success ||
@@ -320,6 +342,7 @@ internal class CatalogClient(private val client: HttpClient, private val identit
 
     private companion object {
         const val CARD_FIELDS = "Overview,Genres,PrimaryImageAspectRatio,ChildCount,RecursiveItemCount"
+        const val SORT_NAME_LIMIT = 10000
     }
 }
 
