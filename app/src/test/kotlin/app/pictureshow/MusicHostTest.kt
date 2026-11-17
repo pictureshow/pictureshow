@@ -140,14 +140,23 @@ class MusicHostTest {
 
         override fun downloaded(account: Account): Set<String> = downloaded.keys.toSet()
 
+        override val changes get() = downloads
+
         override suspend fun report(account: Account, media: String, serial: Long, report: String, ticks: Long, runtimeTicks: Long?) {
             outbox += "$report $media"
         }
     }
 
-    private fun download(vararg ids: String) = ids.forEach { id ->
-        downloaded[id] = java.io.File(context.cacheDir, "downloaded-$id.wav").apply { writeBytes(wav()) }
+    /** Bumped on each finished download, as the download engine's library is. */
+    private val downloads = kotlinx.coroutines.flow.MutableStateFlow(0)
+
+    private fun download(vararg ids: String, ms: Int = 100) = ids.forEach { id ->
+        downloaded[id] = java.io.File(context.cacheDir, "downloaded-$id.wav").apply { writeBytes(wav(ms)) }
+        downloads.value += 1
     }
+
+    /** Tracks the server streams at three seconds rather than a tenth, so one is still playing while a test acts. */
+    private val longStreams = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
 
     private inner class Gateway : MusicGateway {
         override suspend fun negotiate(account: Account, media: String, ceiling: Int): ClientResult<PlayOutcome> {
@@ -301,11 +310,14 @@ class MusicHostTest {
 
     @Before fun open() {
         val audio = wav()
+        val long = wav(3_000)
         server.dispatcher = object : Dispatcher() {
             override fun dispatch(request: RecordedRequest): MockResponse {
                 val response = when {
                     request.path!!.startsWith("/denied") -> MockResponse().setResponseCode(401)
                     request.path!!.startsWith("/broken") -> MockResponse().setBody("this is not audio at all, not even close".repeat(40))
+                    request.path!!.removePrefix("/").substringBefore(".wav") in longStreams ->
+                        MockResponse().setHeader("Content-Type", "audio/wav").setBody(Buffer().write(long))
                     else ->
                         MockResponse()
                             .setHeader("Content-Type", "audio/wav")
@@ -338,8 +350,8 @@ class MusicHostTest {
         downloaded.values.forEach { it.delete() }
     }
 
-    private fun wav(): ByteArray {
-        val samples = ByteArray(8_820)
+    private fun wav(ms: Int = 100): ByteArray {
+        val samples = ByteArray(ms * 882 / 10)
         val header = ByteBuffer.allocate(44).order(ByteOrder.LITTLE_ENDIAN).apply {
             put("RIFF".toByteArray())
             putInt(36 + samples.size)
@@ -674,6 +686,65 @@ class MusicHostTest {
         )
         assertTrue(music.state.value.queue!!.paused)
         assertEquals("b", music.state.value.queue!!.let { q -> q.entries.first { it.id == q.current }.media })
+    }
+
+    /** Where each track the output reached was opened from: "file" or "http", by media id. */
+    private fun heardFrom(player: ExoPlayer): MutableList<String> {
+        val opened = java.util.Collections.synchronizedList(mutableListOf<String>())
+        player.addListener(object : Player.Listener {
+            override fun onMediaItemTransition(mediaItem: androidx.media3.common.MediaItem?, reason: Int) {
+                mediaItem?.localConfiguration?.uri?.let { opened += "${it.scheme} ${it.lastPathSegment}" }
+            }
+        })
+        return opened
+    }
+
+    /**
+     * MUS-10: a track that finishes downloading after it was prepared as a stream plays from the device when the queue reaches
+     * it, with no queue rebuild and no further server call for it.
+     */
+    @Test fun aTrackDownloadedWhileTheOneBeforeItPlaysIsHeardFromTheDevice() {
+        // Played at real speed, so the first track is still playing when the second's download lands.
+        paceNetworkClock = true
+        download("a", ms = 3_000)
+        val music = host()
+        ready(music)
+        music.request(album("a", "b"))
+        until("a playing and b prepared as a stream") { "start a" in outbox && "b" in negotiated }
+        val opened = heardFrom(lastPlayer!!)
+        download("b")
+        until("b to start") { outbox.any { it == "start b" } || log.any { it == "start b" } }
+        assertEquals(listOf("start b"), outbox.filter { it == "start b" }, "b was heard from the stream: $log, $opened")
+        assertTrue("start b" !in log, "b reported to the server as a stream: $log")
+        assertEquals(listOf("file downloaded-b.wav"), opened.filter { it.endsWith("b.wav") }, "$opened")
+        assertEquals(1, negotiated.count { it == "b" }, "Only the one ask from before the download: $negotiated")
+        assertEquals(listOf("a", "b"), music.state.value.queue!!.entries.map { it.media }, "The queue was not rebuilt")
+    }
+
+    /** MUS-10: a download finishing for the track being heard never swaps it mid-track; it keeps its stream to the end. */
+    @Test fun aPlayingTrackIsNotSwappedWhenItsOwnDownloadFinishes() {
+        paceNetworkClock = true
+        longStreams += "a"
+        val music = host()
+        ready(music)
+        music.request(album("a"))
+        until("a playing from the server") { "start a" in log && lastPlayer?.isPlaying == true }
+        val player = lastPlayer!!
+        val playing = player.currentMediaItem
+        val idle = java.util.concurrent.atomic.AtomicInteger()
+        val opened = heardFrom(player)
+        player.addListener(object : Player.Listener {
+            override fun onPlaybackStateChanged(state: Int) {
+                if (state == Player.STATE_IDLE) idle.incrementAndGet()
+            }
+        })
+        download("a")
+        pump(500)
+        assertTrue(playing === player.currentMediaItem, "The playing track was swapped: $opened")
+        assertEquals(0, idle.get(), "The playing track was stopped")
+        assertTrue(opened.isEmpty(), "Nothing else was opened: $opened")
+        until("a to end") { "stop a" in log }
+        assertTrue(outbox.none { it.endsWith(" a") }, "Its listen stayed with the server: $outbox")
     }
 
     /** MUS-10: a new token never stops or reopens a downloaded track that is playing; the file doesn't use it. */

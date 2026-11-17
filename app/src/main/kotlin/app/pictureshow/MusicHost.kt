@@ -89,9 +89,13 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.distinctUntilChangedBy
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -153,6 +157,9 @@ internal interface MusicLocal {
 
     /** A local listen's report ("start", "progress" or "stopped"), into the same outbox video downloads use. */
     suspend fun report(account: Account, media: String, serial: Long, report: String, ticks: Long, runtimeTicks: Long?)
+
+    /** Emits whenever this device's downloads change, so a track that finishes downloading is picked up without a rebuild. */
+    val changes: Flow<Any?> get() = emptyFlow()
 }
 
 /** The server side of the host, narrow so tests can answer with a real file on a mock server. */
@@ -1201,6 +1208,7 @@ internal class MusicHost(
         }
         val entries = q.entries.associateBy(QueueEntry::id)
         prepared.keys.retainAll(target.toSet())
+        adoptDownloads(active)
         target.forEachIndexed { index, entry ->
             if (entry !in prepared) {
                 val media = entries[entry]?.media ?: return
@@ -1211,7 +1219,9 @@ internal class MusicHost(
                     offline != null -> prepared[entry] = PreparedTrack(offline, entry, media, local = true)
 
                     outcome is ClientResult.Success && outcome.value is PlayOutcome.Play ->
-                        prepared[entry] = PreparedTrack((outcome.value as PlayOutcome.Play).decision, entry, media)
+                        // A download that finished while the server was answering wins: it's the same track, from here.
+                        prepared[entry] = local?.decision(active, media)?.let { PreparedTrack(it, entry, media, local = true) }
+                            ?: PreparedTrack((outcome.value as PlayOutcome.Play).decision, entry, media)
 
                     index > 0 -> return applyWindow(active, target)
 
@@ -1294,6 +1304,24 @@ internal class MusicHost(
         endOutput("revoked")
         if (active != null && active.accessToken.isNotEmpty()) accounts.expire(active.key, active.accessToken)
         publish { it.copy(message = "This account needs to sign in again. Your queue is saved for when it does.") }
+    }
+
+    /**
+     * Tracks held as streams that have since finished downloading play from the file instead, the next time they start
+     * (MUS-10). The track being heard is never swapped: it keeps its stream to the end, and only a later start uses the file.
+     */
+    private fun adoptDownloads(active: Account) {
+        val running = player ?: return
+        val files = local ?: return
+        val playing = running.currentMediaItem?.mediaId
+        prepared.values.filter { !it.local && it.entry != playing }.forEach { held ->
+            val file = files.decision(active, held.media) ?: return@forEach
+            val swapped = PreparedTrack(file, held.entry, held.media, local = true)
+            prepared[held.entry] = swapped
+            val at = (0 until running.mediaItemCount).firstOrNull { running.getMediaItemAt(it).mediaId == held.entry } ?: return@forEach
+            running.removeMediaItem(at)
+            running.addMediaSource(at, source(active, swapped))
+        }
     }
 
     private fun applyWindow(active: Account, target: List<String>) {
@@ -1813,6 +1841,14 @@ internal class MusicHost(
                 } catch (failure: Exception) {
                     android.util.Log.w("MusicHost", "A music step failed", failure)
                 }
+            }
+        }
+        local?.let { files ->
+            scope.launch {
+                files.changes
+                    .map { account?.let(files::downloaded) }
+                    .distinctUntilChanged()
+                    .collect { enqueue { account?.let(::adoptDownloads) } }
             }
         }
         scope.launch {
