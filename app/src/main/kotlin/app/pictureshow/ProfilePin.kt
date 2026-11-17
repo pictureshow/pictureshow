@@ -623,9 +623,9 @@ internal class ProfileRelockObserver(
     private val clock: () -> Long = { android.os.SystemClock.elapsedRealtime() },
     private val onRelock: () -> Unit = {}
 ) : androidx.lifecycle.DefaultLifecycleObserver {
-    override fun onStop(owner: androidx.lifecycle.LifecycleOwner) = store.backgrounded(clock())
+    override fun onStop(owner: androidx.lifecycle.LifecycleOwner) = away(sceneVisible = false, pictureInPicture = false, playing = false)
 
-    override fun onStart(owner: androidx.lifecycle.LifecycleOwner) = inUse()
+    override fun onStart(owner: androidx.lifecycle.LifecycleOwner) = away(sceneVisible = true, pictureInPicture = false, playing = false)
 
     /**
      * A picture-in-picture window keeps Pictureshow started, so it counts as in use only while it plays: paused or
@@ -633,9 +633,16 @@ internal class ProfileRelockObserver(
      * if it ran five minutes). Closing the window ([started] false) leaves the time running for ON_STOP to keep.
      */
     fun pictureInPicture(active: Boolean, playing: Boolean, started: Boolean) {
-        if (active && !playing) {
+        if (!active && !started) return
+        // In the window no Pictureshow screen shows; back at full screen ([active] false) the player does.
+        away(sceneVisible = !active, pictureInPicture = active, playing = playing)
+    }
+
+    /** AUTH-18's one rule, shared with every platform through the profile-pin-away vectors. */
+    internal fun away(sceneVisible: Boolean, pictureInPicture: Boolean, playing: Boolean) {
+        if (app.pictureshow.core.profilePinAwayRuns(sceneVisible, pictureInPicture, playing)) {
             store.backgrounded(clock())
-        } else if (active || started) {
+        } else {
             inUse()
         }
     }

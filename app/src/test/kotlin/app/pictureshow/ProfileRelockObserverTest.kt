@@ -14,6 +14,10 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 
 /** AUTH-18: the process lifecycle's stop and start drive the relock, measured on the clock the observer is given. */
 class ProfileRelockObserverTest {
@@ -110,5 +114,31 @@ class ProfileRelockObserverTest {
         now += 60_000
         owner.registry.currentState = Lifecycle.State.RESUMED
         assertNull(store.unlocked.value)
+    }
+
+    // The shared profile-pin-away vectors run through the observer's own decision, so they test the rule Android runs.
+    @Test
+    fun theSharedAwayVectorsDecideWhenTheObserverStartsTheClock() {
+        val roots = generateSequence(java.io.File("").absoluteFile) { it.parentFile }
+        val vectors = roots.map { java.io.File(it, "spec/vectors/application.json") }.first { it.isFile }
+        val cases = kotlinx.serialization.json.Json.parseToJsonElement(vectors.readText()).jsonObject.getValue("cases").jsonArray
+            .map { it.jsonObject }.filter { it["operation"]?.jsonPrimitive?.content == "profile-pin-away" }
+        assertEquals(5, cases.size)
+        cases.forEach { case ->
+            val input = case.getValue("input").jsonObject
+            val store = ProfileLockStore(Memory(), JvmProfilePinHasher(rounds = 1_000))
+            runBlocking { store.set("parent", "2468", askOnStart = true) }
+            var now = 10_000L
+            val observer = ProfileRelockObserver(store, clock = { now })
+            observer.away(
+                input.getValue("sceneVisible").jsonPrimitive.boolean,
+                input.getValue("pictureInPicture").jsonPrimitive.boolean,
+                input.getValue("playing").jsonPrimitive.boolean
+            )
+            now += PROFILE_PIN_RELOCK_AFTER_MS
+            observer.away(sceneVisible = true, pictureInPicture = false, playing = false)
+            val ran = store.unlocked.value == null
+            assertEquals(case.getValue("expected").jsonPrimitive.boolean, ran, case.getValue("id").jsonPrimitive.content)
+        }
     }
 }
