@@ -71,8 +71,7 @@ private fun spatialBadge(stream: MediaStream): String? {
  * reads "Play again", starts at the beginning, and Play from start isn't offered. A series or season keeps naming the
  * episode it plays; Stop and a SyncPlay group ending never set [finished].
  */
-fun detailPlaysAgain(item: MediaItem, finished: Boolean): Boolean =
-    finished && !item.isMissing && item.type !in setOf("Series", "Season")
+fun detailPlaysAgain(item: MediaItem, finished: Boolean): Boolean = finished && !item.isMissing && item.type !in setOf("Series", "Season")
 
 /**
  * The primary detail action's words. A series or season names the episode Play will start ("Play S1:E1 · A Quiet
