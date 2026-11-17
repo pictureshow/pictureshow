@@ -11,6 +11,7 @@ struct SettingsView: View {
     var body: some View {
         Form {
             accounts
+            ProfilePinSettingsSection()
             Section {
                 Toggle("Separate Next up row", isOn: Binding(
                     get: { !app.homeLayout.mergeWatching },

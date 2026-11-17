@@ -35,7 +35,8 @@ class ProfileRelockObserverTest {
         runBlocking { store.set("parent", "2468", askOnStart = true) }
         var now = 10_000L
         val owner = Owner()
-        owner.registry.addObserver(ProfileRelockObserver(store) { now })
+        var relocks = 0
+        owner.registry.addObserver(ProfileRelockObserver(store, clock = { now }, onRelock = { relocks++ }))
         owner.registry.currentState = Lifecycle.State.RESUMED
         assertEquals("parent", store.unlocked.value)
         // Away two minutes: still open.
@@ -43,6 +44,7 @@ class ProfileRelockObserverTest {
         now += 120_000
         owner.registry.currentState = Lifecycle.State.RESUMED
         assertEquals("parent", store.unlocked.value)
+        assertEquals(0, relocks)
         // Paused only (picture-in-picture, a dialog over us) for an hour: never stopped, so still open.
         owner.registry.currentState = Lifecycle.State.STARTED
         now += 3_600_000
@@ -53,5 +55,7 @@ class ProfileRelockObserverTest {
         now += PROFILE_PIN_RELOCK_AFTER_MS
         owner.registry.currentState = Lifecycle.State.RESUMED
         assertNull(store.unlocked.value)
+        // The relock also stops what kept playing for the viewer, once.
+        assertEquals(1, relocks)
     }
 }

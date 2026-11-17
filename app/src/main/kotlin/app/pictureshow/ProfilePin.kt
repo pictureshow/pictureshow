@@ -578,7 +578,7 @@ internal fun ProfilePinSettings(
         )
     }
     // Leaving Settings, or the viewer changing, ends a permission the new-PIN screen never used (AUTH-19).
-    androidx.compose.runtime.DisposableEffect(account.key) { onDispose { store.dropChangeGrant() } }
+    androidx.compose.runtime.DisposableEffect(account.key) { onDispose { store.leftPinSettings() } }
 }
 
 /** The PIN screens draw on the host's theme: TV Material on a TV, Material 3 on touch (TV leaves M3 at its light default). */
@@ -620,11 +620,13 @@ private fun PinSurface(tv: Boolean, modifier: Modifier = Modifier, content: @Com
  */
 internal class ProfileRelockObserver(
     private val store: ProfileLockStore,
-    private val clock: () -> Long = { android.os.SystemClock.elapsedRealtime() }
+    private val clock: () -> Long = { android.os.SystemClock.elapsedRealtime() },
+    private val onRelock: () -> Unit = {}
 ) : androidx.lifecycle.DefaultLifecycleObserver {
     override fun onStop(owner: androidx.lifecycle.LifecycleOwner) = store.backgrounded(clock())
 
     override fun onStart(owner: androidx.lifecycle.LifecycleOwner) {
-        store.foregrounded(clock())
+        // Locked again: whatever kept playing for the viewer while away stops, so the lock isn't only a screen.
+        if (store.foregrounded(clock())) onRelock()
     }
 }

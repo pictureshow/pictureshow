@@ -38,15 +38,20 @@ import PictureshowCore
     /// Each account's Seerr connection (SEERR-01..07); its changes redraw whatever reads it through the app.
     let seerr = SeerrConnections()
     private var seerrChanges: AnyCancellable?
+    /// Profile PINs on this device (AUTH-16..19); which viewer is unlocked lives only here, in memory.
+    let pins: ProfileLockStore
+    /// A viewer chosen while its PIN is asked for; it becomes current only once the PIN is right (AUTH-16).
+    @Published var pinSwitch: Account?
 
     deinit {
         let socket = socket
         Task { @MainActor in socket.stop() }
     }
 
-    init(store: AccountStore = AccountStore()) {
+    init(store: AccountStore = AccountStore(), pinKeychain: KeychainBackend = SystemKeychain()) {
         self.store = store
         snapshot = store.load()
+        pins = ProfileLockStore(persistence: ProfileLockKeychain(keychain: pinKeychain))
         preferences = Preferences.load()
         downloads = Downloads(deviceName: DeviceIdentity.name, version: AppInfo.version)
         socket = ServerSocket(requestFor: { Self.makeClient(deviceID: $0.deviceID).socketRequest(account: $0) })
@@ -54,6 +59,7 @@ import PictureshowCore
         remoteTarget = RemoteTarget(app: self)
         remote = RemoteControl(app: self)
         syncPlay = SyncPlaySession(app: self)
+        pins.load(keys: snapshot.accounts.map(\.key))
         seerr.load(keys: snapshot.accounts.filter { !$0.signedOut }.map(\.key))
         seerrChanges = seerr.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
         socket.follow(account)
@@ -86,6 +92,8 @@ import PictureshowCore
         downloads.signedIn(account)
         addingAccount = false
         signingInAgain = nil
+        // A password or Quick Connect sign-in opens the viewer and allows a new PIN without the old one (Forgot PIN).
+        pins.provenByPassword(account.key)
     }
 
     /// A signed-out card the viewer chose: sign-in opens for its server with the username filled.
@@ -95,6 +103,14 @@ import PictureshowCore
 
     func select(_ account: Account) {
         guard account.isSignedIn else { signingInAgain = account; return }
+        // AUTH-16: switching to a viewer with a PIN asks first; the open viewer stays until it is right.
+        if pins.switchNeedsPin(to: account.key, current: self.account?.key) { pinSwitch = account; return }
+        choose(account)
+    }
+
+    /// Makes the viewer current once its PIN (if any) was typed.
+    func choose(_ account: Account) {
+        pinSwitch = nil
         var next = snapshot
         next.selected = account.key
         update(next)
@@ -127,6 +143,7 @@ import PictureshowCore
     /// Forgets the viewer's card entirely, ending its session first if it still has one.
     func remove(_ account: Account) {
         signOut(account)
+        pins.forget(account.key)
         clients[account.key] = nil
         homeLayoutGeneration += 1
         homeLayouts.removeValue(forKey: account.key)
@@ -137,7 +154,7 @@ import PictureshowCore
     }
 
     func forget(_ server: Server) {
-        for account in snapshot.accounts where account.server.url == server.url { signOut(account) }
+        for account in snapshot.accounts where account.server.url == server.url { signOut(account); pins.forget(account.key) }
         homeLayoutGeneration += 1
         for account in snapshot.accounts where account.server.url == server.url {
             homeLayouts.removeValue(forKey: account.key)
@@ -153,6 +170,14 @@ import PictureshowCore
         guard accounts.contains(where: { $0 == account }) else { return }
         clients[account.key] = nil
         update(AccountBook.expire(account.key, from: snapshot))
+    }
+
+    /// "Switch user" on the lock screen: back to the chooser without opening the locked viewer.
+    func leaveLockedViewer() {
+        player = nil
+        var next = snapshot
+        next.selected = nil
+        update(next)
     }
 
     func catalogChanged() { catalogRevision += 1 }

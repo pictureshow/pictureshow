@@ -93,6 +93,7 @@ class RemoteTargetHostTest {
         val opens = mutableListOf<RemoteEffect>()
         val navigation = mutableListOf<String>()
         val trace = mutableListOf<String>()
+        var locked = false
         val host = RemoteTargetHost(
             scope.backgroundScope,
             { url, authorization, events -> FakeSocket(url, authorization, events).also { sockets += it } },
@@ -103,7 +104,8 @@ class RemoteTargetHostTest {
             },
             authorization = { "auth:${it.user.id}" },
             nowMs = { scope.testScheduler.currentTime },
-            trace = { trace += it }
+            trace = { trace += it },
+            admitted = { !locked }
         )
         val player = Player()
         val token = Any()
@@ -138,6 +140,34 @@ class RemoteTargetHostTest {
 
     private fun general(id: String, name: String, arguments: String = "{}") =
         """{"MessageId":"$id","MessageType":"GeneralCommand","Data":{"Name":"$name","ControllingUserId":"$viewer","Arguments":$arguments}}"""
+
+    @Test fun aViewerBehindItsPinIsNoTargetAndTakesNoCommands() = runTest {
+        val rig = Rig(this)
+        rig.online(this)
+        rig.watching(paused = true)
+        val socket = rig.sockets.single()
+        // Locked again; a command already on the wire before the host hears about the lock is dropped.
+        rig.locked = true
+        rig.message(this, state("u1", "Unpause"))
+        rig.message(this, play("p1", listOf(second)))
+        assertEquals(emptyList(), rig.player.calls)
+        assertTrue(rig.opens.isEmpty())
+        // Hearing about it closes the socket and withdraws the listing, so no other client offers this device.
+        rig.host.lockChanged()
+        runCurrent()
+        assertTrue(socket.closed)
+        assertEquals(emptyList(), rig.registered.last())
+        rig.host.setForeground(false)
+        rig.host.setForeground(true)
+        runCurrent()
+        assertEquals(1, rig.sockets.size, "coming to the front behind the lock is no target either")
+        // Unlocked: a target again.
+        rig.locked = false
+        rig.host.lockChanged()
+        runCurrent()
+        assertEquals(2, rig.sockets.size)
+        assertFalse(rig.sockets.last().closed)
+    }
 
     @Test fun socketFollowsForegroundAccountAndPolicyAndRegistersOnlyWhatIsImplemented() = runTest {
         val rig = Rig(this)

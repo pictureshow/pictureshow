@@ -145,7 +145,9 @@ internal class RemoteTargetHost(
     private val register: suspend (Account, List<String>) -> Int,
     private val authorization: suspend (Account) -> String,
     private val nowMs: () -> Long,
-    private val trace: (String) -> Unit = {}
+    private val trace: (String) -> Unit = {},
+    /** Whether the viewer is past its profile lock (AUTH-18); a locked viewer is no target and takes no commands. */
+    private val admitted: (Account) -> Boolean = { true }
 ) {
     var syncMessages: (String) -> Unit = {}
     var syncQueueRequest: (RemoteEffect) -> Boolean = { false }
@@ -211,6 +213,9 @@ internal class RemoteTargetHost(
         reconcile()
     }
 
+    /** The profile lock opened or closed: be a target again, or stop being one. */
+    fun lockChanged() = reconcile()
+
     private fun advertised() = if (policy == "off") emptyList() else commands
 
     private fun restart() {
@@ -237,10 +242,12 @@ internal class RemoteTargetHost(
 
     private fun reconcile() {
         val current = account
-        val wanted = foreground && current != null && (policy != "off" || syncSocket)
+        val open = current != null && admitted(current)
+        val wanted = foreground && open && (policy != "off" || syncSocket)
         if (!wanted) {
             if (loop != null) stop()
-            if (foreground && current != null && policy == "off" && withdrawnFor != current.key) withdraw(current)
+            // Off, or behind its PIN: tell the server too, so no other client lists this device for that viewer.
+            if (foreground && current != null && (policy == "off" || !open) && withdrawnFor != current.key) withdraw(current)
             return
         }
         withdrawnFor = null
@@ -375,7 +382,15 @@ internal class RemoteTargetHost(
         }
     }
 
-    private fun receive(inbound: RemoteInbound) = reduce(RemoteReceiveEvent("message", inbound, nowMs()))
+    private fun receive(inbound: RemoteInbound) {
+        // A command already on the wire when the lock came up is dropped, not saved for later.
+        val current = account ?: return
+        if (!admitted(current)) {
+            trace("remote refused reason=profile-locked")
+            return
+        }
+        reduce(RemoteReceiveEvent("message", inbound, nowMs()))
+    }
 
     private fun reduce(event: RemoteReceiveEvent) {
         val before = state ?: return

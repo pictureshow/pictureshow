@@ -9867,6 +9867,54 @@
       "expected": true
     },
     {
+      "id": "profile-pin-proof-change-made",
+      "operation": "profile-pin-proof",
+      "input": {
+        "event": "CHANGE_MADE"
+      },
+      "expected": false
+    },
+    {
+      "id": "profile-pin-proof-viewer-changed",
+      "operation": "profile-pin-proof",
+      "input": {
+        "event": "VIEWER_CHANGED"
+      },
+      "expected": false
+    },
+    {
+      "id": "profile-pin-proof-relocked",
+      "operation": "profile-pin-proof",
+      "input": {
+        "event": "RELOCKED"
+      },
+      "expected": false
+    },
+    {
+      "id": "profile-pin-proof-settings-left",
+      "operation": "profile-pin-proof",
+      "input": {
+        "event": "SETTINGS_LEFT"
+      },
+      "expected": false
+    },
+    {
+      "id": "profile-pin-proof-sign-in-landed",
+      "operation": "profile-pin-proof",
+      "input": {
+        "event": "SIGN_IN_LANDED"
+      },
+      "expected": true
+    },
+    {
+      "id": "profile-pin-proof-setup-cancelled",
+      "operation": "profile-pin-proof",
+      "input": {
+        "event": "SETUP_CANCELLED"
+      },
+      "expected": true
+    },
+    {
       "id": "access-refusal-sign-in",
       "operation": "access-refusal",
       "input": {
