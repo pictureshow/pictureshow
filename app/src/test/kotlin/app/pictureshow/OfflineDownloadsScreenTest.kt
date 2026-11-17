@@ -154,9 +154,9 @@ class OfflineDownloadsScreenTest {
         File(context.noBackupFilesDir, "offline").deleteRecursively()
     }
 
-    private fun tv() = compose.setContent { OfflineDownloadsTvScreen(account, true, { played = it.id }, {}, {}, {}) }
+    private fun tv() = compose.setContent { OfflineDownloadsTvScreen(account, true, { e, _ -> played = e.id }, {}, {}, {}) }
 
-    private fun touch() = compose.setContent { OfflineDownloadsTouchScreen(account, true, { played = it.id }, {}, {}, {}) }
+    private fun touch() = compose.setContent { OfflineDownloadsTouchScreen(account, true, { e, _ -> played = e.id }, {}, {}, {}) }
 
     private fun settle() {
         repeat(8) {
@@ -291,7 +291,7 @@ class OfflineDownloadsScreenTest {
     fun `TV back from the player goes to a notice, whole, and OK returns to the row`() {
         install(*Array(4) { entry("r$it", OfflinePhase.ready) })
         val back = androidx.compose.ui.test.junit4.StateRestorationTester(compose)
-        back.setContent { OfflineDownloadsTvScreen(account, true, { played = it.id }, {}, {}, {}) }
+        back.setContent { OfflineDownloadsTvScreen(account, true, { e, _ -> played = e.id }, {}, {}, {}) }
         settle()
         compose.onNode(hasScrollAction()).performScrollToNode(hasTestTag("downloads:play:r2"))
         compose.onNodeWithTag("downloads:play:r2").performSemanticsAction(SemanticsActions.OnClick)
@@ -447,7 +447,7 @@ class OfflineDownloadsScreenTest {
             }
             CompositionLocalProvider(LocalConfiguration provides configuration) {
                 Box(Modifier.requiredSize(700.dp, height).testTag("viewport")) {
-                    OfflineDownloadsTouchScreen(account, true, { played = it.id }, {}, {}, {})
+                    OfflineDownloadsTouchScreen(account, true, { e, _ -> played = e.id }, {}, {}, {})
                 }
             }
         }

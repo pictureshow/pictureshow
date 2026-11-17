@@ -122,6 +122,19 @@ class MusicDownloadsTest {
         assertNull(offlineMusicPlay(account, lib, entry("9", kind = OfflineMediaKind.movie)) { null })
     }
 
+    /** A track two downloads share plays with the album or playlist row it was played from; without one, the newest holding it. */
+    @Test fun aSharedTrackPlaysWithTheRowItWasPlayedFrom() {
+        val album = OfflineCollection("al", OfflineCollectionKind.album, "Album", itemIds = listOf("1", "2"), createdSequence = 1)
+        val playlist = OfflineCollection("pl", OfflineCollectionKind.playlist, "Mix", itemIds = listOf("1"), createdSequence = 2)
+        val lib = library(entry("1"), entry("2"), collections = listOf(album, playlist))
+        val fromAlbum = offlineMusicPlay(account, lib, entry("1"), "al") { null }!!
+        assertEquals("MusicAlbum:al", fromAlbum.context)
+        assertEquals(listOf("1", "2"), fromAlbum.tracks.map { it.id })
+        assertEquals("Playlist:pl", offlineMusicPlay(account, lib, entry("1")) { null }!!.context)
+        // An id that doesn't hold the track falls back the same way.
+        assertEquals("Playlist:pl", offlineMusicPlay(account, lib, entry("1"), "other") { null }!!.context)
+    }
+
     @Test fun aListenCountsAsFinishedOnlyAtTheEnd() {
         assertTrue(musicListenFinished(2_400_000_000, 2_400_000_000))
         assertTrue(musicListenFinished(2_395_000_000, 2_400_000_000))

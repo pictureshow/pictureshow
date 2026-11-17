@@ -114,7 +114,7 @@ private const val OFFLINE_TV_ITEMS_ABOVE_NOTICES = 3
 internal fun OfflineDownloadsTvScreen(
     account: Account,
     offline: Boolean,
-    onPlay: (OfflineEntry) -> Unit,
+    onPlay: (OfflineEntry, String?) -> Unit,
     onStorage: () -> Unit,
     onOnline: () -> Unit,
     onBack: () -> Unit
@@ -122,10 +122,10 @@ internal fun OfflineDownloadsTvScreen(
     // Survive a trip to the player or to Storage, so Back returns the remote to where it left from.
     var returnToRow by rememberSaveable { mutableStateOf<String?>(null) }
     var returnToStorage by rememberSaveable { mutableStateOf(false) }
-    val view = rememberOfflineDownloads(account, tv = true) { entry ->
+    val view = rememberOfflineDownloads(account, tv = true) { entry, collection ->
         returnToRow = entry.id
         returnToStorage = false
-        onPlay(entry)
+        onPlay(entry, collection)
     }
     val controller = view.controller
     val sections = view.sections
@@ -222,7 +222,9 @@ internal fun OfflineDownloadsTvScreen(
             }
         }
         if (sections.isEmpty && !view.library.recoverable) {
-            item(key = "empty") { Text("Nothing downloaded yet. Open a movie, an episode or an album and choose Download.", color = OfflineMuted) }
+            item(key = "empty") {
+                Text("Nothing downloaded yet. Open a movie, an episode or an album and choose Download.", color = OfflineMuted)
+            }
         }
         sections.ordered.forEach { (title, rows) ->
             item(key = "section:$title") {
@@ -441,7 +443,7 @@ private fun offlineChoiceColors(selected: Boolean) =
 
 @Composable
 internal fun OfflineStorageTvScreen(account: Account, onBack: () -> Unit) {
-    val view = rememberOfflineDownloads(account, tv = true) {}
+    val view = rememberOfflineDownloads(account, tv = true) { _, _ -> }
     val controller = view.controller
     val engine: OfflineEngine = koinInject()
     val manifest = view.library.manifest

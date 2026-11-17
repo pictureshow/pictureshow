@@ -15,7 +15,6 @@ import app.pictureshow.core.offline.OfflinePolicy
 import app.pictureshow.core.offline.OfflinePreset
 import app.pictureshow.core.offline.OfflinePresetChoice
 import app.pictureshow.core.offline.OfflineTrack
-import app.pictureshow.core.offline.collectionFor
 import app.pictureshow.core.offline.collectionProgress
 import app.pictureshow.core.offline.committedBytes
 import app.pictureshow.core.offline.offlinePresets
@@ -317,10 +316,11 @@ internal fun offlineSections(
         )
     }
     val sorted = manifest.entries.sortedBy { it.createdSequence }
-    // MUS-10: a track lives under the album or playlist it plays with from here (the newest one holding it), one row for the lot.
-    val grouped = sorted.filter { it.kind == OfflineMediaKind.audio }
-        .mapNotNull { entry -> manifest.collectionFor(entry.itemId)?.let { it to entry } }
-        .groupBy({ it.first.id }, { it.second })
+    // MUS-10: one row per album or playlist; it lists every track it holds, so a track two of them share shows under both.
+    val tracksByItem = sorted.filter { it.kind == OfflineMediaKind.audio }.associateBy { it.itemId }
+    val grouped = manifest.collections.associate { collection ->
+        collection.id to collection.itemIds.distinct().mapNotNull { tracksByItem[it] }
+    }.filterValues { it.isNotEmpty() }
     val collections = manifest.collections.associateBy { it.id }
     val inGroup = grouped.values.flatten().map { it.id }.toSet()
     val needsAttention = setOf(OfflinePhase.failed, OfflinePhase.missing)
@@ -337,8 +337,7 @@ internal fun offlineSections(
     grouped.forEach { (collectionId, entries) ->
         val collection = collections.getValue(collectionId)
         val progress = manifest.collectionProgress(collectionId) ?: return@forEach
-        val byItem = entries.associateBy { it.itemId }
-        val ordered = collection.itemIds.distinct().mapNotNull { byItem[it] }
+        val ordered = entries
         val first = ordered.firstOrNull { it.job.phase == OfflinePhase.ready } ?: ordered.first()
         val status = musicDownloadStatus(library, collectionId, network, tv)
         val ready = progress.phase == "ready"

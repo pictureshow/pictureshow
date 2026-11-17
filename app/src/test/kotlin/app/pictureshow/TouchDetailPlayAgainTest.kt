@@ -43,7 +43,9 @@ class TouchDetailPlayAgainTest {
     private fun label(target: String) = compose.onNodeWithTag("touch:detail:$target").fetchSemanticsNode().config
         .getOrElse(SemanticsProperties.Text) { emptyList() }.joinToString { it.text }
 
-    private fun page(finishedLine: String?): Pair<androidx.compose.runtime.MutableState<CatalogDetailState>, MutableList<Pair<MediaItem, Boolean>>> {
+    private fun page(
+        finishedLine: String?
+    ): Pair<androidx.compose.runtime.MutableState<CatalogDetailState>, MutableList<Pair<MediaItem, Boolean>>> {
         val plays = mutableListOf<Pair<MediaItem, Boolean>>()
         val state = mutableStateOf(
             CatalogDetailState(account, film, loading = true, playbackPending = true, finishedLine = finishedLine)

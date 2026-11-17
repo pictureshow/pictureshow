@@ -12,6 +12,7 @@ import app.pictureshow.core.offline.OfflineManifest
 import app.pictureshow.core.offline.OfflineMediaKind
 import app.pictureshow.core.offline.OfflinePhase
 import app.pictureshow.core.offline.OfflinePreset
+import app.pictureshow.core.offline.OfflineResourceRole
 import app.pictureshow.core.offline.offlineEntryId
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -49,12 +50,15 @@ class OfflineMusicSectionsTest {
         createdSequence = 10
     )
 
-    private fun sections(vararg entries: OfflineEntry, collections: List<OfflineCollection> = listOf(album), open: Set<String> = emptySet()) =
-        offlineSections(
-            OfflineLibrary(OfflineManifest(entries = entries.toList(), collections = collections)),
-            OfflineNetwork.unmetered,
-            open = open
-        )
+    private fun sections(
+        vararg entries: OfflineEntry,
+        collections: List<OfflineCollection> = listOf(album),
+        open: Set<String> = emptySet()
+    ) = offlineSections(
+        OfflineLibrary(OfflineManifest(entries = entries.toList(), collections = collections)),
+        OfflineNetwork.unmetered,
+        open = open
+    )
 
     @Test fun anAlbumIsOneRowWithItsTrackCountUnderReadyToPlay() {
         val list = sections(film, track("t1", 2), track("t2", 3), track("t3", 4))
@@ -85,12 +89,17 @@ class OfflineMusicSectionsTest {
         assertEquals(4, offlineRowPosition(list, list.ready[3].key))
     }
 
-    @Test fun aSharedTrackSitsUnderTheNewestCollectionHoldingIt() {
-        val playlist = OfflineCollection("pl", OfflineCollectionKind.playlist, "Invented playlist", null, listOf("t1"), createdSequence = 20)
-        val list = sections(track("t1", 2), track("t2", 3), track("t3", 4), collections = listOf(album, playlist))
-        assertEquals(listOf("collection:alb", "collection:pl"), list.ready.map { it.key })
-        assertEquals("2 tracks · ${offlineBytes(0)}", list.ready[0].status)
-        assertEquals("Playlist", list.ready[1].subtitle)
+    @Test fun aSharedTrackShowsUnderEachCollectionHoldingIt() {
+        val playlist = OfflineCollection("pl", OfflineCollectionKind.playlist, "Mix", itemIds = listOf("t1"), createdSequence = 20)
+        val tracks = arrayOf(track("t1", 2), track("t2", 3), track("t3", 4))
+        val list = sections(*tracks, collections = listOf(album, playlist), open = setOf("alb", "pl"))
+        assertEquals(
+            listOf("collection:alb", "alb:t3:original", "alb:t1:original", "alb:t2:original", "collection:pl", "pl:t1:original"),
+            list.ready.map { it.key }
+        )
+        assertEquals("3 tracks · ${offlineBytes(0)}", list.ready[0].status)
+        assertEquals("1 track · ${offlineBytes(0)}", list.ready[4].status)
+        assertEquals("Playlist", list.ready[4].subtitle)
     }
 
     @Test fun anAlbumStillComingIsInProgressAndOffersNoPlayUntilATrackIsReady() {
@@ -100,6 +109,19 @@ class OfflineMusicSectionsTest {
         assertEquals("Downloading · 0 of 3 tracks", row.status)
         assertEquals(listOf(OfflineAction.Tracks, OfflineAction.Delete), row.actions)
         assertEquals("Stop downloading Invented album and delete what's saved so far?", offlineCollectionDeleteQuestion(row))
+    }
+
+    /** Offline art: the cover lives on the album in Jellyfin, so a track saves its album's image. */
+    @Test fun aTrackSavesItsAlbumsCoverAndAFilmItsOwnPoster() {
+        fun artPath(item: OfflineApiItem): String {
+            val entry = offlineBuildEntry(item, OfflineChoice(item.id, OfflinePreset.original), 1)
+            return entry.requestFor(entry.resources.first { it.role == OfflineResourceRole.artwork }, "device", "session").path
+        }
+        val source = listOf(OfflineApiSource("s", "etag", "flac", 1))
+        assertEquals("/Items/alb/Images/Primary", artPath(OfflineApiItem("t1", "Song", "Audio", sources = source, albumId = "alb")))
+        assertEquals("/Items/t2/Images/Primary", artPath(OfflineApiItem("t2", "Song", "Audio", sources = source)))
+        val film = OfflineApiItem("m", "Film", "Movie", sources = listOf(OfflineApiSource("s", "etag", "mkv", 1)), albumId = "x")
+        assertEquals("/Items/m/Images/Primary", artPath(film))
     }
 
     @Test fun aTrackNoCollectionHoldsStaysItsOwnRow() {

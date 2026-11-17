@@ -495,10 +495,20 @@ internal fun rememberTouchDetailPresentation(
             TouchDetailAction(
                 target = "primary",
                 label = when {
-                    local != null -> if (playsAgain) "Play again" else if (local.startTicks > 0) resumeLabel(local.startTicks) else "Play"
+                    local != null -> when {
+                        playsAgain -> "Play again"
+                        local.startTicks > 0 -> resumeLabel(local.startTicks)
+                        else -> "Play"
+                    }
                     !pendingEnabled -> if (groupPlay != null && primaryFresh == "Play") groupPlay else primaryFresh
                     playQueued != null && playQueued != "primary" -> if (playsAgain) "Play again" else plain("primary")
-                    playsAgain -> detailPendingPresentationLabel(heldLabels, playQueued == "primary", captureOpen, "Play again", primaryPending)
+                    playsAgain -> detailPendingPresentationLabel(
+                        heldLabels,
+                        playQueued == "primary",
+                        captureOpen,
+                        "Play again",
+                        primaryPending
+                    )
                     else -> label("primary", playQueued == "primary", primaryPending)
                 },
                 // The longest resume wording stands in for any position, so fresh data arriving moves nothing.

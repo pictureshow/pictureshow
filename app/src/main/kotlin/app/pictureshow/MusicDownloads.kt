@@ -274,12 +274,15 @@ internal fun offlineMusicPlay(
     account: Account,
     library: OfflineLibrary?,
     entry: OfflineEntry,
+    /** The album or playlist row it was played from; otherwise the newest one holding the track. */
+    collectionId: String? = null,
     art: (OfflineEntry) -> java.io.File?
 ): MusicPlay? {
     if (entry.kind != OfflineMediaKind.audio) return null
     val manifest = library?.manifest ?: return null
     val ready = manifest.entries.filter { it.kind == OfflineMediaKind.audio && it.job.phase == OfflinePhase.ready }
-    val collection = manifest.collectionFor(entry.itemId)
+    val collection = collectionId?.let { id -> manifest.collections.firstOrNull { it.id == id && entry.itemId in it.itemIds } }
+        ?: manifest.collectionFor(entry.itemId)
     val byItem = ready.filter { it.preset == (collection?.preset ?: entry.preset) }.associateBy { it.itemId }
     val order = collection?.let { manifest.collectionPlayOrder(it.id) } ?: listOf(entry.itemId)
     val tracks = order.mapNotNull { byItem[it]?.musicTrack(art) }
@@ -294,8 +297,16 @@ internal fun OfflineEngine.artFile(accountKey: String, entry: OfflineEntry): jav
     entry.resources.firstOrNull { it.role == OfflineResourceRole.artwork && it.complete }?.let { resourceFile(accountKey, entry, it) }
 
 /** For Downloads: plays a music row through the music player and opens Now playing; anything else isn't handled here. */
-internal fun offlinePlayMusic(context: Context, account: Account, entry: OfflineEntry, engine: OfflineEngine, host: MusicHost): Boolean {
-    val play = offlineMusicPlay(account, engine.libraries.value[account.key], entry) { engine.artFile(account.key, it) } ?: return false
+internal fun offlinePlayMusic(
+    context: Context,
+    account: Account,
+    entry: OfflineEntry,
+    collectionId: String?,
+    engine: OfflineEngine,
+    host: MusicHost
+): Boolean {
+    val library = engine.libraries.value[account.key]
+    val play = offlineMusicPlay(account, library, entry, collectionId) { engine.artFile(account.key, it) } ?: return false
     host.request(play)
     return true
 }
@@ -359,11 +370,11 @@ internal fun musicListenFinished(ticks: Long, runtimeTicks: Long?): Boolean =
 
 /** Downloads' Play for a music row: true when it went to the music player. Without one (tests, no Koin), nothing is music. */
 @Composable
-internal fun rememberOfflineMusicPlay(account: Account): (OfflineEntry) -> Boolean {
+internal fun rememberOfflineMusicPlay(account: Account): (OfflineEntry, String?) -> Boolean {
     val context = LocalContext.current
     val engine = remember { org.koin.mp.KoinPlatform.getKoinOrNull()?.getOrNull<OfflineEngine>() }
     val host = remember { org.koin.mp.KoinPlatform.getKoinOrNull()?.getOrNull<MusicHost>() }
     return remember(account.key, engine, host) {
-        { entry -> engine != null && host != null && offlinePlayMusic(context, account, entry, engine, host) }
+        { entry, collection -> engine != null && host != null && offlinePlayMusic(context, account, entry, collection, engine, host) }
     }
 }

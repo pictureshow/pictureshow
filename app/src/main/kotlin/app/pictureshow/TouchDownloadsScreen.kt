@@ -66,7 +66,7 @@ private fun TouchSection(title: String) {
 internal fun OfflineDownloadsTouchScreen(
     account: Account,
     offline: Boolean,
-    onPlay: (OfflineEntry) -> Unit,
+    onPlay: (OfflineEntry, String?) -> Unit,
     onStorage: () -> Unit,
     onOnline: () -> Unit,
     onBack: (() -> Unit)?
@@ -201,7 +201,9 @@ internal fun OfflineRowTouch(account: Account, row: OfflineRow, controller: Offl
                                 Text(offlineActionLabel(action))
                             }
                         } else {
-                            TextButton(onClick = { controller.act(row, action) }, modifier = modifier) { Text(offlineRowActionLabel(row, action)) }
+                            TextButton(onClick = { controller.act(row, action) }, modifier = modifier) {
+                                Text(offlineRowActionLabel(row, action))
+                            }
                         }
                     }
                     if (offlineOffersStorage(row.entry.job)) {
@@ -235,7 +237,7 @@ private fun OfflinePasswordTouch(controller: OfflineDownloadsController) {
 
 @Composable
 internal fun OfflineStorageTouchScreen(account: Account, onBack: () -> Unit) {
-    val view = rememberOfflineDownloads(account) {}
+    val view = rememberOfflineDownloads(account) { _, _ -> }
     val controller = view.controller
     val engine: OfflineEngine = koinInject()
     val manifest = view.library.manifest

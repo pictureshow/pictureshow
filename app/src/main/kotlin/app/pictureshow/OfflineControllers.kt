@@ -49,7 +49,8 @@ internal class OfflineDownloadsController(
     val account: Account,
     private val engine: OfflineEngine,
     private val scope: CoroutineScope,
-    private val onPlay: (OfflineEntry) -> Unit,
+    /** The entry, and the album or playlist it was played from, if any. */
+    private val onPlay: (OfflineEntry, String?) -> Unit,
     private val openState: MutableState<List<String>> = mutableStateOf(emptyList())
 ) {
     var confirm by mutableStateOf<OfflineConfirm?>(null)
@@ -65,7 +66,7 @@ internal class OfflineDownloadsController(
         val key = account.key
         val id = row.entry.id
         when (action) {
-            OfflineAction.Play -> onPlay(row.entry)
+            OfflineAction.Play -> onPlay(row.entry, row.collection?.id ?: row.parent)
             OfflineAction.Delete -> confirm = OfflineConfirm.One(row)
             OfflineAction.Tracks -> row.collection?.let { collection ->
                 open = if (collection.id in open) open - collection.id else open + collection.id
@@ -129,7 +130,11 @@ internal class OfflineDownloadsView(
 }
 
 @Composable
-internal fun rememberOfflineDownloads(account: Account, tv: Boolean = false, onPlay: (OfflineEntry) -> Unit): OfflineDownloadsView {
+internal fun rememberOfflineDownloads(
+    account: Account,
+    tv: Boolean = false,
+    onPlay: (OfflineEntry, String?) -> Unit
+): OfflineDownloadsView {
     val engine: OfflineEngine = koinInject()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()

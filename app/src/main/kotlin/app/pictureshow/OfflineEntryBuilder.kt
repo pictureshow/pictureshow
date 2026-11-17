@@ -142,6 +142,7 @@ internal fun offlineBuildEntry(item: OfflineApiItem, choice: OfflineChoice, sequ
             OfflineLabels(
                 title = item.name,
                 album = item.album,
+                albumId = item.albumId,
                 artist = item.artists.filter(String::isNotBlank).joinToString(", ").ifBlank { null } ?: item.albumArtist,
                 trackNumber = item.episodeNumber,
                 discNumber = item.seasonNumber,
@@ -185,7 +186,11 @@ internal fun OfflineEntry.requestFor(resource: OfflineResource, deviceId: String
             playSessionId
         )
         OfflineResourceRole.subtitle -> offlineSubtitleRequest(itemId, source, resource.serverStreamIndex ?: 0)
-        OfflineResourceRole.artwork -> OfflineRequest("/Items/$itemId/Images/Primary", listOf("maxWidth" to "480", "format" to "Jpg"))
+        // Jellyfin keeps a track's cover on its album; the track's own Primary image is usually missing.
+        OfflineResourceRole.artwork -> OfflineRequest(
+            "/Items/${labels.albumId.takeIf { kind == OfflineMediaKind.audio } ?: itemId}/Images/Primary",
+            listOf("maxWidth" to "480", "format" to "Jpg")
+        )
     }
 }
 
