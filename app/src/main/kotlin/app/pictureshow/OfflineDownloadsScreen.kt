@@ -5,6 +5,7 @@ package app.pictureshow
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,6 +33,7 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.KeyEventType
@@ -392,11 +394,23 @@ internal fun OfflineRowTv(
                     runCatching { cancel.requestFocus() }
                 }
             } else {
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                // A track sits indented under its album, so the nearest button below the album's is its Delete; enter on Play instead.
+                val trackEntry = remember { FocusRequester() }
+                val trackRow = row.parent != null
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = if (trackRow) {
+                        Modifier.focusProperties { onEnter = { runCatching { trackEntry.requestFocus() } } }.focusGroup()
+                    } else {
+                        Modifier
+                    }
+                ) {
                     row.actions.forEach { action ->
                         Button(
                             onClick = { controller.act(row, action) },
                             modifier = Modifier
+                                .then(if (trackRow && action == row.actions.first()) Modifier.focusRequester(trackEntry) else Modifier)
                                 .then(if (focus != null && action == focusAction) Modifier.focusRequester(focus) else Modifier)
                                 .then(if (action == OfflineAction.Delete) Modifier.focusRequester(deleteFocus) else Modifier)
                                 .testTag("downloads:${action.name.lowercase()}:${row.key}")
