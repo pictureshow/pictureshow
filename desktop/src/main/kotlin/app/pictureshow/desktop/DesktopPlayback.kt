@@ -54,6 +54,14 @@ interface DesktopPlaybackEngine : AutoCloseable {
     fun selectedTracks(): DesktopSelectedTracks? = null
     fun selectAudio(index: Int): Boolean = false
     fun selectSubtitle(index: Int): Boolean = false
+    /** Stream A: subtitle look and audio output for the next [open] (SET-02..04, 15, 19). */
+    fun preferences(prefs: PlaybackPreferences) {}
+    /** PLAY-25: playback rate. False when the engine can't play at it. */
+    fun speed(value: Float): Boolean = false
+    /** PLAY-11: positive shows captions later. */
+    fun subtitleDelay(ms: Int) {}
+    /** PLAY-25: whether encoded audio is going out undecoded right now (speed must stay 1x). */
+    fun passthroughActive(): Boolean = false
 }
 data class DesktopSelectedTracks(
     val audioId: Int?, val subtitleId: Int?, val subtitleText: String, val subtitleVisible: Boolean,
@@ -218,6 +226,8 @@ class NativeDesktopPlayback(private val directory: File) : DesktopPlaybackEngine
         player.option("sub-use-margins", "no")
         player.option("sub-pos", "100")
         player.option("sub-margin-y", "24")
+        // An option this libmpv doesn't know (an older build) is skipped, not fatal: the defaults still play.
+        desktopMpvOptions(playbackPreferences).forEach { (name, value) -> runCatching { player.option(name, value) } }
         proxy = DesktopMediaProxy(account, decision)
         if (Platform.isLinux()) {
             val hdr = decision.mediaSource.mediaStreams.any { it.type == MediaStreamType.Video && it.videoRangeType !in listOf(null, VideoRangeType.Unknown, VideoRangeType.SDR) }
@@ -369,6 +379,11 @@ class NativeDesktopPlayback(private val directory: File) : DesktopPlaybackEngine
         mpv?.command("seek", (target - offset).coerceAtLeast(0.0).toString(), "absolute+exact")
     }
     override fun volume(value: Int) { mpv?.set("volume", value.coerceIn(0, 100).toString()) }
+    @Volatile private var playbackPreferences = PlaybackPreferences.decode(passthrough = false)
+    override fun preferences(prefs: PlaybackPreferences) { playbackPreferences = prefs }
+    override fun speed(value: Float): Boolean = !stopped.get() && runCatching { mpv?.set("speed", value.toString()) }.isSuccess && mpv != null
+    override fun subtitleDelay(ms: Int) { if (!stopped.get()) runCatching { mpv?.set("sub-delay", (ms / 1000.0).toString()) } }
+    override fun passthroughActive(): Boolean = runCatching { mpv?.get("audio-out-params/format")?.startsWith("spdif") == true }.getOrDefault(false)
     override fun mute(muted: Boolean) { if (!stopped.get()) mpv?.set("mute", if (muted) "yes" else "no") }
     override fun viewport(topRatio: Double, bottomRatio: Double) {
         if (!topRatio.isFinite() || !bottomRatio.isFinite() || topRatio < 0 || bottomRatio < 0 || topRatio + bottomRatio >= 1) return

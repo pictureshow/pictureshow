@@ -45,7 +45,8 @@ class DesktopSettingsStore(private val file: File) {
             conversionNotice = p.getProperty("conversionNotice")?.toBooleanStrictOrNull() ?: true,
             autoplayNext = p.getProperty("autoplayNext")?.toBooleanStrictOrNull() ?: true,
             volume = (p.getProperty("volume")?.toIntOrNull() ?: 80).coerceIn(0, 100),
-            largeInterface = p.getProperty("largeInterface")?.toBooleanStrictOrNull() ?: false
+            largeInterface = p.getProperty("largeInterface")?.toBooleanStrictOrNull() ?: false,
+            playback = readDesktopPlayback(p)
         )
     }
     fun write(settings: DesktopSettings) {
@@ -57,6 +58,7 @@ class DesktopSettingsStore(private val file: File) {
             setProperty("autoplayNext", settings.autoplayNext.toString())
             setProperty("volume", settings.volume.toString())
             setProperty("largeInterface", settings.largeInterface.toString())
+            writeDesktopPlayback(this, settings.playback)
         }
         val bytes = java.io.ByteArrayOutputStream().use { out -> p.store(out, "Pictureshow desktop preferences"); out.toByteArray() }
         atomicPrivateWrite(file, bytes)

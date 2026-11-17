@@ -56,3 +56,5 @@ Snapshot 2026-11-13 after merging main `81f73948`: all 45 shared JSON contracts 
 | `playback-start.json` | 4 | `FrameRateMatchVectorsTest` |
 | `player-quality.json` | 14 | `PlaybackQualityPresentationVectorsTest` |
 | `settings-presentation.json` | 65 | `SettingsPresentationVectorsTest` |
+| `subtitle-download.json` | 18 | `SubtitleDownloadVectorsTest` |
+| `subtitle-timing.json` | 20 | `SubtitleTimingVectorsTest` |

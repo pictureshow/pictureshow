@@ -154,6 +154,8 @@ const pendingPortSuites = new Set([
     "player-control-affordances",
     // SUB-DL-01..04 remote subtitle search and stream adoption (Android leg 163): web port owed.
     "subtitle-download",
+    // PLAY-11 subtitle timing wording and steps (core SubtitleTiming): web's player-subtitles.ts port of the runner owed.
+    "subtitle-timing",
 ]);
 // Desktop slice 1 added these shared application policies. Their web adapters/UI
 // are still owed; list exact case IDs rather than accepting unknown operations.

@@ -92,6 +92,8 @@ class ReferenceParityVectorsTest {
                         "account-sign-out",
                         // SubtitleDownloadVectorsTest executes SUB-DL-01..04.
                         "subtitle-download",
+                        // SubtitleTimingVectorsTest executes PLAY-11's timing rules.
+                        "subtitle-timing",
                         "recovery",
                         "playback-information",
                         "playback-formats", "catalog-return",

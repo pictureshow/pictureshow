@@ -13,9 +13,11 @@ data class DesktopSettings(
     val conversionNotice: Boolean = true,
     val autoplayNext: Boolean = true,
     val volume: Int = 80,
-    val largeInterface: Boolean = false
+    val largeInterface: Boolean = false,
+    /** Stream A: subtitles, segments, audio output and tuning (SET-02..05, 13..19). Bitrate and notice stay above. */
+    val playback: PlaybackPreferences = desktopDefaultPlayback()
 ) {
-    fun preferences() = PlaybackPreferences.decode(bitrateMbps = bitrateMbps, conversionNotice = conversionNotice)
+    fun preferences() = playback.copy(bitrateMbps = PlaybackPreferences.decode(bitrateMbps = bitrateMbps).bitrateMbps, conversionNotice = conversionNotice)
 }
 
 data class DesktopPlaybackState(
@@ -37,14 +39,15 @@ data class DesktopPlaybackState(
     val liveChannel: app.pictureshow.core.livetv.LiveChannel? = null,
     val liveWindow: ObservedLiveWindow? = null,
     val bufferExpired: Boolean = false,
-    val received: DesktopReceivedFormats = DesktopReceivedFormats()
+    val received: DesktopReceivedFormats = DesktopReceivedFormats(),
+    val extras: DesktopPlayerExtras = DesktopPlayerExtras()
 )
 
 /**
  * The card shown after a genuine end. [next] null means "Finished" (a film or the last episode).
  * [secondsLeft] counts down to the next episode; null means no countdown (autoplay off or cancelled).
  */
-data class DesktopEndCard(val next: MediaItem?, val secondsLeft: Int? = null)
+data class DesktopEndCard(val next: MediaItem?, val secondsLeft: Int? = null, /** PLAY-30: ask before the next episode. */ val stillWatching: Boolean = false)
 
 /** PLAY-17: the return to a title after it played to its end, for that title's page only. */
 data class DesktopFinished(val itemId: String, val line: String)
