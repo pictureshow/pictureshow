@@ -643,6 +643,23 @@ class MusicHostTest {
         assertTrue(music.state.value.queue!!.paused.not())
     }
 
+    /** MUS-10: a paused queue isn't moved by a failure the viewer didn't start; it stays on the track and says why. */
+    @Test fun aPausedQueueStaysOnAnOnlineOnlyTrackItCantReach() {
+        unreachable = true
+        download("c")
+        val held = kotlinx.coroutines.CompletableDeferred<Unit>().also { negotiateGate = it }
+        val music = host()
+        ready(music)
+        music.request(album("b", "c"))
+        music.pause()
+        until("the committed pause") { music.state.value.queue?.paused == true }
+        held.complete(Unit)
+        until("the failed request") { music.state.value.message != null }
+        assertEquals("Can't reach the server. Your queue is saved: press Play to try again.", music.state.value.message)
+        assertTrue(music.state.value.queue!!.paused)
+        assertEquals("b", music.state.value.queue!!.let { q -> q.entries.first { it.id == q.current }.media })
+    }
+
     /** MUS-10: with nothing downloaded after it, the queue stops on the track and says so instead of hunting. */
     @Test fun anOnlineOnlyTrackWithNothingDownloadedAfterItStopsAndSaysWhy() {
         unreachable = true

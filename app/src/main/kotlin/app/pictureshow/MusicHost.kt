@@ -40,6 +40,7 @@ import app.pictureshow.core.control.QueueStoreState
 import app.pictureshow.core.control.reduceQueue
 import app.pictureshow.core.control.reduceQueueStore
 import app.pictureshow.core.music.MUSIC_QUEUE_LIMIT
+import app.pictureshow.core.music.MUSIC_UNREACHABLE_TEXT
 import app.pictureshow.core.music.MusicOutput
 import app.pictureshow.core.music.MusicPlayRequest
 import app.pictureshow.core.music.MusicReportEffect
@@ -1214,7 +1215,7 @@ internal class MusicHost(
 
                     index > 0 -> return applyWindow(active, target)
 
-                    outcome is ClientResult.Failure -> return negotiationFailed(outcome.error)
+                    outcome is ClientResult.Failure -> return negotiationFailed(outcome.error, entry)
 
                     else -> {
                         // The server has no way to give this device this file: skipping it is the honest move.
@@ -1227,7 +1228,7 @@ internal class MusicHost(
         }
     }
 
-    private fun negotiationFailed(error: ClientError) {
+    private fun negotiationFailed(error: ClientError, entry: String) {
         if (group() != null && error.kind != ErrorKind.EXPIRED) {
             enqueue { failCurrent() }
             return
@@ -1237,32 +1238,37 @@ internal class MusicHost(
 
             error.status == 403 || error.status == 404 -> enqueue { failCurrent() }
 
-            else -> enqueue { unreachable(always = true) }
+            else -> enqueue { unreachable(entry, always = true) }
         }
     }
 
     /**
      * The current track needs the server and the server can't be reached, whether that showed while asking for the track or
-     * while streaming it (MUS-10). With [always] false, a queue with nothing downloaded in it is left to the caller's own wording.
-     * Returns whether this handled it.
+     * while streaming it (MUS-10). With [always] false, a queue with nothing downloaded in it, or a failure of a downloaded track
+     * itself, is left to the caller. [entry] is the queue entry that failed: once the queue has moved on (the viewer pressed Next
+     * before this ran), the failure is old news and changes nothing. Returns whether this handled it.
      */
-    private suspend fun unreachable(always: Boolean): Boolean {
+    private suspend fun unreachable(entry: String?, always: Boolean): Boolean {
         val active = account
         val q = queue.committed
-        val title = q.entries.firstOrNull { it.id == q.current }?.media?.let(tracks::get)?.title.orEmpty()
+        if (entry != null && entry != q.current) return true
+        val media = q.entries.firstOrNull { it.id == q.current }?.media
+        val title = media?.let(tracks::get)?.title.orEmpty()
         val downloaded = active?.let { local?.downloaded(it) }.orEmpty()
-        if (!always && q.entries.none { it.media in downloaded }) return false
+        if (!always && (media in downloaded || q.entries.none { it.media in downloaded })) return false
         val unreachable = musicUnreachable(q, downloaded, title)
-        if (unreachable.step == "skip") {
+        // A paused queue isn't moved by a failure the viewer didn't start: it stays put and says why.
+        if (unreachable.step == "skip" && !q.paused) {
             // One skip per track per pass: the reducer marks this one failed, so a queue that comes round again stops.
             commit {
                 QueueEvent("error", revision = it.revision, generation = it.generation, completion = it.completion, music = true)
             }
+            publish { it.copy(message = unreachable.message) }
         } else {
             player?.playWhenReady = false
             commit { QueueEvent("pause", revision = it.revision, generation = it.generation) }
+            publish { it.copy(message = if (unreachable.step == "skip") MUSIC_UNREACHABLE_TEXT else unreachable.message) }
         }
-        publish { it.copy(message = unreachable.message) }
         return true
     }
 
@@ -1575,12 +1581,15 @@ internal class MusicHost(
             when {
                 cause is HttpDataSource.InvalidResponseCodeException && cause.responseCode == 401 -> enqueue { revoked() }
 
-                error.errorCode in NETWORK_ERRORS -> enqueue {
-                    savePosition()
-                    // A stream that drops in a queue with downloads in it follows the offline rule, not a bare pause.
-                    if (unreachable(always = false)) return@enqueue
-                    commit { QueueEvent("pause", revision = it.revision, generation = it.generation) }
-                    publish { it.copy(message = "Lost the connection. Your place is saved: press Play to try again.") }
+                error.errorCode in NETWORK_ERRORS -> {
+                    val failed = player?.currentMediaItem?.mediaId
+                    enqueue {
+                        savePosition()
+                        // A stream that drops in a queue with downloads in it follows the offline rule, not a bare pause.
+                        if (unreachable(failed, always = false)) return@enqueue
+                        commit { QueueEvent("pause", revision = it.revision, generation = it.generation) }
+                        publish { it.copy(message = "Lost the connection. Your place is saved: press Play to try again.") }
+                    }
                 }
 
                 else -> enqueue {
