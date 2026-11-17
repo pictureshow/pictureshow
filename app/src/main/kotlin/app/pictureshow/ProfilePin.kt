@@ -33,6 +33,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -86,6 +87,15 @@ internal fun ProfilePinPad(
     val palette = pinPalette(tv)
     var pin by remember { mutableStateOf("") }
     val first = remember { FocusRequester() }
+    val ok = remember { FocusRequester() }
+    // A digit from the remote's number keys moves focus to OK, so the remote's OK/Enter submits instead of pressing the
+    // key focus rested on (rc39: Enter typed another "1"). Requested after the digit lands, when OK is enabled. A digit
+    // typed by pressing a focused key (D-pad only) leaves focus where it is.
+    var focusOk by remember { mutableStateOf(0) }
+    var okFocused by remember { mutableStateOf(false) }
+    var focusFirst by remember { mutableStateOf(0) }
+    LaunchedEffect(focusOk) { if (focusOk > 0) runCatching { ok.requestFocus() } }
+    LaunchedEffect(focusFirst) { if (focusFirst > 0) runCatching { first.requestFocus() } }
     // During a wait the keys rest too, so nobody types a PIN that would be thrown away.
     val keysOn = !busy && waitSeconds == 0
     LaunchedEffect(clearSignal) { pin = "" }
@@ -112,11 +122,15 @@ internal fun ProfilePinPad(
         modifier.widthIn(max = 420.dp).verticalScroll(rememberScrollState()).onPreviewKeyEvent { event ->
             if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
             pinDigit(event.key)?.let {
+                val before = pin.length
                 type(it)
+                if (pin.length > before) focusOk++
                 true
             } ?: when (event.key) {
                 Key.Backspace, Key.Delete -> {
                     pin = pin.dropLast(1)
+                    // OK turns off with an empty PIN; don't leave focus on a disabled key.
+                    if (pin.isEmpty() && okFocused) focusFirst++
                     true
                 }
                 Key.NumPadEnter -> {
@@ -184,7 +198,8 @@ internal fun ProfilePinPad(
                 pin = pin.dropLast(1)
             }
             PinKey("0", tv, keysOn, Modifier.testTag("pin:key:0")) { type('0') }
-            PinKey(okLabel, tv, keysOn && pin.isNotEmpty(), Modifier.testTag("pin:ok"), primary = true) { submit() }
+            val okModifier = Modifier.testTag("pin:ok").focusRequester(ok).onFocusChanged { okFocused = it.isFocused }
+            PinKey(okLabel, tv, keysOn && pin.isNotEmpty(), okModifier, primary = true) { submit() }
         }
         actions()
     }

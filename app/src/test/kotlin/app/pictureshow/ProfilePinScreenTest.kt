@@ -6,6 +6,7 @@ package app.pictureshow
 import android.app.Application
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.test.assertContentDescriptionContains
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -123,6 +124,61 @@ class ProfilePinScreenTest {
         waitUntil { runCatching { compose.onNodeWithTag("pin:key:1").assertIsFocused() }.isSuccess }
         press("2580")
         compose.runOnIdle { assertEquals("2580", chosen) }
+    }
+
+    private fun lockScreen(onUnlocked: () -> Unit): ProfileLockStore {
+        val store = ProfileLockStore(Memory(), JvmProfilePinHasher(rounds = 1_000))
+        runBlocking {
+            store.set("parent", "2468", askOnStart = true)
+            store.markUnlocked(null)
+        }
+        compose.setContent {
+            app.pictureshow.ui.PictureshowTheme {
+                ProfileLockScreen(store, "parent", "Parent", tv = true, onUnlocked = onUnlocked, onSwitch = {}, onPassword = {})
+            }
+        }
+        return store
+    }
+
+    /**
+     * rc39: number keys, then the remote's OK (Enter or D-pad center) typed another "1", because focus rested on the
+     * "1" key. A number-key digit moves focus to OK, so OK submits whichever code the remote sends.
+     */
+    private fun numberKeysThen(enter: Key) {
+        remote()
+        var opened = 0
+        lockScreen { opened++ }
+        compose.onNodeWithTag("pin:key:1").requestFocus()
+        compose.onNodeWithTag("pin:key:1").assertIsFocused()
+        compose.onNodeWithTag("pin:key:1").performKeyInput { "2468".forEach { pressKey(digitKeys[it - '0']) } }
+        waitUntil { runCatching { compose.onNodeWithTag("pin:ok").assertIsFocused() }.isSuccess }
+        compose.onNodeWithTag("pin:ok").performKeyInput { pressKey(enter) }
+        waitUntil { opened == 1 }
+    }
+
+    @Test
+    fun numberKeysThenEnterSubmits() = numberKeysThen(Key.Enter)
+
+    @Test
+    fun numberKeysThenDPadCenterSubmits() = numberKeysThen(Key.DirectionCenter)
+
+    /** A D-pad-only remote (the projector) types by pressing the focused key: focus stays on it until the viewer moves. */
+    @Test
+    fun dPadCenterOnAKeyTypesItAndFocusStays() {
+        remote()
+        var opened = 0
+        lockScreen { opened++ }
+        "2468".forEach { digit ->
+            val key = compose.onNodeWithTag("pin:key:$digit")
+            key.requestFocus()
+            key.performKeyInput { pressKey(Key.DirectionCenter) }
+            compose.waitForIdle()
+            key.assertIsFocused()
+        }
+        compose.onNodeWithTag("pin:dots").assertContentDescriptionContains("4 digits", substring = true)
+        compose.onNodeWithTag("pin:ok").requestFocus()
+        compose.onNodeWithTag("pin:ok").performKeyInput { pressKey(Key.DirectionCenter) }
+        waitUntil { opened == 1 }
     }
 
     @Test
