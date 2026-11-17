@@ -5,11 +5,16 @@ package app.pictureshow
 
 import android.app.Application
 import androidx.activity.ComponentActivity
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.test.requestFocus
 import app.pictureshow.core.JvmProfilePinHasher
 import app.pictureshow.core.ProfileLockStore
 import app.pictureshow.core.TextPersistence
@@ -39,6 +44,24 @@ class ProfilePinScreenTest {
         compose.onNodeWithTag("pin:ok").performClick()
     }
 
+    /**
+     * A remote: no touch mode (performClick would inject touches, and in touch mode TV buttons can't take focus), focus
+     * resting on "0", digits from the remote's number keys and Enter to submit. Without PIN focus reset, focus would
+     * stay on "0" after each try.
+     */
+    private fun remote() = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().setInTouchMode(false)
+
+    private val digitKeys = listOf(Key.Zero, Key.One, Key.Two, Key.Three, Key.Four, Key.Five, Key.Six, Key.Seven, Key.Eight, Key.Nine)
+
+    private fun press(pin: String) {
+        compose.onNodeWithTag("pin:key:0").requestFocus()
+        compose.onNodeWithTag("pin:key:0").assertIsFocused()
+        compose.onNodeWithTag("pin:key:0").performKeyInput {
+            pin.forEach { pressKey(digitKeys[it - '0']) }
+            pressKey(Key.NumPadEnter)
+        }
+    }
+
     private fun waitUntil(condition: () -> Boolean) = compose.waitUntil(10_000) { condition() }
 
     @Test
@@ -65,6 +88,41 @@ class ProfilePinScreenTest {
         assertEquals("parent", store.unlocked.value)
         compose.onNodeWithTag("pin:switch").performClick()
         compose.runOnIdle { assertEquals(1, switched) }
+    }
+
+    /** On a remote, focus goes back to "1" after a wrong PIN and on "Type the PIN again" (rc38 finding 1). */
+    @Test
+    fun focusReturnsToTheFirstKeyAfterEachTry() {
+        remote()
+        val store = ProfileLockStore(Memory(), JvmProfilePinHasher(rounds = 1_000))
+        runBlocking {
+            store.set("parent", "2468", askOnStart = true)
+            store.markUnlocked(null)
+        }
+        compose.setContent {
+            app.pictureshow.ui.PictureshowTheme {
+                ProfileLockScreen(store, "parent", "Parent", tv = true, onUnlocked = {}, onSwitch = {}, onPassword = {})
+            }
+        }
+        press("1111")
+        waitUntil { runCatching { compose.onNodeWithTag("pin:note").assertTextContains("didn't match", substring = true) }.isSuccess }
+        waitUntil { runCatching { compose.onNodeWithTag("pin:key:1").assertIsFocused() }.isSuccess }
+        compose.onNodeWithTag("pin:key:1").assertIsFocused()
+    }
+
+    @Test
+    fun theConfirmStepStartsOnTheFirstKey() {
+        var chosen: String? = null
+        remote()
+        compose.setContent {
+            app.pictureshow.ui.PictureshowTheme {
+                ProfilePinSetup(tv = true, name = "Parent", onDone = { chosen = it }, onCancel = {})
+            }
+        }
+        press("2580")
+        waitUntil { runCatching { compose.onNodeWithTag("pin:key:1").assertIsFocused() }.isSuccess }
+        press("2580")
+        compose.runOnIdle { assertEquals("2580", chosen) }
     }
 
     @Test

@@ -325,7 +325,13 @@ the platform player's answer (`platformMethod`, `platformReasons`, TranscodeReas
 answer `mpvMethod` (null when never asked). Expected: `engine` (Media3 or Mpv) and `askedMpv`, whether a PlaybackInfo
 request carried mpv's profile. An explicit mpv choice asks with mpv first and never asks the platform profile; Automatic
 asks mpv only when the platform answer converts for mpv-solvable reasons only, and keeps mpv only if mpv's answer
-doesn't convert.
+doesn't convert. Optional `mpvFailed` (default false): PLAY-61's watchdog gave up on mpv for this viewing, so neither
+choice asks with mpv's profile again.
+
+Operation `first-frame` (PLAY-61). Input: `loaded` (the file opened), `firstFrame`, `dataReadyForMs` (how long at least
+2 s of media has been buffered, null if never), `loadedForMs` and `passthrough` (the open passes compressed audio
+through). Expected: `action`, one of Wait, WithoutPassthrough (reopen on mpv with decoded audio) or Platform (reopen on
+the built-in player with the notice). Stalled means `dataReadyForMs` >= 8000 or `loadedForMs` >= 20000, with no picture.
 
 ### playback-mode
 

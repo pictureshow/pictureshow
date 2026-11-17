@@ -392,6 +392,160 @@
         "engine": "Media3",
         "askedMpv": false
       }
+    },
+    {
+      "id": "playback-engine.mpv-failed-this-viewing-uses-platform",
+      "operation": "engine",
+      "input": {
+        "choice": "Mpv",
+        "mpvAvailable": true,
+        "live": false,
+        "offline": false,
+        "syncPlay": false,
+        "audio": false,
+        "platformMethod": "DirectPlay",
+        "platformReasons": [],
+        "mpvMethod": null,
+        "mpvFailed": true
+      },
+      "expected": {
+        "engine": "Media3",
+        "askedMpv": false
+      }
+    },
+    {
+      "id": "playback-engine.automatic-mpv-failed-does-not-retry-mpv",
+      "operation": "engine",
+      "input": {
+        "choice": "Automatic",
+        "mpvAvailable": true,
+        "live": false,
+        "offline": false,
+        "syncPlay": false,
+        "audio": false,
+        "platformMethod": "Transcode",
+        "platformReasons": [
+          "ContainerNotSupported"
+        ],
+        "mpvMethod": null,
+        "mpvFailed": true
+      },
+      "expected": {
+        "engine": "Media3",
+        "askedMpv": false
+      }
+    },
+    {
+      "id": "playback-engine.first-frame.not-loaded-waits",
+      "operation": "first-frame",
+      "input": {
+        "loaded": false,
+        "firstFrame": false,
+        "dataReadyForMs": 60000,
+        "loadedForMs": 60000,
+        "passthrough": true
+      },
+      "expected": {
+        "action": "Wait"
+      }
+    },
+    {
+      "id": "playback-engine.first-frame.picture-shown-waits",
+      "operation": "first-frame",
+      "input": {
+        "loaded": true,
+        "firstFrame": true,
+        "dataReadyForMs": 60000,
+        "loadedForMs": 60000,
+        "passthrough": true
+      },
+      "expected": {
+        "action": "Wait"
+      }
+    },
+    {
+      "id": "playback-engine.first-frame.buffered-under-ready-waits",
+      "operation": "first-frame",
+      "input": {
+        "loaded": true,
+        "firstFrame": false,
+        "dataReadyForMs": 7999,
+        "loadedForMs": 12000,
+        "passthrough": true
+      },
+      "expected": {
+        "action": "Wait"
+      }
+    },
+    {
+      "id": "playback-engine.first-frame.buffered-ready-passthrough-retries-decoded",
+      "operation": "first-frame",
+      "input": {
+        "loaded": true,
+        "firstFrame": false,
+        "dataReadyForMs": 8000,
+        "loadedForMs": 9000,
+        "passthrough": true
+      },
+      "expected": {
+        "action": "WithoutPassthrough"
+      }
+    },
+    {
+      "id": "playback-engine.first-frame.buffered-ready-decoded-goes-platform",
+      "operation": "first-frame",
+      "input": {
+        "loaded": true,
+        "firstFrame": false,
+        "dataReadyForMs": 8000,
+        "loadedForMs": 9000,
+        "passthrough": false
+      },
+      "expected": {
+        "action": "Platform"
+      }
+    },
+    {
+      "id": "playback-engine.first-frame.slow-network-under-ceiling-waits",
+      "operation": "first-frame",
+      "input": {
+        "loaded": true,
+        "firstFrame": false,
+        "dataReadyForMs": null,
+        "loadedForMs": 19999,
+        "passthrough": true
+      },
+      "expected": {
+        "action": "Wait"
+      }
+    },
+    {
+      "id": "playback-engine.first-frame.ceiling-without-buffer-retries-decoded",
+      "operation": "first-frame",
+      "input": {
+        "loaded": true,
+        "firstFrame": false,
+        "dataReadyForMs": null,
+        "loadedForMs": 20000,
+        "passthrough": true
+      },
+      "expected": {
+        "action": "WithoutPassthrough"
+      }
+    },
+    {
+      "id": "playback-engine.first-frame.ceiling-decoded-goes-platform",
+      "operation": "first-frame",
+      "input": {
+        "loaded": true,
+        "firstFrame": false,
+        "dataReadyForMs": 1000,
+        "loadedForMs": 20000,
+        "passthrough": false
+      },
+      "expected": {
+        "action": "Platform"
+      }
     }
   ]
 }

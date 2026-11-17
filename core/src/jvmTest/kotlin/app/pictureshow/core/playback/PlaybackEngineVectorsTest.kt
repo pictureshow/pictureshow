@@ -14,7 +14,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
-/** PLAY-60 vectors: which engine plays, and whether the server is asked with mpv's profile. */
+/** PLAY-60/61 vectors: which engine plays, whether the server is asked with mpv's profile, and the first-frame watchdog. */
 class PlaybackEngineVectorsTest {
     @Test fun engineChoiceMatchesPortableRule() {
         val text = requireNotNull(javaClass.classLoader.getResourceAsStream("parity-vectors/playback-engine.json"))
@@ -23,17 +23,34 @@ class PlaybackEngineVectorsTest {
         assertEquals("playback-engine", document.getValue("suite").jsonPrimitive.content)
         val cases = document.getValue("cases").jsonArray
         assertTrue(cases.isNotEmpty())
+        assertTrue(cases.any { it.jsonObject.getValue("operation").jsonPrimitive.content == "first-frame" })
         for (element in cases) {
             val case = element.jsonObject
-            assertEquals("engine", case.getValue("operation").jsonPrimitive.content)
             val input = case.getValue("input").jsonObject
+            if (case.getValue("operation").jsonPrimitive.content == "first-frame") {
+                val action = EngineFirstFrame.action(
+                    loaded = input.flag("loaded"),
+                    firstFrame = input.flag("firstFrame"),
+                    dataReadyForMs = input["dataReadyForMs"]?.takeUnless { it is JsonNull }?.jsonPrimitive?.content?.toLong(),
+                    loadedForMs = input.text("loadedForMs").toLong(),
+                    passthrough = input.flag("passthrough")
+                )
+                assertEquals(
+                    case.getValue("expected"),
+                    JsonObject(mapOf("action" to JsonPrimitive(action.name))),
+                    case.getValue("id").jsonPrimitive.content
+                )
+                continue
+            }
+            assertEquals("engine", case.getValue("operation").jsonPrimitive.content)
             val context = PlaybackEngineContext(
                 choice = PlaybackEngineChoice.valueOf(input.text("choice")),
                 mpvAvailable = input.flag("mpvAvailable"),
                 live = input.flag("live"),
                 offline = input.flag("offline"),
                 syncPlay = input.flag("syncPlay"),
-                audio = input.flag("audio")
+                audio = input.flag("audio"),
+                mpvFailed = input["mpvFailed"]?.jsonPrimitive?.boolean ?: false
             )
             val method = PlayMethod.valueOf(input.text("platformMethod"))
             val reasons = input.getValue("platformReasons").jsonArray.map { it.jsonPrimitive.content }

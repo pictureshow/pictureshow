@@ -129,14 +129,34 @@ internal class PlaybackHostState(
 
     /** The player menu's engine pick: reopens this viewing at its position with the new engine. */
     fun chooseEngine(choice: app.pictureshow.core.playback.PlaybackEngineChoice) {
-        if (choice == engineChoice) return
+        if (choice == engineChoice && !mpvFailed) return
+        // Picking mpv again from the player is the viewer's retry after a fallback.
+        mpvFailed = false
         engineOverride = choice
+        controller?.routeChanged()
+    }
+
+    /**
+     * PLAY-61: mpv showed no picture for this viewing, so the rest of it plays on the built-in player and the player
+     * says why ([engineFallbackNotice], once).
+     */
+    var mpvFailed by mutableStateOf(false)
+        private set
+    var engineFallbackNotice by mutableStateOf(false)
+
+    /** The pick the player menu shows: after a fallback this viewing is on the built-in player, so it offers mpv again. */
+    val shownEngineChoice get() = if (mpvFailed) app.pictureshow.core.playback.PlaybackEngineChoice.Automatic else engineChoice
+
+    fun engineFailed() {
+        if (mpvFailed) return
+        mpvFailed = true
+        engineFallbackNotice = true
         controller?.routeChanged()
     }
 
     /** Whether the player offers the per-title switch: mpv loaded and this viewing is one it may play. */
     val engineSwitchable get() = !localCopy &&
-        engineContext().copy(choice = app.pictureshow.core.playback.PlaybackEngineChoice.Mpv).mpvEligible &&
+        engineContext().copy(choice = app.pictureshow.core.playback.PlaybackEngineChoice.Mpv, mpvFailed = false).mpvEligible &&
         state.decision?.isLive != true
 
     fun engineContext() = app.pictureshow.core.playback.PlaybackEngineContext(
@@ -144,7 +164,8 @@ internal class PlaybackHostState(
         mpvAvailable = MpvAvailability.available,
         live = item.type == "TvChannel",
         offline = localCopy,
-        syncPlay = sync?.participating == true
+        syncPlay = sync?.participating == true,
+        mpvFailed = mpvFailed
     )
     var onSyncEnded: ((PlayDecision) -> Boolean)? = null
     var localPreferences by mutableStateOf(PlaybackPreferences())
@@ -683,6 +704,9 @@ internal fun PlaybackHostEffects(host: PlaybackHostState, account: Account, cata
                 output.onBuffering = { waiting, source -> session.buffering(waiting, source) }
                 output.onProgress = { session.progress(it) }
                 output.onFailure = { retry, source -> session.failed(retry, source) }
+                output.onEngineStalled = { action ->
+                    if (action == app.pictureshow.core.playback.FirstFrameAction.Platform) engineFailed() else controller?.routeChanged()
+                }
                 output.onAudioFailure = { source, local -> session.audioFailed(source, local) }
                 output.onEnded = ended@{ source ->
                     if (sync?.participating == true) {

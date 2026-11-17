@@ -49,7 +49,7 @@ Snapshot 2026-11-13 after merging main `81f73948`: all 45 shared JSON contracts 
 | `session-command.json` | 35 | `ControlVectorsTest` |
 | `session-owner.json` | 17 | `ControlVectorsTest` |
 | `frame-rate-match.json` | 6 | `FrameRateMatchVectorsTest` |
-| `playback-engine.json` | 19 | `PlaybackEngineVectorsTest` |
+| `playback-engine.json` | 29 | `PlaybackEngineVectorsTest` |
 | `playback-settings-layout.json` | 7 | `ReferenceParityVectorsTest` |
 | `playback-settings.json` | 68 | `PlaybackSettingsVectorsTest` |
 | `playback-start.json` | 4 | `FrameRateMatchVectorsTest` |
