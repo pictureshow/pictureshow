@@ -33,6 +33,7 @@ object DesktopGlyph {
     val ChevronDown by lazy { glyph("ChevronDown") { moveTo(5f,8f); lineTo(12f,15f); lineTo(19f,8f); lineTo(21f,10f); lineTo(12f,19f); lineTo(3f,10f); close() } }
     val ChevronRight by lazy { outlineGlyph("ChevronRight") { moveTo(9f,5f); lineTo(16f,12f); lineTo(9f,19f) } }
     val Remove by lazy { glyph("Remove") { moveTo(7f,3f); lineTo(17f,3f); lineTo(17f,5f); lineTo(21f,5f); lineTo(21f,7f); lineTo(3f,7f); lineTo(3f,5f); lineTo(7f,5f); close(); moveTo(5f,8f); lineTo(19f,8f); lineTo(18f,21f); lineTo(6f,21f); close(); moveTo(9f,10f); lineTo(11f,10f); lineTo(11f,19f); lineTo(9f,19f); close(); moveTo(13f,10f); lineTo(15f,10f); lineTo(15f,19f); lineTo(13f,19f); close() } }
+    val Download by lazy { outlineGlyph("Download") { moveTo(12f,3f); lineTo(12f,15f); moveTo(7f,10f); lineTo(12f,15f); lineTo(17f,10f); moveTo(5f,20f); lineTo(19f,20f) } }
 
 }
 
