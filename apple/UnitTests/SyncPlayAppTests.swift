@@ -60,6 +60,8 @@ final class SyncPlayAppTests: XCTestCase {
     private static let joined = update("GroupJoined", "{\"GroupId\":\"g\",\"GroupName\":\"Evening\",\"State\":\"Paused\",\"Participants\":[\"v\",\"w\"],\"LastUpdatedAt\":\"2026-11-10T12:00:00Z\"}")
     private static let queue = update("PlayQueue", "{\"Reason\":\"NewPlaylist\",\"LastUpdate\":\"2026-11-10T12:00:00Z\",\"Playlist\":[{\"ItemId\":\"item\",\"PlaylistItemId\":\"entry-0\"}],\"PlayingItemIndex\":0,\"StartPositionTicks\":0,\"IsPlaying\":false,\"ShuffleMode\":\"Sorted\",\"RepeatMode\":\"RepeatNone\"}")
 
+    private static let twoEntries = update("PlayQueue", "{\"Reason\":\"NewPlaylist\",\"LastUpdate\":\"2026-11-10T12:00:01Z\",\"Playlist\":[{\"ItemId\":\"item\",\"PlaylistItemId\":\"entry-0\"},{\"ItemId\":\"next\",\"PlaylistItemId\":\"entry-1\"}],\"PlayingItemIndex\":0,\"StartPositionTicks\":0,\"IsPlaying\":false,\"ShuffleMode\":\"Sorted\",\"RepeatMode\":\"RepeatNone\"}")
+
     /// Registers the socket and joins group "g" through the real socket subscription.
     private func join(_ app: AppModel, _ fake: Fake) {
         app.socket.openForTesting()
@@ -95,6 +97,7 @@ final class SyncPlayAppTests: XCTestCase {
     func testPlayersControlsInAGroupAreGroupRequestsAndItStartsPaused() throws {
         let (app, fake) = try model()
         join(app, fake)
+        app.socket.receiveForTesting(Self.twoEntries)
         let controller = groupViewing(app)
         defer { controller.close(reason: .MANUAL_LEAVE) }
         XCTAssertTrue(controller.grouped)
@@ -168,6 +171,63 @@ final class SyncPlayAppTests: XCTestCase {
         XCTAssertEqual(stale.syncFacts.generation, generation)
         XCTAssertEqual(app.syncPlay.engine.naturalCompletion(stale.syncRenderer!, current: true, unpaused: true), .HOLD,
                        "A renderer from an older membership can't drive continuation")
+    }
+
+    func testGroupTransportFollowsTheServersQueueAndOnlyAsks() throws {
+        let (app, fake) = try model()
+        join(app, fake)
+        fake.posted.removeAll()
+        var transport = app.syncPlay.transport
+        XCTAssertTrue(transport.visible)
+        XCTAssertFalse(transport.previousEnabled || transport.nextEnabled, "One Repeat Off entry has nowhere to go")
+        app.syncPlay.requestNext(); app.syncPlay.requestPrevious()
+        XCTAssertFalse(fake.operations.contains("NextItem") || fake.operations.contains("PreviousItem"))
+        app.socket.receiveForTesting(Self.twoEntries)
+        transport = app.syncPlay.transport
+        XCTAssertTrue(transport.nextEnabled)
+        XCTAssertFalse(transport.previousEnabled)
+        XCTAssertEqual(transport.primary, "play")
+        app.syncPlay.requestNext()
+        app.syncPlay.requestPlayPause()
+        XCTAssertEqual(fake.operations.filter { $0 == "NextItem" || $0 == "Unpause" }, ["NextItem", "Unpause"])
+        XCTAssertEqual(app.syncPlay.engine.membership.queue?.current?.playlistItemId, "entry-0", "Nothing moves before the server says so")
+        XCTAssertEqual(SyncPresentation.watchingCount(app.syncPlay.participants.count), "2 people watching")
+    }
+
+    func testAirPlayInAGroupAsksAndRoutesOnlyAfterTheLeave() throws {
+        let (app, fake) = try model()
+        join(app, fake)
+        let controller = groupViewing(app)
+        defer { controller.close(reason: .MANUAL_LEAVE) }
+        fake.posted.removeAll()
+        var routes = 0
+        XCTAssertTrue(app.syncPlay.askToLeaveForAirPlay { routes += 1 })
+        let first = try XCTUnwrap(app.syncPlay.airPlayConsent)
+        app.syncPlay.cancelAirPlay(first)
+        XCTAssertNil(app.syncPlay.airPlayConsent)
+        XCTAssertTrue(fake.posted.isEmpty, "Cancel keeps the group")
+        XCTAssertTrue(app.syncPlay.askToLeaveForAirPlay { routes += 1; controller.airPlayAfterLeaving() })
+        let second = try XCTUnwrap(app.syncPlay.airPlayConsent)
+        app.syncPlay.leaveForAirPlay(first)
+        XCTAssertEqual(routes, 0, "An older dialog's answer does nothing")
+        app.syncPlay.leaveForAirPlay(second)
+        XCTAssertEqual(fake.operations.filter { $0 == "Leave" }, ["Leave"])
+        XCTAssertEqual(routes, 1)
+        XCTAssertFalse(app.syncPlay.participating)
+        XCTAssertTrue(controller.player.allowsExternalPlayback)
+        XCTAssertTrue(controller.routePickerPending)
+    }
+
+    func testAnAccountChangeDropsAnOpenAirPlayQuestion() throws {
+        let (app, fake) = try model()
+        join(app, fake)
+        var routes = 0
+        XCTAssertTrue(app.syncPlay.askToLeaveForAirPlay { routes += 1 })
+        let consent = try XCTUnwrap(app.syncPlay.airPlayConsent)
+        _ = app.syncPlay.signingOut(try XCTUnwrap(app.account))
+        app.syncPlay.leaveForAirPlay(consent)
+        XCTAssertEqual(routes, 0)
+        XCTAssertNil(app.syncPlay.airPlayConsent)
     }
 
     private final class MemoryKeychain: KeychainBackend {

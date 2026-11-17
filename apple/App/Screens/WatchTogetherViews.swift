@@ -61,12 +61,28 @@ struct WatchTogetherSheet: View {
             .accessibilityElement(children: .combine)
             if let notice = sync.notice { Text(notice).font(.footnote) }
         }
-        let people = SyncPresentation.people(sync.participants)
-        if !people.names.isEmpty {
-            Section("In this group") {
-                ForEach(people.names, id: \.self) { Text($0) }
-                if people.remaining > 0 { Text("and \(people.remaining) more").foregroundStyle(.secondary) }
+        let transport = sync.transport
+        if transport.visible {
+            Section {
+                HStack(spacing: 12) {
+                    transportButton("Previous", systemImage: "backward.end.fill", enabled: transport.previousEnabled, id: "sync-previous") { sync.requestPrevious() }
+                    if let primary = transport.primary {
+                        transportButton(primary == "pause" ? "Pause" : "Play", systemImage: primary == "pause" ? "pause.fill" : "play.fill",
+                                        enabled: transport.playEnabled, id: "sync-play") { sync.requestPlayPause() }
+                    }
+                    transportButton("Next", systemImage: "forward.end.fill", enabled: transport.nextEnabled, id: "sync-next") { sync.requestNext() }
+                }
+                .frame(maxWidth: .infinity)
+            } header: {
+                Text("Group playback")
+            } footer: {
+                Text("Changes here apply to everyone.")
             }
+        }
+        let people = SyncPresentation.people(sync.participants)
+        Section(SyncPresentation.watchingCount(sync.participants.count)) {
+            ForEach(people.names, id: \.self) { Text($0) }
+            if people.remaining > 0 { Text("and \(people.remaining) more").foregroundStyle(.secondary) }
         }
         Section {
             Toggle(isOn: Binding(get: { sync.waitForMe }, set: { sync.setWaitForMe($0) })) {
@@ -82,8 +98,18 @@ struct WatchTogetherSheet: View {
             Button("Leave group", role: .destructive) { sync.leave(); dismiss() }
                 .accessibilityIdentifier("leave-group")
         } footer: {
-            Text("Play, pause and seeking move everyone in the group. AirPlay isn't available while you're in a group.")
+            Text("Play, pause and seeking move everyone in the group. To use AirPlay, leave the group first.")
         }
+    }
+
+    private func transportButton(_ title: String, systemImage: String, enabled: Bool, id: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: systemImage).labelStyle(.iconOnly).font(.title3).frame(minWidth: 56, minHeight: 48)
+        }
+        .buttonStyle(.bordered)
+        .disabled(!enabled)
+        .accessibilityLabel(title)
+        .accessibilityIdentifier(id)
     }
 
     // MARK: Choosing a group
@@ -184,6 +210,35 @@ private extension SyncStayBanner {
     }
 }
 
+#if os(iOS)
+/// AirPlay while grouped (SYN-10): asks to leave the group first; AirPlay opens once the server accepted the Leave.
+struct SyncAirPlayButton: View {
+    @ObservedObject var sync: SyncPlaySession
+    let route: () -> Void
+
+    var body: some View {
+        let consent = sync.airPlayConsent
+        Button { sync.askToLeaveForAirPlay(route) } label: {
+            Image(systemName: "airplayvideo").font(.title3).frame(width: 44, height: 44)
+        }
+        .accessibilityLabel("AirPlay")
+        .accessibilityIdentifier("sync-airplay")
+        .confirmationDialog("Leave \(sync.groupName ?? "the group") to use AirPlay?", isPresented: Binding(
+            get: { consent != nil },
+            set: { if !$0, let consent, sync.airPlayConsent == consent { sync.cancelAirPlay(consent) } }
+        ), titleVisibility: .visible) {
+            // Each answer carries the consent this dialog showed; an older dialog can't answer a newer question.
+            if let consent {
+                Button("Leave group and use AirPlay", role: .destructive) { sync.leaveForAirPlay(consent) }
+                Button("Cancel", role: .cancel) { sync.cancelAirPlay(consent) }
+            }
+        } message: {
+            Text("AirPlay can't stay in step with the group. Everyone else keeps watching together.")
+        }
+    }
+}
+#endif
+
 /// The player's compact group chip (SYN-06): group name and phase, plus this device's own sync estimate.
 struct SyncGroupChip: View {
     @ObservedObject var sync: SyncPlaySession
@@ -191,15 +246,25 @@ struct SyncGroupChip: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 6) {
+            // The whole status where it fits, else the group's name, else the icon (the sheet has the rest), so the
+            // chip never shows clipped fragments beside the player's other buttons.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 6) {
+                    Image(systemName: "person.2.fill")
+                    Text(sync.groupName ?? "Group").lineLimit(1).fixedSize()
+                    Text("·").opacity(0.6)
+                    Text(SyncLabels.phase(sync.phase)).lineLimit(1).fixedSize()
+                }
+                HStack(spacing: 6) {
+                    Image(systemName: "person.2.fill")
+                    Text(sync.groupName ?? "Group").lineLimit(1).fixedSize()
+                }
                 Image(systemName: "person.2.fill")
-                Text(sync.groupName ?? "Group").lineLimit(1)
-                Text("·").opacity(0.6)
-                Text(SyncLabels.phase(sync.phase)).lineLimit(1)
             }
             .font(.caption.weight(.semibold))
             .padding(.horizontal, 12).padding(.vertical, 8)
             .background(Capsule().fill(.black.opacity(0.55)))
+            .contentShape(Capsule())
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Watch together: \(sync.groupName ?? "group"), \(SyncLabels.phase(sync.phase))\(SyncLabels.quality(sync.quality).map { ", \($0)" } ?? "")")

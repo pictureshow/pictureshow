@@ -87,11 +87,13 @@ final class SyncSessionEngineTests: XCTestCase {
 
     func testViewerControlsAreGroupRequestsAndLeaveTheLocalPlayerAlone() {
         let world = SyncFakeWorld()
-        let engine = joinedEngine(world)
+        let engine = joinedEngine(world, entries: [("item", "entry-0"), ("next", "entry-1")])
         let player = renderer(generation: engine.membership.generation)
         engine.bind(player)
         world.posted.removeAll()
         engine.requestUnpause(); engine.requestPause(); engine.requestSeek(ticks: 50_000_000); engine.requestNext()
+        // Previous from the first Repeat Off entry has no target in the authoritative queue, so nothing is asked.
+        engine.requestPrevious()
         XCTAssertEqual(world.operations, ["Unpause", "Pause", "Seek", "NextItem"])
         XCTAssertEqual(world.posted[2].body?.rendered, "{\"PositionTicks\":50000000}")
         XCTAssertTrue(player.applied.isEmpty)

@@ -325,6 +325,16 @@ struct PlayerContent: View {
     @State private var scrubbing: Double?
     @State private var showingGroup = false
     @State private var findingSubtitles = false
+    /// Read so a rotation re-evaluates `topClearance`.
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
+
+    /// The player draws edge to edge, so in portrait the top bar would sit under the Dynamic Island or notch, where
+    /// taps go to the system (OBSERVED: the group chip under the island didn't respond). Landscape has no top inset.
+    private var topClearance: CGFloat {
+        _ = verticalSizeClass
+        let window = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow }.first
+        return max(0, (window?.safeAreaInsets.top ?? 0) - 12)
+    }
 
     var body: some View {
         ZStack {
@@ -378,8 +388,13 @@ struct PlayerContent: View {
                 controller.adoptDownloadedSubtitle(adopted, streams: streams)
             }
         }
+        // Presented from the whole screen, not the top bar, so hiding the controls can't take the sheet down with them.
+        .sheet(isPresented: $showingGroup) {
+            WatchTogetherSheet(sync: controller.app.syncPlay, item: nil).environmentObject(controller.app)
+        }
         .onAppear { scheduleHide() }
         .onChange(of: controller.isPlaying) { scheduleHide() }
+        .onChange(of: showingGroup) { scheduleHide() }
     }
 
     private var controls: some View {
@@ -389,6 +404,7 @@ struct PlayerContent: View {
                 .allowsHitTesting(false)
             VStack(spacing: 0) {
                 topBar
+                    .padding(.top, topClearance)
                 Spacer()
                 centerButtons
                 Spacer()
@@ -419,18 +435,20 @@ struct PlayerContent: View {
                 Text(controller.title).font(.headline).lineLimit(1)
                 if let subtitle = controller.subtitle { Text(subtitle).font(.caption).opacity(0.8).lineLimit(1) }
             }
+            // The title keeps its room; the group chip shortens to fit what's left.
+            .layoutPriority(1)
             Spacer()
             if controller.sync != nil, controller.app.syncPlay.participating {
                 SyncGroupChip(sync: controller.app.syncPlay) { showingGroup = true }
             }
             trackMenu
-            // SYN-10: AirPlay can't follow a group's timeline at launch; it returns once the viewer leaves.
-            if !(controller.sync != nil && controller.app.syncPlay.participating) {
-                RoutePicker().frame(width: 44, height: 44).accessibilityLabel("AirPlay")
+            // SYN-10: AirPlay can't follow a group's timeline; the viewer is asked to leave the group first.
+            if controller.sync != nil && controller.app.syncPlay.participating {
+                SyncAirPlayButton(sync: controller.app.syncPlay) { [weak controller] in controller?.airPlayAfterLeaving() }
+            } else {
+                RoutePicker(open: controller.routePickerPending) { controller.routePickerPending = false }
+                    .frame(width: 44, height: 44).accessibilityLabel("AirPlay")
             }
-        }
-        .sheet(isPresented: $showingGroup) {
-            WatchTogetherSheet(sync: controller.app.syncPlay, item: nil).environmentObject(controller.app)
         }
     }
 
@@ -530,7 +548,8 @@ struct PlayerContent: View {
         guard controlsVisible, controller.isPlaying, !UIAccessibility.isVoiceOverRunning else { return }
         hideTask = Task {
             try? await Task.sleep(for: .seconds(10))
-            if !Task.isCancelled, scrubbing == nil { controlsVisible = false }
+            // The group sheet and the AirPlay question are anchored in the controls; they stay while either is open.
+            if !Task.isCancelled, scrubbing == nil, !showingGroup, controller.app.syncPlay.airPlayConsent == nil { controlsVisible = false }
         }
     }
 }
@@ -554,13 +573,23 @@ struct VideoSurface: UIViewRepresentable {
 }
 
 struct RoutePicker: UIViewRepresentable {
+    /// Opens the system route list once (after leaving a group for AirPlay); `opened` clears the request.
+    var open = false
+    var opened: () -> Void = {}
     func makeUIView(context: Context) -> AVRoutePickerView {
         let view = AVRoutePickerView()
         view.tintColor = .white
         view.prioritizesVideoDevices = true
         return view
     }
-    func updateUIView(_ view: AVRoutePickerView, context: Context) {}
+    func updateUIView(_ view: AVRoutePickerView, context: Context) {
+        guard open else { return }
+        DispatchQueue.main.async {
+            // AVRoutePickerView has no API to open its list; its own button does that.
+            (view.subviews.first { $0 is UIButton } as? UIButton)?.sendActions(for: .touchUpInside)
+            opened()
+        }
+    }
 }
 #endif
 
