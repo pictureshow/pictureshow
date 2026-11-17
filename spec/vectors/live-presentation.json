@@ -4118,7 +4118,8 @@
         "focusedAction": "confirm",
         "fullHeadingVisible": true,
         "writes": 0
-      }
+      },
+      "note": "UI contract, not a pure function: focusedAction and writes are what the real focus engine does after the key press. Android checks all three fields in LiveTvReviewNavigationTest (Compose, real TV pivot); its pure runner checks only fullHeadingVisible through liveEditorShouldRevealHeader. A platform without a UI harness checks fullHeadingVisible."
     },
     {
       "id": "review-header-switch-confirm-to-edit",
@@ -4133,7 +4134,8 @@
         "focusedAction": "edit",
         "fullHeadingVisible": true,
         "writes": 0
-      }
+      },
+      "note": "UI contract, not a pure function: focusedAction and writes are what the real focus engine does after the key press. Android checks all three fields in LiveTvReviewNavigationTest (Compose, real TV pivot); its pure runner checks only fullHeadingVisible through liveEditorShouldRevealHeader. A platform without a UI harness checks fullHeadingVisible."
     },
     {
       "id": "round3-recording-now-start",

@@ -172,6 +172,11 @@ const pendingReferenceHttpCases = new Map([
     ["search-playlists", "search"],
 ]);
 const pendingApplicationCases = new Map([
+    // PLAY-17 finished line wording (Android leg android-live-rules): web shows the line; its core rule is owed.
+    ["detail-finished-line-title", "detail-finished-line"],
+    ["detail-finished-line-trimmed", "detail-finished-line"],
+    ["detail-finished-line-blank", "detail-finished-line"],
+    ["detail-finished-line-missing", "detail-finished-line"],
     ["detail-primary-next", "detail-play-item"],
     ["detail-primary-unplayed", "detail-play-item"],
     ["detail-primary-all-played", "detail-play-item"],

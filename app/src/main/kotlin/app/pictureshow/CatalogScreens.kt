@@ -2481,6 +2481,14 @@ fun CatalogDetail(
                                         modifier = arrivalMetadataSemantics
                                     )
                                 }
+                                // PLAY-17: the return from a viewing that played to its end says so, above the actions.
+                                state.finishedLine?.let { line ->
+                                    Text(
+                                        line,
+                                        modifier = Modifier.testTag("detail:finished")
+                                            .semantics { liveRegion = LiveRegionMode.Polite }
+                                    )
+                                }
                                 val container = item.type in listOf("Series", "Season")
                                 if (hasActions && container && (!playbackWaiting || pendingEnabled || recoveryActive || recoveryHandoff)) {
                                     DetailActions(

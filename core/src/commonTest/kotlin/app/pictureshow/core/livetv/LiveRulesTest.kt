@@ -7,6 +7,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -67,7 +68,7 @@ class LiveRulesTest {
 
     @Test fun defaultsProjectionKeepsCommonProviderIdsAndPaddingWithoutSeriesFields() {
         val original = LiveSchedule(fields)
-        val draft = timerDraft(original, program("p", from, to), series = false)
+        val draft = assertNotNull(timerDraft(original, program("p", from, to), series = false))
         assertEquals(JsonPrimitive("Emby"), draft.fields["ServiceName"])
         assertEquals(JsonPrimitive("provider-program"), draft.fields["ExternalProgramId"])
         assertEquals(JsonPrimitive("UntilDeleted"), draft.fields["KeepUntil"])
@@ -75,7 +76,7 @@ class LiveRulesTest {
         assertFalse("RecordNewOnly" in draft.fields)
         assertFalse("Id" in draft.fields)
         assertEquals("p", draft.programId)
-        val series = timerDraft(original, program("p", from, to), series = true)
+        val series = assertNotNull(timerDraft(original, program("p", from, to), series = true))
         assertEquals(fields["ProviderExtension"], series.fields["ProviderExtension"])
         assertEquals(fields["RecordNewOnly"], series.fields["RecordNewOnly"])
         assertFalse("Id" in series.fields)

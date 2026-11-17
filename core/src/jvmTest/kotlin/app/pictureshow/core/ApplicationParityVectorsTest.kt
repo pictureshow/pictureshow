@@ -262,6 +262,9 @@ class ApplicationParityVectorsTest {
                             input.getValue("alreadyConfirmed").jsonPrimitive.booleanOrNull!!
                         )
                     )
+                    "detail-finished-line" -> JsonPrimitive(
+                        playbackFinishedLine(input["title"]?.jsonPrimitive?.contentOrNull)
+                    )
                     "detail-completion-read" -> JsonPrimitive(
                         detailReadCanReplaceCompletion(
                             input.getValue("completionItem").jsonPrimitive.content,

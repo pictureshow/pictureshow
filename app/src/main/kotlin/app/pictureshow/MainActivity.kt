@@ -1259,6 +1259,8 @@ internal fun Pictureshow(
                     val discovery by discoveryVm.state.collectAsStateWithLifecycle()
                     val context = LocalContext.current
                     var subtitleTarget by remember { mutableStateOf<MediaItem?>(null) }
+                    // PLAY-17: leaving this page (or opening the player from it) ends its finished line.
+                    DisposableEffect(vm) { onDispose { vm.leftPage() } }
                     LaunchedEffect(entry) {
                         entry.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
                             vm.resumed()

@@ -292,7 +292,7 @@
         "Completed",
         "Cancelled",
         "Overlaps",
-        "Won\u2019t record",
+        "Won’t record",
         "Failed",
         "Unknown status (FutureState)"
       ]
@@ -810,6 +810,183 @@
         "Error",
         "Neutral"
       ]
+    },
+    {
+      "id": "live-dvr.draft-missing-start",
+      "operation": "draft",
+      "note": "Jellyfin's TimerInfoDto has non-nullable StartDate/EndDate: without two parseable times, end after start, there is no draft (null) and the viewer is told to refresh, rather than a body the server must refuse.",
+      "input": {
+        "defaults": {
+          "Id": "default",
+          "ProgramId": "old",
+          "ChannelId": "old",
+          "Name": "Default",
+          "StartDate": "old",
+          "EndDate": "old",
+          "ServiceName": "Emby",
+          "ExternalProgramId": "provider-id",
+          "PrePaddingSeconds": 20,
+          "PostPaddingSeconds": 30,
+          "Priority": 2,
+          "KeepUntil": "UntilDeleted",
+          "RecordNewOnly": true,
+          "RecordAnyChannel": false,
+          "Days": [
+            "Monday"
+          ],
+          "ProviderExtension": {
+            "keep": true
+          }
+        },
+        "program": {
+          "Id": "p",
+          "Name": "Program",
+          "ChannelId": "c",
+          "EndDate": "2030-11-03T07:00:00Z"
+        },
+        "series": false
+      },
+      "expected": null
+    },
+    {
+      "id": "live-dvr.draft-null-end",
+      "operation": "draft",
+      "note": "Jellyfin's TimerInfoDto has non-nullable StartDate/EndDate: without two parseable times, end after start, there is no draft (null) and the viewer is told to refresh, rather than a body the server must refuse.",
+      "input": {
+        "defaults": {
+          "Id": "default",
+          "ProgramId": "old",
+          "ChannelId": "old",
+          "Name": "Default",
+          "StartDate": "old",
+          "EndDate": "old",
+          "ServiceName": "Emby",
+          "ExternalProgramId": "provider-id",
+          "PrePaddingSeconds": 20,
+          "PostPaddingSeconds": 30,
+          "Priority": 2,
+          "KeepUntil": "UntilDeleted",
+          "RecordNewOnly": true,
+          "RecordAnyChannel": false,
+          "Days": [
+            "Monday"
+          ],
+          "ProviderExtension": {
+            "keep": true
+          }
+        },
+        "program": {
+          "Id": "p",
+          "Name": "Program",
+          "ChannelId": "c",
+          "StartDate": "2030-11-03T05:00:00Z",
+          "EndDate": null
+        },
+        "series": true
+      },
+      "expected": null
+    },
+    {
+      "id": "live-dvr.draft-malformed-end",
+      "operation": "draft",
+      "note": "Jellyfin's TimerInfoDto has non-nullable StartDate/EndDate: without two parseable times, end after start, there is no draft (null) and the viewer is told to refresh, rather than a body the server must refuse.",
+      "input": {
+        "defaults": {
+          "Id": "default",
+          "ProgramId": "old",
+          "ChannelId": "old",
+          "Name": "Default",
+          "StartDate": "old",
+          "EndDate": "old",
+          "ServiceName": "Emby",
+          "ExternalProgramId": "provider-id",
+          "PrePaddingSeconds": 20,
+          "PostPaddingSeconds": 30,
+          "Priority": 2,
+          "KeepUntil": "UntilDeleted",
+          "RecordNewOnly": true,
+          "RecordAnyChannel": false,
+          "Days": [
+            "Monday"
+          ],
+          "ProviderExtension": {
+            "keep": true
+          }
+        },
+        "program": {
+          "Id": "p",
+          "Name": "Program",
+          "ChannelId": "c",
+          "StartDate": "2030-11-03T05:00:00Z",
+          "EndDate": "unavailable"
+        },
+        "series": false
+      },
+      "expected": null
+    },
+    {
+      "id": "live-dvr.draft-end-before-start",
+      "operation": "draft",
+      "note": "Jellyfin's TimerInfoDto has non-nullable StartDate/EndDate: without two parseable times, end after start, there is no draft (null) and the viewer is told to refresh, rather than a body the server must refuse.",
+      "input": {
+        "defaults": {
+          "Id": "default",
+          "ProgramId": "old",
+          "ChannelId": "old",
+          "Name": "Default",
+          "StartDate": "old",
+          "EndDate": "old",
+          "ServiceName": "Emby",
+          "ExternalProgramId": "provider-id",
+          "PrePaddingSeconds": 20,
+          "PostPaddingSeconds": 30,
+          "Priority": 2,
+          "KeepUntil": "UntilDeleted",
+          "RecordNewOnly": true,
+          "RecordAnyChannel": false,
+          "Days": [
+            "Monday"
+          ],
+          "ProviderExtension": {
+            "keep": true
+          }
+        },
+        "program": {
+          "Id": "p",
+          "Name": "Program",
+          "ChannelId": "c",
+          "StartDate": "2030-11-03T07:00:00Z",
+          "EndDate": "2030-11-03T05:00:00Z"
+        },
+        "series": false
+      },
+      "expected": null
+    },
+    {
+      "id": "live-dvr.draft-offset-times-kept-verbatim",
+      "operation": "draft",
+      "note": "Times with a UTC offset parse as instants and are sent as the server gave them.",
+      "input": {
+        "defaults": {
+          "PrePaddingSeconds": 0
+        },
+        "program": {
+          "Id": "p",
+          "Name": "Program",
+          "ChannelId": "c",
+          "StartDate": "2030-11-03T06:00:00+01:00",
+          "EndDate": "2030-11-03T07:00:00.0000000Z"
+        },
+        "series": false
+      },
+      "expected": {
+        "PrePaddingSeconds": 0,
+        "ProgramId": "p",
+        "ChannelId": "c",
+        "Name": "Program",
+        "StartDate": "2030-11-03T06:00:00+01:00",
+        "EndDate": "2030-11-03T07:00:00.0000000Z"
+      }
     }
   ]
 }

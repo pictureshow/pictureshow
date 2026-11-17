@@ -324,7 +324,11 @@ internal class PlaybackHostState(
     /** This viewing is over, though the player may wait here for the viewer: with a screen reader on, or after a trip away. */
     val atEnd get() = ended || deferredNext != null
 
+    /** PLAY-17: a film or a series' last episode played to its end; set by the effects, which own the catalog. */
+    var onFinishedToEnd: () -> Unit = {}
+
     fun finish(next: MediaItem? = null, reason: String = "next-episode") {
+        if (next == null && reason == "natural-end" && sync?.participating != true && !exitRequested) onFinishedToEnd()
         if (next != null && sync?.transport("next") == true) return
         if (next == null && sync?.participating == true) {
             // SYN-08: closing the player keeps this viewer in its group; only explicit Leave removes it.
@@ -601,6 +605,12 @@ internal fun PlaybackHostEffects(host: PlaybackHostState, account: Account, cata
     val pauseIntent by output.pauseIntent.collectAsState()
     SyncPlaybackBinding(host)
     host.remote?.let { RemoteTargetBinding(host, it, account, catalog, paused) }
+    DisposableEffect(host, catalog) {
+        // A new viewing ends any earlier finished line; this one's end sets its own.
+        catalog.clearFinished()
+        host.onFinishedToEnd = { catalog.playbackFinished(host.item) }
+        onDispose { host.onFinishedToEnd = {} }
+    }
     if (host.item.type == "TvChannel" && offline == null) {
         LaunchedEffect(host, account, foreground) {
             if (!foreground) return@LaunchedEffect

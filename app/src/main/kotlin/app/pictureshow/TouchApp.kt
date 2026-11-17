@@ -618,6 +618,8 @@ internal fun TouchPictureshow(
                         val discoveryVm: DetailDiscoveryViewModel = koinViewModel(parameters = { parametersOf(account, item, catalog) })
                         val discovery by discoveryVm.state.collectAsStateWithLifecycle()
                         val context = LocalContext.current
+                        // PLAY-17: leaving this page (or opening the player from it) ends its finished line.
+                        DisposableEffect(vm) { onDispose { vm.leftPage() } }
                         LaunchedEffect(entry) {
                             entry.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
                                 // The model's arrival read and a deliberate Retry own the budget; this only refreshes a real return.

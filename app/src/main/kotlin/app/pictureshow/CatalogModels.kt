@@ -42,6 +42,27 @@ class CatalogSession(val service: CatalogService, private val accounts: AccountS
     )
     private val mutableChanges = MutableStateFlow(Changes())
     val changes = mutableChanges.asStateFlow()
+
+    /**
+     * PLAY-17: the last viewing that played a film or a series' last episode to its end. [serial] orders it against
+     * detail pages: only a page that was already open under the player is the one the viewer returns to.
+     */
+    data class FinishedViewing(val serial: Long, val relatedIds: Set<String>, val title: String?)
+    private var finishSerial = 0L
+    private val mutableFinished = MutableStateFlow<FinishedViewing?>(null)
+    val finished = mutableFinished.asStateFlow()
+
+    internal fun finishedSerial(): Long = finishSerial
+
+    /** The player calls this at a natural end with nothing to play next, before it exits. */
+    fun playbackFinished(item: MediaItem) {
+        mutableFinished.value = FinishedViewing(++finishSerial, setOfNotNull(item.id, item.seriesId, item.seasonId), item.name)
+    }
+
+    /** The line belongs to that return only: leaving the page, or starting another viewing, ends it. */
+    internal fun clearFinished(detailId: String? = null) {
+        mutableFinished.update { current -> current?.takeUnless { detailId == null || detailId in it.relatedIds } }
+    }
     private var completedUsers = emptyMap<String, ItemUserData>()
     private var unresolvedPlayback = emptySet<String>()
 
@@ -628,7 +649,9 @@ data class CatalogDetailState(
     val readSucceeded: Boolean = false,
     val readAttempt: Long = 0,
     // Presentation identity survives a fast optimistic/error round trip coalesced by StateFlow.
-    val writeAttempt: Long = 0
+    val writeAttempt: Long = 0,
+    /** PLAY-17: "Finished. You watched {title} to the end." on the page a completed viewing returned to. */
+    val finishedLine: String? = null
 )
 
 class CatalogDetailViewModel(private val account: Account, private val original: MediaItem, private val session: CatalogSession) :
@@ -672,8 +695,18 @@ class CatalogDetailViewModel(private val account: Account, private val original:
     private var lastReadUserData: ItemUserData? = null
     private val readLifecycle = app.pictureshow.core.DetailReadLifecycle()
 
+    /** Finishes after this serial happened while this page was open, under the player. */
+    private val arrivalFinishSerial = session.finishedSerial()
+
     init {
         reload(retainRows = false)
+        viewModelScope.launch {
+            session.finished.collect { finished ->
+                val line = finished?.takeIf { it.serial > arrivalFinishSerial && original.id in it.relatedIds }
+                    ?.let { app.pictureshow.core.playbackFinishedLine(it.title) }
+                mutableState.update { it.copy(finishedLine = line) }
+            }
+        }
         viewModelScope.launch {
             var revision = initialChanges.revision
             var refreshRevision = initialChanges.refreshRevision
@@ -738,6 +771,9 @@ class CatalogDetailViewModel(private val account: Account, private val original:
         }
         reload(retainRows = false)
     }
+
+    /** PLAY-17: the finished line is for the return from that viewing, not a later visit to this page. */
+    fun leftPage() = session.clearFinished(original.id)
 
     // Lifecycle reads replace stale work but inherit any viewer-owned Retry deadline.
     fun resumed() {

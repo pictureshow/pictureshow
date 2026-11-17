@@ -76,19 +76,31 @@ private val seriesEdits = timerEdits + setOf(
     "KeepUntil"
 )
 
-/** Defaults are a SeriesTimerInfoDto. One-off projects only TimerInfoDto's common writable fields. */
-fun timerDraft(defaults: LiveSchedule, program: LiveProgram, series: Boolean): LiveSchedule = LiveSchedule(
-    JsonObject(
-        defaults.fields.filterKeys { if (series) it !in setOf("Id", "SeriesTimerId", "Status") else it in timerFields } +
-            mapOf(
-                "ProgramId" to JsonPrimitive(program.id),
-                "ChannelId" to JsonPrimitive(program.channelId),
-                "Name" to JsonPrimitive(program.name),
-                "StartDate" to JsonPrimitive(requireNotNull(program.startDate)),
-                "EndDate" to JsonPrimitive(requireNotNull(program.endDate))
-            )
+/**
+ * Defaults are a SeriesTimerInfoDto. One-off projects only TimerInfoDto's common writable fields.
+ *
+ * The airing's identity and times come from the freshly read program. Jellyfin's TimerInfoDto declares StartDate and
+ * EndDate as non-nullable DateTime, so a draft without both, or with a time that doesn't parse as an instant, or one
+ * that ends before it starts, could only be refused by the server. There is no draft then (null), and the caller tells
+ * the viewer to refresh rather than sending a body the server must reject.
+ */
+fun timerDraft(defaults: LiveSchedule, program: LiveProgram, series: Boolean): LiveSchedule? {
+    val start = program.startDate?.takeIf { liveInstant(it) != null } ?: return null
+    val end = program.endDate?.takeIf { liveInstant(it) != null } ?: return null
+    if (requireNotNull(liveInstant(end)) <= requireNotNull(liveInstant(start))) return null
+    return LiveSchedule(
+        JsonObject(
+            defaults.fields.filterKeys { if (series) it !in setOf("Id", "SeriesTimerId", "Status") else it in timerFields } +
+                mapOf(
+                    "ProgramId" to JsonPrimitive(program.id),
+                    "ChannelId" to JsonPrimitive(program.channelId),
+                    "Name" to JsonPrimitive(program.name),
+                    "StartDate" to JsonPrimitive(start),
+                    "EndDate" to JsonPrimitive(end)
+                )
+        )
     )
-)
+}
 
 /** Only explicit dirty fields change; missing provider capabilities are not invented by an editor. */
 fun editSchedule(original: LiveSchedule, edits: JsonObject, series: Boolean): LiveSchedule {

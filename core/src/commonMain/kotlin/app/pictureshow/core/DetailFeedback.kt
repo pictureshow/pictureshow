@@ -225,6 +225,13 @@ fun detailFeedbackCanSubmit(currentPage: Boolean, selectedAction: Boolean): Bool
 /** Completion intent changes presentation only; the authoritative read/write guard stays separate. */
 fun detailCompletionPresentedPlayed(played: Boolean, completionIntent: Boolean): Boolean = played || completionIntent
 
+/**
+ * PLAY-17: the line on the detail page a film or a series' last episode returns to after playing to its end. The title
+ * is the item that played, trimmed; a nameless item reads "this". A platform may set "Finished." in bold, as web does.
+ */
+fun playbackFinishedLine(title: String?): String =
+    "Finished. You watched ${title?.trim()?.takeIf(String::isNotEmpty) ?: "this"} to the end."
+
 /** A desired-state request may already match a newer read, but must not disappear silently. */
 fun detailPlayedRequestNotice(wanted: Boolean, current: Boolean): String? = if (wanted == current) {
     "Nothing changed. This item is already ${if (wanted) "watched" else "unwatched"}."

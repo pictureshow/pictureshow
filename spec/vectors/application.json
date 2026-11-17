@@ -3997,6 +3997,42 @@
       ]
     },
     {
+      "id": "detail-finished-line-title",
+      "operation": "detail-finished-line",
+      "note": "PLAY-17: shown on the detail page a film or a series' last episode returns to after playing to its end.",
+      "input": {
+        "title": "The Long Goodbye"
+      },
+      "expected": "Finished. You watched The Long Goodbye to the end."
+    },
+    {
+      "id": "detail-finished-line-trimmed",
+      "operation": "detail-finished-line",
+      "note": "PLAY-17: shown on the detail page a film or a series' last episode returns to after playing to its end.",
+      "input": {
+        "title": "  Pilot \n"
+      },
+      "expected": "Finished. You watched Pilot to the end."
+    },
+    {
+      "id": "detail-finished-line-blank",
+      "operation": "detail-finished-line",
+      "note": "PLAY-17: shown on the detail page a film or a series' last episode returns to after playing to its end.",
+      "input": {
+        "title": "   "
+      },
+      "expected": "Finished. You watched this to the end."
+    },
+    {
+      "id": "detail-finished-line-missing",
+      "operation": "detail-finished-line",
+      "note": "PLAY-17: shown on the detail page a film or a series' last episode returns to after playing to its end.",
+      "input": {
+        "title": null
+      },
+      "expected": "Finished. You watched this to the end."
+    },
+    {
       "id": "detail.f3.completion-new-success",
       "operation": "detail-completion-read",
       "input": {

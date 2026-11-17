@@ -191,9 +191,8 @@ internal class LiveTvViewModel(
             val defaults = api.defaults(account, program.id).required()
             mutable.value = mutable.value.copy(
                 policy = policy,
-                draft = runCatching { timerDraft(defaults, fresh, series) }.getOrElse {
-                    throw LiveReadFailure("This program no longer has valid schedule dates. Refresh Live TV.")
-                },
+                draft = timerDraft(defaults, fresh, series)
+                    ?: throw LiveReadFailure("This program no longer has valid schedule dates. Refresh Live TV."),
                 draftSeries = series
             )
         } catch (failure: LiveReadFailure) {

@@ -111,7 +111,7 @@ class LiveVectorsTest {
             LiveSchedule(input.getValue("defaults").jsonObject),
             json.decodeFromJsonElement(input.getValue("program")),
             input.getValue("series").jsonPrimitive.boolean
-        ).fields
+        )?.fields ?: kotlinx.serialization.json.JsonNull
         "edit" -> try {
             editSchedule(
                 LiveSchedule(input.getValue("original").jsonObject),

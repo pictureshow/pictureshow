@@ -211,6 +211,206 @@
         "behindLiveMs": 2001,
         "atLiveEdge": false
       }
+    },
+    {
+      "id": "midnight-paused-inside",
+      "note": "Window starts 2026-11-17T23:59:50Z and runs past UTC midnight; offsets are epoch milliseconds, never wall-clock dates.",
+      "window": {
+        "offsetMs": 1794959990000,
+        "durationMs": 30000,
+        "defaultPositionMs": 27000,
+        "seekable": true
+      },
+      "positionMs": 15000,
+      "pausedAbsoluteMs": 1794959995000,
+      "expected": {
+        "canTimeShift": true,
+        "contains": true,
+        "expired": false,
+        "goLiveMs": 27000,
+        "behindLiveMs": 12000,
+        "atLiveEdge": false
+      }
+    },
+    {
+      "id": "midnight-paused-before-window",
+      "note": "Window starts 2026-11-17T23:59:50Z and runs past UTC midnight; offsets are epoch milliseconds, never wall-clock dates.",
+      "window": {
+        "offsetMs": 1794959990000,
+        "durationMs": 30000,
+        "defaultPositionMs": 27000,
+        "seekable": true
+      },
+      "positionMs": 0,
+      "pausedAbsoluteMs": 1794959989999,
+      "expected": {
+        "canTimeShift": true,
+        "contains": true,
+        "expired": true,
+        "goLiveMs": 27000,
+        "behindLiveMs": 27000,
+        "atLiveEdge": false
+      }
+    },
+    {
+      "id": "midnight-paused-past-window",
+      "note": "Window starts 2026-11-17T23:59:50Z and runs past UTC midnight; offsets are epoch milliseconds, never wall-clock dates.",
+      "window": {
+        "offsetMs": 1794959990000,
+        "durationMs": 30000,
+        "defaultPositionMs": 27000,
+        "seekable": true
+      },
+      "positionMs": 30000,
+      "pausedAbsoluteMs": 1794960020001,
+      "expected": {
+        "canTimeShift": true,
+        "contains": true,
+        "expired": true,
+        "goLiveMs": 27000,
+        "behindLiveMs": 0,
+        "atLiveEdge": false
+      }
+    },
+    {
+      "id": "dst-paused-in-repeated-hour",
+      "note": "Window starts 2026-11-01T05:59:30Z and spans 06:00Z, when US Eastern repeats 01:00-02:00; epoch arithmetic has no repeated or missing minute.",
+      "window": {
+        "offsetMs": 1793512770000,
+        "durationMs": 60000,
+        "defaultPositionMs": 58000,
+        "seekable": true
+      },
+      "positionMs": 45000,
+      "pausedAbsoluteMs": 1793512815000,
+      "expected": {
+        "canTimeShift": true,
+        "contains": true,
+        "expired": false,
+        "goLiveMs": 58000,
+        "behindLiveMs": 13000,
+        "atLiveEdge": false
+      }
+    },
+    {
+      "id": "dst-paused-at-window-end",
+      "note": "Window starts 2026-11-01T05:59:30Z and spans 06:00Z, when US Eastern repeats 01:00-02:00; epoch arithmetic has no repeated or missing minute.",
+      "window": {
+        "offsetMs": 1793512770000,
+        "durationMs": 60000,
+        "defaultPositionMs": 58000,
+        "seekable": true
+      },
+      "positionMs": 57000,
+      "pausedAbsoluteMs": 1793512830000,
+      "expected": {
+        "canTimeShift": true,
+        "contains": true,
+        "expired": false,
+        "goLiveMs": 58000,
+        "behindLiveMs": 1000,
+        "atLiveEdge": true
+      }
+    },
+    {
+      "id": "dst-paused-past-window",
+      "note": "Window starts 2026-11-01T05:59:30Z and spans 06:00Z, when US Eastern repeats 01:00-02:00; epoch arithmetic has no repeated or missing minute.",
+      "window": {
+        "offsetMs": 1793512770000,
+        "durationMs": 60000,
+        "defaultPositionMs": 58000,
+        "seekable": true
+      },
+      "positionMs": 57000,
+      "pausedAbsoluteMs": 1793512830001,
+      "expected": {
+        "canTimeShift": true,
+        "contains": true,
+        "expired": true,
+        "goLiveMs": 58000,
+        "behindLiveMs": 1000,
+        "atLiveEdge": false
+      }
+    },
+    {
+      "id": "negative-skew-paused-at-start",
+      "note": "Negative skew: the window starts 5 s before stream position zero (positionInFirstPeriodMs-style offset).",
+      "window": {
+        "offsetMs": -5000,
+        "durationMs": 30000,
+        "defaultPositionMs": 27000,
+        "seekable": true
+      },
+      "positionMs": 0,
+      "pausedAbsoluteMs": -5000,
+      "expected": {
+        "canTimeShift": true,
+        "contains": true,
+        "expired": false,
+        "goLiveMs": 27000,
+        "behindLiveMs": 27000,
+        "atLiveEdge": false
+      }
+    },
+    {
+      "id": "negative-skew-paused-before-start",
+      "note": "Negative skew: the window starts 5 s before stream position zero (positionInFirstPeriodMs-style offset).",
+      "window": {
+        "offsetMs": -5000,
+        "durationMs": 30000,
+        "defaultPositionMs": 27000,
+        "seekable": true
+      },
+      "positionMs": 0,
+      "pausedAbsoluteMs": -5001,
+      "expected": {
+        "canTimeShift": true,
+        "contains": true,
+        "expired": true,
+        "goLiveMs": 27000,
+        "behindLiveMs": 27000,
+        "atLiveEdge": false
+      }
+    },
+    {
+      "id": "negative-skew-paused-at-end",
+      "note": "Negative skew: the window starts 5 s before stream position zero (positionInFirstPeriodMs-style offset).",
+      "window": {
+        "offsetMs": -5000,
+        "durationMs": 30000,
+        "defaultPositionMs": 27000,
+        "seekable": true
+      },
+      "positionMs": 30000,
+      "pausedAbsoluteMs": 25000,
+      "expected": {
+        "canTimeShift": true,
+        "contains": true,
+        "expired": false,
+        "goLiveMs": 27000,
+        "behindLiveMs": 0,
+        "atLiveEdge": true
+      }
+    },
+    {
+      "id": "negative-skew-paused-past-end",
+      "note": "Negative skew: the window starts 5 s before stream position zero (positionInFirstPeriodMs-style offset).",
+      "window": {
+        "offsetMs": -5000,
+        "durationMs": 30000,
+        "defaultPositionMs": 27000,
+        "seekable": true
+      },
+      "positionMs": 30000,
+      "pausedAbsoluteMs": 25001,
+      "expected": {
+        "canTimeShift": true,
+        "contains": true,
+        "expired": true,
+        "goLiveMs": 27000,
+        "behindLiveMs": 0,
+        "atLiveEdge": false
+      }
     }
   ],
   "metadataCases": [

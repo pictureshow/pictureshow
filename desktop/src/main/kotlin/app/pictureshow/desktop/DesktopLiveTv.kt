@@ -153,6 +153,7 @@ class DesktopLiveTv internal constructor(
         } else {
             val defaults = api.defaults(a, program.id).required()
             val draft = timerDraft(defaults, fresh, series)
+                ?: error("This program no longer has valid schedule dates. Refresh Live TV.")
             update(a) { it.copy(draft = draft, draftSeries = series, draftExisting = false) }
         }
     }

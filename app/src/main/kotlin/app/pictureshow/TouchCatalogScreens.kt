@@ -603,6 +603,14 @@ internal fun TouchCatalogDetail(
                                     }
                                     if (item.type in listOf("Movie", "Episode", "Video", "Series", "Season")) {
                                         TouchDetailActionGrid(page.actions)
+                                        // PLAY-17: under the grid, so the line moves none of its actions.
+                                        state.finishedLine?.let { line ->
+                                            Text(
+                                                line,
+                                                modifier = Modifier.testTag("touch:detail:finished")
+                                                    .semantics { liveRegion = LiveRegionMode.Polite }
+                                            )
+                                        }
                                         // Under the grid, so it moves none of the actions the grid holds still.
                                         val startDownload: () -> Unit = {
                                             val season = if (item.type == "Season") {
