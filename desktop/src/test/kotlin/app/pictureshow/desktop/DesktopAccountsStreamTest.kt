@@ -151,6 +151,26 @@ class DesktopAccountsStreamTest {
         assertFalse(desktopPinAway(iconified = false, focused = true, playing = false))
     }
 
+    /** Leg 172 integration: music playing in an unfocused window is not time away, so the PIN doesn't return over it. */
+    @Test fun musicPlayingInTheBackgroundIsNotTimeAway() = runBlocking {
+        val d = dir(); val clock = Clock()
+        val lock = DesktopProfileLock(d, scope, { clock.now })
+        lock.load(); setPin(lock, ana, "8642")
+        var relocks = 0; lock.onRelock = { relocks++ }
+        val seerr = DesktopSeerr(DesktopSeerrStore(d), scope, { ana }, log = { })
+        val s = DesktopState(account = ana, route = DesktopRoute.Home)
+        desktopAccountsObserve(s, s, lock, seerr, musicPlaying = true)
+        lock.window(iconified = false, focused = false)
+        clock.now += PROFILE_PIN_RELOCK_AFTER_MS + 1
+        lock.window(focused = true)
+        assertEquals(0, relocks, "music counts as playing")
+        desktopAccountsObserve(s, s, lock, seerr, musicPlaying = false)
+        lock.window(focused = false)
+        clock.now += PROFILE_PIN_RELOCK_AFTER_MS + 1
+        lock.window(focused = true)
+        assertEquals(1, relocks, "without video or music the time away runs")
+    }
+
     @Test fun approvalCopyCoversEveryOutcomeWithoutServerText() {
         QuickConnectApprovalResult.entries.forEach { r ->
             val text = desktopApprovalText(r, "Ana")

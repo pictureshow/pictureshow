@@ -14,14 +14,17 @@ import java.awt.event.WindowEvent
  * connection; leaving Settings ends PIN-change permissions (AUTH-19); playback starting or pausing moves the time away
  * (AUTH-18).
  */
-internal fun desktopAccountsObserve(previous: DesktopState, next: DesktopState, pins: DesktopProfileLock, seerr: DesktopSeerr) {
+internal fun desktopAccountsObserve(previous: DesktopState, next: DesktopState, pins: DesktopProfileLock, seerr: DesktopSeerr, musicPlaying: Boolean = false) {
     if (previous.account?.key != next.account?.key || previous.account?.signedIn != next.account?.signedIn) {
         pins.viewerChanged(next.account)
         seerr.viewerChanged(next.account)
     }
     if (previous.route == DesktopRoute.Settings && next.route != DesktopRoute.Settings) pins.leftSettings()
-    pins.playing(next.playback?.let { it.ready && !it.paused && it.end == null } == true)
+    pins.playing(desktopVideoPlaying(next) || musicPlaying)
 }
+
+/** Video counts while it is really playing; music (stream B) counts while audio is meant to come out. */
+internal fun desktopVideoPlaying(s: DesktopState) = s.playback?.let { it.ready && !it.paused && it.end == null } == true
 
 /** The window's minimized and focused states feed the time away (AUTH-18). */
 internal fun attachPinWindow(window: Window, pins: DesktopProfileLock) {

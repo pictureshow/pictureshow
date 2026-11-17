@@ -83,7 +83,9 @@ class DesktopController(
     private var inputAttached = false
     init {
         // AUTH-18: a relock closes the open player; the lock screen then asks like a fresh start.
-        pins.onRelock = { if (mutable.value.route == DesktopRoute.Player) stopPlayback() }
+        pins.onRelock = { if (mutable.value.route == DesktopRoute.Player) stopPlayback(); music.pause() }
+        // AUTH-18: music playing in an unfocused window is not time away, as video isn't.
+        scope.launch { music.state.map { it.isPlaying }.distinctUntilChanged().collect { pins.playing(desktopVideoPlaying(mutable.value) || it) } }
         inputDiagnostics.route(mutable.value.route)
         scope.launch { while (isActive) { delay(10_000); inputDiagnostics.heartbeat() } }
     }
@@ -119,7 +121,7 @@ class DesktopController(
         val next = change(previous)
         mutable.value = next
         inputDiagnostics.route(next.route)
-        desktopAccountsObserve(previous, next, pins, seerr)
+        desktopAccountsObserve(previous, next, pins, seerr, music.state.value.isPlaying)
     }
     private fun snapshotAccounts() {
         val s = store.snapshots.value; updateState { it.copy(accounts = s.accounts, rememberedServers = s.rememberedServers) }
