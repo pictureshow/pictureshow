@@ -18,6 +18,12 @@ internal const val ENTRY_INVALID = "Could not open this playback request."
 
 internal data class PlaybackEntry(val itemId: String, val positionMs: Long? = null)
 
+/**
+ * AUTH-18: an entry that arrived while [heldFor] was current (perhaps behind its PIN) opens only for that viewer. If
+ * someone else is current once the lock is past, a switch from the lock screen, it is dropped rather than played as them.
+ */
+internal fun entryForViewer(heldFor: String?, current: String?): Boolean = heldFor != null && heldFor == current
+
 internal sealed interface ParsedPlaybackEntry {
     data object Ignore : ParsedPlaybackEntry
     data object Invalid : ParsedPlaybackEntry

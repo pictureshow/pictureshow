@@ -207,8 +207,9 @@ class ProfileLockStore(private val persistence: TextPersistence, private val has
     private var backgroundedAt: Long? = null
 
     /** Pictureshow left the screen (the process stopped being visible). [now] is the monotonic clock. */
+    /** Away from now, unless already away: a paused picture-in-picture window that then closes keeps its earlier start. */
     fun backgrounded(now: Long) {
-        backgroundedAt = now
+        if (backgroundedAt == null) backgroundedAt = now
     }
 
     /**

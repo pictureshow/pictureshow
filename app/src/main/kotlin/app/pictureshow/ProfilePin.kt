@@ -625,7 +625,22 @@ internal class ProfileRelockObserver(
 ) : androidx.lifecycle.DefaultLifecycleObserver {
     override fun onStop(owner: androidx.lifecycle.LifecycleOwner) = store.backgrounded(clock())
 
-    override fun onStart(owner: androidx.lifecycle.LifecycleOwner) {
+    override fun onStart(owner: androidx.lifecycle.LifecycleOwner) = inUse()
+
+    /**
+     * A picture-in-picture window keeps Pictureshow started, so it counts as in use only while it plays: paused or
+     * ended, the away time runs as if it had left the screen; playing again, or back to full screen, ends it (and locks
+     * if it ran five minutes). Closing the window ([started] false) leaves the time running for ON_STOP to keep.
+     */
+    fun pictureInPicture(active: Boolean, playing: Boolean, started: Boolean) {
+        if (active && !playing) {
+            store.backgrounded(clock())
+        } else if (active || started) {
+            inUse()
+        }
+    }
+
+    private fun inUse() {
         // Locked again: whatever kept playing for the viewer while away stops, so the lock isn't only a screen.
         if (store.foregrounded(clock())) onRelock()
     }

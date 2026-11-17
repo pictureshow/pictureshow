@@ -58,4 +58,57 @@ class ProfileRelockObserverTest {
         // The relock also stops what kept playing for the viewer, once.
         assertEquals(1, relocks)
     }
+
+    @Test
+    fun aPausedPictureInPictureWindowCountsAsAwayAndAPlayingOneDoesNot() {
+        val store = ProfileLockStore(Memory(), JvmProfilePinHasher(rounds = 1_000))
+        runBlocking { store.set("parent", "2468", askOnStart = true) }
+        var now = 10_000L
+        var relocks = 0
+        val observer = ProfileRelockObserver(store, clock = { now }, onRelock = { relocks++ })
+        // Playing in the window for an hour: in use.
+        observer.pictureInPicture(active = true, playing = true, started = true)
+        now += 3_600_000
+        observer.pictureInPicture(active = true, playing = true, started = true)
+        assertEquals("parent", store.unlocked.value)
+        // Paused two minutes, then played again: still open.
+        observer.pictureInPicture(active = true, playing = false, started = true)
+        now += 120_000
+        observer.pictureInPicture(active = true, playing = true, started = true)
+        assertEquals("parent", store.unlocked.value)
+        // Paused five minutes, then Play in the window: locked again, and what played stops.
+        observer.pictureInPicture(active = true, playing = false, started = true)
+        now += PROFILE_PIN_RELOCK_AFTER_MS
+        observer.pictureInPicture(active = true, playing = true, started = true)
+        assertNull(store.unlocked.value)
+        assertEquals(1, relocks)
+    }
+
+    @Test
+    fun closingAPausedWindowKeepsTheEarlierStartAndFullScreenEndsIt() {
+        val store = ProfileLockStore(Memory(), JvmProfilePinHasher(rounds = 1_000))
+        runBlocking { store.set("parent", "2468", askOnStart = true) }
+        var now = 10_000L
+        val owner = Owner()
+        val observer = ProfileRelockObserver(store, clock = { now })
+        owner.registry.addObserver(observer)
+        owner.registry.currentState = Lifecycle.State.RESUMED
+        // Paused in the window three minutes, then expanded back to full screen: in use again, the clock ends.
+        observer.pictureInPicture(active = true, playing = false, started = true)
+        now += 180_000
+        observer.pictureInPicture(active = false, playing = false, started = true)
+        now += 180_000
+        owner.registry.currentState = Lifecycle.State.CREATED
+        now += 60_000
+        owner.registry.currentState = Lifecycle.State.RESUMED
+        assertEquals("parent", store.unlocked.value)
+        // Paused four minutes, then the window closed (stopped): the away time started at the pause, not the close.
+        observer.pictureInPicture(active = true, playing = false, started = true)
+        now += 240_000
+        observer.pictureInPicture(active = false, playing = false, started = false)
+        owner.registry.currentState = Lifecycle.State.CREATED
+        now += 60_000
+        owner.registry.currentState = Lifecycle.State.RESUMED
+        assertNull(store.unlocked.value)
+    }
 }
