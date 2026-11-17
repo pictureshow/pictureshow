@@ -6,6 +6,8 @@ Status: early development. Server discovery, password sign-in, Quick Connect, re
 
 Pictureshow is developed with AI assistance and tested on real Android TV hardware.
 
+Planned work, platform by platform, is in [ROADMAP.md](ROADMAP.md).
+
 ## Build
 
 Install JDK 21 and the Android SDK with platform 37 and build-tools 36.0.0. Set `ANDROID_HOME` or point `sdk.dir` in an untracked `local.properties` file at the SDK, then run:
