@@ -259,15 +259,22 @@ class PictureshowApplication : Application() {
                 }
             )
         }
+        val koin = dependencyGraph.koin
+        val lock = koin.get<app.pictureshow.core.ProfileLockStore>()
         if (usesTvInterface(this)) {
-            watchNext = WatchNextCoordinator(this, dependencyGraph.koin.get(), dependencyGraph.koin.get()).also { it.start() }
+            watchNext = WatchNextCoordinator(
+                this,
+                dependencyGraph.koin.get(),
+                dependencyGraph.koin.get(),
+                admitted = { lock.admits(it.key) },
+                lockChanges = kotlinx.coroutines.flow.combine(lock.unlocked, lock.locks) { _, _ -> },
+                prepare = lock::load
+            ).also { it.start() }
         }
         // AUTH-18: five minutes with no Pictureshow screen visible locks again. The process lifecycle stops only when
         // nothing of ours is on screen, so the in-app screensaver and picture-in-picture never count as away.
         // A relock also ends what kept going while away: music and its controls, being a remote target, and following a
         // Watch-together group. The open video goes with the screens the lock replaces.
-        val koin = dependencyGraph.koin
-        val lock = koin.get<app.pictureshow.core.ProfileLockStore>()
         androidx.lifecycle.ProcessLifecycleOwner.get().lifecycle.addObserver(
             ProfileRelockObserver(lock, onRelock = { profileRelocked(lock, koin.get(), koin.get(), koin.get()) })
         )

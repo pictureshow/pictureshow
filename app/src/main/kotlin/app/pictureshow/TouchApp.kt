@@ -90,6 +90,8 @@ internal fun TouchPictureshow(
     }
     // AUTH-16: see the TV host. Nothing below (rows, deep links, playback entries) composes while locked.
     var pendingPassword by remember { mutableStateOf<app.pictureshow.core.Account?>(null) }
+    // Who an outside entry (Watch Next, a link, Assistant) arrived for, noted before the lock can change who is current.
+    val entryHeldFor by rememberSaveable(entrySequence) { mutableStateOf(state.snapshot.currentKey) }
     if (profileLockGate(state.snapshot, accounts, tv = false) { pendingPassword = it }) return
     // Navigation restores its own stack. Save the identity that installed it too: the first
     // composition after recreation is not an account change. Do not put credentials in saved state.
@@ -229,7 +231,7 @@ internal fun TouchPictureshow(
         LaunchedEffect(entrySequence, state.snapshot.currentKey, state.snapshot.currentAccount?.accessToken) {
             val entry = playbackEntry ?: return@LaunchedEffect
             val account = state.snapshot.currentAccount?.takeUnless { it.expired }
-            if (account == null) {
+            if (account == null || !entryForViewer(entryHeldFor, account.key)) {
                 consumePlaybackEntry()
                 return@LaunchedEffect
             }
