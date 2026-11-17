@@ -38,7 +38,7 @@ class PlaybackEngineVectorsTest {
                 assertEquals(
                     case.getValue("expected"),
                     JsonObject(mapOf("action" to JsonPrimitive(action.name))),
-                    case.getValue("id").jsonPrimitive.content,
+                    case.getValue("id").jsonPrimitive.content
                 )
                 continue
             }
