@@ -1237,25 +1237,33 @@ internal class MusicHost(
 
             error.status == 403 || error.status == 404 -> enqueue { failCurrent() }
 
-            else -> enqueue {
-                val active = account
-                val q = queue.committed
-                val title = q.entries.firstOrNull { it.id == q.current }?.media?.let(tracks::get)?.title.orEmpty()
-                val downloaded = active?.let { local?.downloaded(it) }.orEmpty()
-                val unreachable = musicUnreachable(q, downloaded, title)
-                if (unreachable.step == "skip") {
-                    // One skip per track per pass: the reducer marks this one failed, so a queue that comes round again stops.
-                    commit {
-                        QueueEvent("error", revision = it.revision, generation = it.generation, completion = it.completion, music = true)
-                    }
-                    publish { it.copy(message = unreachable.message) }
-                } else {
-                    player?.playWhenReady = false
-                    commit { QueueEvent("pause", revision = it.revision, generation = it.generation) }
-                    publish { it.copy(message = unreachable.message) }
-                }
-            }
+            else -> enqueue { unreachable(always = true) }
         }
+    }
+
+    /**
+     * The current track needs the server and the server can't be reached, whether that showed while asking for the track or
+     * while streaming it (MUS-10). With [always] false, a queue with nothing downloaded in it is left to the caller's own wording.
+     * Returns whether this handled it.
+     */
+    private suspend fun unreachable(always: Boolean): Boolean {
+        val active = account
+        val q = queue.committed
+        val title = q.entries.firstOrNull { it.id == q.current }?.media?.let(tracks::get)?.title.orEmpty()
+        val downloaded = active?.let { local?.downloaded(it) }.orEmpty()
+        if (!always && q.entries.none { it.media in downloaded }) return false
+        val unreachable = musicUnreachable(q, downloaded, title)
+        if (unreachable.step == "skip") {
+            // One skip per track per pass: the reducer marks this one failed, so a queue that comes round again stops.
+            commit {
+                QueueEvent("error", revision = it.revision, generation = it.generation, completion = it.completion, music = true)
+            }
+        } else {
+            player?.playWhenReady = false
+            commit { QueueEvent("pause", revision = it.revision, generation = it.generation) }
+        }
+        publish { it.copy(message = unreachable.message) }
+        return true
     }
 
     private suspend fun failCurrent() {
@@ -1569,6 +1577,8 @@ internal class MusicHost(
 
                 error.errorCode in NETWORK_ERRORS -> enqueue {
                     savePosition()
+                    // A stream that drops in a queue with downloads in it follows the offline rule, not a bare pause.
+                    if (unreachable(always = false)) return@enqueue
                     commit { QueueEvent("pause", revision = it.revision, generation = it.generation) }
                     publish { it.copy(message = "Lost the connection. Your place is saved: press Play to try again.") }
                 }

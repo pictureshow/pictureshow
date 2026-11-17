@@ -116,6 +116,12 @@ class MusicHostTest {
     /** The server can't be reached: every negotiation fails as a lost connection does. */
     @Volatile private var unreachable = false
 
+    /** Tracks the server agrees to play whose stream then can't be opened, as when the connection drops between the two. */
+    private val deadStreams = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
+    /** A local port nothing listens on, so opening it is refused at once, as an unreachable server's is. */
+    private val closedPort by lazy { java.net.ServerSocket(0).use { it.localPort } }
+
     /** Downloaded tracks by media id, and what their listens wrote to the outbox. */
     private val downloaded = java.util.concurrent.ConcurrentHashMap<String, java.io.File>()
     private val outbox = java.util.Collections.synchronizedList(mutableListOf<String>())
@@ -158,7 +164,7 @@ class MusicHostTest {
                         media,
                         MediaSourceInfo(id = media),
                         PlayMethod.DirectPlay,
-                        server.url("/$media.wav").toString(),
+                        if (media in deadStreams) "http://127.0.0.1:$closedPort/$media.wav" else server.url("/$media.wav").toString(),
                         emptyMap(),
                         "session-$media"
                     )
@@ -370,7 +376,8 @@ class MusicHostTest {
                 System.currentTimeMillis() < end,
                 "Waited for: $what. Log: $log. Ui: ${hosts.lastOrNull()?.state?.value?.let {
                     it.message to it.queue?.order
-                }}. Player: ${lastPlayer?.let { it.playbackState to it.playWhenReady }}. " +
+                }}. Player: ${lastPlayer?.let { listOf(it.playbackState, it.playWhenReady, it.currentMediaItem?.mediaId) }}. " +
+                    "Outbox: $outbox. Negotiated: $negotiated. " +
                     "Clocks: fakeMs=${pacedClocks.map { it.clock.elapsedRealtime() }} " +
                     "androidUptimeMs=${android.os.SystemClock.uptimeMillis()} " +
                     "pacedMs=${pacedClocks.map { it.advancedMs }}. " +
@@ -612,6 +619,28 @@ class MusicHostTest {
         assertTrue("start b" !in outbox)
         assertEquals("Skipped Title b: it isn't downloaded, and the server can't be reached.", music.state.value.message)
         assertTrue(negotiated.none { it == "a" || it == "c" || it == "unreachable a" || it == "unreachable c" })
+    }
+
+    /**
+     * MUS-10, found on the phone: the server answered for the online-only track but its stream couldn't be opened. In a queue with
+     * downloads that is the same offline rule (skip once, say why), not a bare "Lost the connection" pause on it.
+     */
+    @Test fun anOnlineOnlyTrackWhoseStreamCantOpenIsSkippedOnceAndSaysWhy() {
+        // A refused connection is retried on the player's clock; pace it by real time as the revocation fixture does.
+        paceNetworkClock = true
+        deadStreams += "b"
+        // b leads: the fixture's tracks are a tenth of a second, so a short track before it would wait on b's buffer instead.
+        download("c")
+        val music = host()
+        ready(music)
+        music.request(album("b", "c"))
+        until("the downloaded track after it") { "start c" in outbox }
+        assertEquals(
+            "Skipped Title b: it isn't downloaded, and the server can't be reached.",
+            music.state.value.message,
+            "${synchronized(playerErrors) { playerErrors.toList() }}"
+        )
+        assertTrue(music.state.value.queue!!.paused.not())
     }
 
     /** MUS-10: with nothing downloaded after it, the queue stops on the track and says so instead of hunting. */
