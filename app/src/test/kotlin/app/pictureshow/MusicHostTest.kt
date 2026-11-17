@@ -142,6 +142,9 @@ class MusicHostTest {
 
         override val changes get() = downloads
 
+        override fun art(account: Account, media: String): String? =
+            savedArt[media]?.takeIf { it.isFile }?.let { android.net.Uri.fromFile(it).toString() }
+
         override suspend fun report(account: Account, media: String, serial: Long, report: String, ticks: Long, runtimeTicks: Long?) {
             outbox += "$report $media"
         }
@@ -150,8 +153,12 @@ class MusicHostTest {
     /** Bumped on each finished download, as the download engine's library is. */
     private val downloads = kotlinx.coroutines.flow.MutableStateFlow(0)
 
+    /** Each download's saved artwork, as the engine keeps it beside the file. */
+    private val savedArt = java.util.concurrent.ConcurrentHashMap<String, java.io.File>()
+
     private fun download(vararg ids: String, ms: Int = 100) = ids.forEach { id ->
         downloaded[id] = java.io.File(context.cacheDir, "downloaded-$id.wav").apply { writeBytes(wav(ms)) }
+        savedArt[id] = java.io.File(context.cacheDir, "art-$id.jpg").apply { writeBytes(byteArrayOf(1, 2, 3)) }
         downloads.value += 1
     }
 
@@ -348,6 +355,7 @@ class MusicHostTest {
         server.shutdown()
         java.io.File(context.filesDir, "music").deleteRecursively()
         downloaded.values.forEach { it.delete() }
+        savedArt.values.forEach { it.delete() }
     }
 
     private fun wav(ms: Int = 100): ByteArray {
@@ -745,6 +753,31 @@ class MusicHostTest {
         assertTrue(opened.isEmpty(), "Nothing else was opened: $opened")
         until("a to end") { "stop a" in log }
         assertTrue(outbox.none { it.endsWith(" a") }, "Its listen stayed with the server: $outbox")
+    }
+
+    /**
+     * MUS-10: a downloaded track queued from the library, not from Downloads, still shows its saved art, on the screens and in
+     * the media session, and one whose download lands while queued picks it up. What isn't downloaded keeps the server's art.
+     */
+    @Test fun aDownloadedTrackShowsItsSavedArtWhereverItWasQueuedFrom() {
+        paceNetworkClock = true
+        download("a", ms = 3_000)
+        val music = host()
+        ready(music)
+        val serverArt = { id: String -> "http://server/Items/$id/Images/Primary" }
+        val queued = listOf("a", "b").map { MusicTrack(it, "Title $it", artUrl = serverArt(it)) }
+        music.request(MusicPlay(account.key, queued, null, "album", "Album", false))
+        until("a playing from the device") { "start a" in outbox && lastPlayer?.isPlaying == true }
+        val fileArt = { id: String -> android.net.Uri.fromFile(savedArt.getValue(id)).toString() }
+        assertEquals(fileArt("a"), music.state.value.tracks.getValue("a").artUrl)
+        assertEquals(serverArt("b"), music.state.value.tracks.getValue("b").artUrl)
+        assertEquals(fileArt("a"), lastPlayer!!.currentMediaItem!!.mediaMetadata.artworkUri.toString(), "The media session's art")
+        download("b")
+        until("b's saved art") { music.state.value.tracks.getValue("b").artUrl == fileArt("b") }
+        val saved = runBlocking { MusicStore(context).load(account) }
+        assertEquals(serverArt("a"), saved?.tracks?.first { it.id == "a" }?.artUrl, "The saved queue keeps the server's art")
+        music.stop()
+        until("the stop") { !music.state.value.outputActive }
     }
 
     /** MUS-10: a new token never stops or reopens a downloaded track that is playing; the file doesn't use it. */

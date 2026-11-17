@@ -327,6 +327,11 @@ internal class EngineMusicLocal(private val engine: OfflineEngine) : MusicLocal 
 
     override val changes: kotlinx.coroutines.flow.Flow<Any?> get() = engine.libraries
 
+    override fun art(account: Account, media: String): String? = engine.libraries.value[account.key]?.readyTrack(media)
+        ?.let { engine.artFile(account.key, it) }
+        ?.takeIf { it.isFile }
+        ?.let { Uri.fromFile(it).toString() }
+
     override fun downloaded(account: Account): Set<String> = engine.libraries.value[account.key]?.manifest?.entries.orEmpty()
         .filter { it.kind == OfflineMediaKind.audio && it.job.phase == OfflinePhase.ready }
         .map { it.itemId }
