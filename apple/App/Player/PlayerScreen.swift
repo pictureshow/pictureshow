@@ -345,12 +345,17 @@ struct PlayerContent: View {
                 .accessibilityHidden(true)
             if pip.active {
                 // TOUCH-15: the picture is in the system window; this screen says so until it comes back.
+                // Always light text on a dark scrim: the video surface stays black whatever the app's appearance,
+                // and the system secondary colour turned the hint grey-on-black in Light mode.
                 VStack(spacing: 10) {
-                    Image(systemName: "pip").font(.system(size: 44)).foregroundStyle(.secondary)
-                    Text("Playing in picture in picture").font(.headline)
+                    Image(systemName: "pip").font(.system(size: 44)).foregroundStyle(.white.opacity(0.8))
+                    Text("Playing in picture in picture").font(.headline).foregroundStyle(.white)
                     Text("Tap the window and choose expand to come back here.")
-                        .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                        .font(.footnote).foregroundStyle(.white.opacity(0.8)).multilineTextAlignment(.center)
                 }
+                .padding(.horizontal, 28).padding(.vertical, 24)
+                .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(.black.opacity(0.72)))
+                .environment(\.colorScheme, .dark)
                 .padding(32)
                 .allowsHitTesting(false)
                 .accessibilityElement(children: .combine)

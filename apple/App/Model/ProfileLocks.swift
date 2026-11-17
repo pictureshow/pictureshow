@@ -83,6 +83,8 @@ extension AppModel {
             // A viewing still open (a picture-in-picture window included) ends through its normal stop.
             activeController?.close()
             player = nil
+            // AUTH-18: music stops too, its place saved and its queue kept, and nothing starts it until unlock.
+            music.lockOut()
         }
         return true
     }

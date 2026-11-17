@@ -240,9 +240,9 @@ struct LibraryTile: View {
 
     var body: some View {
         #if os(tvOS)
-        NavigationLink(value: library.isLiveTvLibrary ? Route.liveTV : Route.library(library)) { tile }.buttonStyle(.card)
+        NavigationLink(value: library.isLiveTvLibrary ? Route.liveTV : (library.musicRoute.map(Route.music) ?? Route.library(library))) { tile }.buttonStyle(.card)
         #else
-        NavigationLink(value: library.isLiveTvLibrary ? Route.liveTV : Route.library(library)) { tile.clipShape(RoundedRectangle(cornerRadius: Theme.corner, style: .continuous)) }.buttonStyle(.plain)
+        NavigationLink(value: library.isLiveTvLibrary ? Route.liveTV : (library.musicRoute.map(Route.music) ?? Route.library(library))) { tile.clipShape(RoundedRectangle(cornerRadius: Theme.corner, style: .continuous)) }.buttonStyle(.plain)
         #endif
     }
 
