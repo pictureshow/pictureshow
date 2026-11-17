@@ -357,6 +357,13 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState, video
         }
     }, onClosed = { host.finish(reason = "pip-closed") })
     val pipAvailable = pictureInPictureAllowed(pipRequest.state)
+    // AUTH-18: the small window counts as in use only while it plays; paused or ended, the away time runs.
+    val relock = remember { (context.applicationContext as? PictureshowApplication)?.relockObserver }
+    val pipLifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    val pipPlaying = !paused && !pipRequest.state.atEnd
+    LaunchedEffect(pip.active, pipPlaying) {
+        relock?.pictureInPicture(pip.active, pipPlaying, pipLifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED))
+    }
     LaunchedEffect(pip.active) {
         if (pip.active) {
             ui.sheet = null

@@ -110,6 +110,42 @@ class WatchNextCoordinatorTest {
         assertTrue(provider.programs.isEmpty())
     }
 
+    /** AUTH-18: the launcher is outside Pictureshow, so a viewer behind its PIN shows nothing there. */
+    @Test
+    fun aViewerBehindItsPinHasNoLauncherRowsUntilUnlockedAndLosesThemOnRelock() = runTest {
+        val accounts = AccountStore(Persistence())
+        accounts.remember(account)
+        val lock = app.pictureshow.core.ProfileLockStore(Persistence(), app.pictureshow.core.JvmProfilePinHasher(rounds = 1_000))
+        lock.set(account.key, "2468", askOnStart = true)
+        // Opened again: the PIN is asked, nothing typed yet.
+        lock.backgrounded(0)
+        lock.foregrounded(app.pictureshow.core.PROFILE_PIN_RELOCK_AFTER_MS)
+        val service = CatalogModelsTest.FakeCatalog().apply { resumeItems = ClientResult.Success(ItemPage(listOf(item))) }
+        val provider = Provider()
+        WatchNextCoordinator(
+            RuntimeEnvironment.getApplication(),
+            accounts,
+            service,
+            backgroundScope,
+            { provider },
+            Dismissals(),
+            admitted = { lock.admits(it.key) },
+            lockChanges = kotlinx.coroutines.flow.combine(lock.unlocked, lock.locks) { _, _ -> },
+            prepare = lock::load
+        ).start()
+        runCurrent()
+        assertTrue(provider.programs.isEmpty(), "locked: no titles on the launcher")
+        assertEquals(0, service.resumeCalls, "and nothing asked of the server for them")
+        lock.verify(account.key, "2468", 0)
+        runCurrent()
+        assertEquals(1, provider.programs.size)
+        // Five minutes away: locked again, and the rows go with it.
+        lock.backgrounded(0)
+        lock.foregrounded(app.pictureshow.core.PROFILE_PIN_RELOCK_AFTER_MS)
+        runCurrent()
+        assertTrue(provider.programs.isEmpty())
+    }
+
     /** AUTH-10: a card kept after Sign out owns no launcher rows. */
     @Test
     fun signOutKeepingTheCardClearsTheViewersRows() = runTest {

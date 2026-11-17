@@ -22,7 +22,9 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertTrue
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -44,6 +46,15 @@ class PlaybackEntryTest {
 
     private fun play() = Intent(PLAY_ACTION).putExtra("itemId", id)
     private fun view(value: String) = Intent(Intent.ACTION_VIEW, Uri.parse(value))
+
+    /** AUTH-18: an entry held at the lock plays only for the viewer it arrived for, never for one switched to. */
+    @Test
+    fun aHeldEntryOpensOnlyForTheViewerItArrivedFor() {
+        assertTrue(entryForViewer("parent", "parent"))
+        assertFalse(entryForViewer("parent", "kid"))
+        assertFalse(entryForViewer(null, "kid"), "no viewer when it arrived: it never waits for a later one")
+        assertFalse(entryForViewer("parent", null))
+    }
 
     @Test
     fun actionRequiresStringIdentityAndAnOptionalLongPosition() {

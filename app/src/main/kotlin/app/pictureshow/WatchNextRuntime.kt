@@ -13,6 +13,7 @@ import android.os.Bundle
 import androidx.annotation.RequiresApi
 import androidx.tvprovider.media.tv.TvContractCompat
 import androidx.tvprovider.media.tv.WatchNextProgram
+import app.pictureshow.core.Account
 import app.pictureshow.core.AccountStore
 import app.pictureshow.core.CatalogService
 import app.pictureshow.core.ClientResult
@@ -22,8 +23,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -110,7 +113,16 @@ internal class WatchNextCoordinator(
     private val providerFactory: () -> WatchProvider? = {
         if (supportsWatchNext(application)) AndroidWatchProvider(application) else null
     },
-    private val dismissals: WatchDismissals = StoredWatchDismissals(application)
+    private val dismissals: WatchDismissals = StoredWatchDismissals(application),
+    /**
+     * AUTH-18: whether the current viewer is past its profile lock. The launcher sits outside Pictureshow, so a viewer
+     * behind its PIN (at opening, after a relock or just switched to) shows no titles there.
+     */
+    private val admitted: (Account) -> Boolean = { true },
+    /** Fires when the lock opens or closes, so the rows follow it. */
+    private val lockChanges: Flow<Any?> = emptyFlow(),
+    /** Reads what [admitted] needs (the saved PINs) before the first refresh. */
+    private val prepare: suspend () -> Unit = {}
 ) : Application.ActivityLifecycleCallbacks {
     private val requests = Channel<Unit>(Channel.CONFLATED)
 
@@ -125,12 +137,15 @@ internal class WatchNextCoordinator(
         scope.launch {
             try {
                 accounts.load()
+                prepare()
                 merge(
                     accounts.snapshots.map { snapshot -> snapshot.accounts to snapshot.currentKey }.distinctUntilChanged().map { Unit },
+                    lockChanges.map { Unit },
                     requests.receiveAsFlow()
                 ).collectLatest {
                     try {
-                        val account = accounts.snapshots.value.currentAccount?.takeUnless { it.expired }
+                        // Locked: retaining no viewer clears every row, as a sign-out does.
+                        val account = accounts.snapshots.value.currentAccount?.takeUnless { it.expired }?.takeIf(admitted)
                         // Clear removed and signed-out viewers' launcher dismissal history as well as published rows (AUTH-10).
                         val prefixes = accounts.snapshots.value.privateStateOwners.map { "${watchAccountKey(it)}:" }.toSet()
                         sync.retainSavedAccounts(prefixes)
@@ -140,7 +155,7 @@ internal class WatchNextCoordinator(
                         val resume = catalog.resume(account)
                         val next = catalog.nextUp(account)
                         // AccountStore can change while either request is in flight, including token expiration.
-                        if (accounts.snapshots.value.currentAccount != account) return@collectLatest
+                        if (accounts.snapshots.value.currentAccount != account || !admitted(account)) return@collectLatest
                         val failure = listOf(resume, next).filterIsInstance<ClientResult.Failure>().firstOrNull()
                         if (failure != null) {
                             if (failure.error.kind in setOf(ErrorKind.EXPIRED, ErrorKind.INVALID_CREDENTIALS)) {

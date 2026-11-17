@@ -447,6 +447,8 @@ internal fun Pictureshow(
     // AUTH-16: a viewer with a PIN opens nothing until it's typed. "Use the password" leaves the viewer and opens
     // its sign-in once the account bootstrap below has installed the chooser.
     var pendingPassword by remember { mutableStateOf<app.pictureshow.core.Account?>(null) }
+    // Who an outside entry (Watch Next, a link, Assistant) arrived for, noted before the lock can change who is current.
+    val entryHeldFor by rememberSaveable(entrySequence) { mutableStateOf(state.snapshot.currentKey) }
     if (profileLockGate(state.snapshot, accounts, tv = true) { pendingPassword = it }) return
     // Navigation restores its own stack. Save the identity that installed it too: the first
     // composition after recreation is not an account change. Do not put credentials in saved state.
@@ -475,7 +477,7 @@ internal fun Pictureshow(
     LaunchedEffect(entrySequence, state.snapshot.currentKey, state.snapshot.currentAccount?.accessToken) {
         val entry = playbackEntry ?: return@LaunchedEffect
         val account = state.snapshot.currentAccount?.takeUnless { it.expired }
-        if (account == null) {
+        if (account == null || !entryForViewer(entryHeldFor, account.key)) {
             consumePlaybackEntry()
             return@LaunchedEffect
         }
