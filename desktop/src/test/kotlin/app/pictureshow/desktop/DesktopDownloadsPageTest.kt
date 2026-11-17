@@ -31,12 +31,13 @@ import kotlinx.coroutines.flow.flowOf
 class DesktopDownloadsPageTest {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val identity = ClientIdentity("Test", "install-id", "1")
+    private val viewer = app.pictureshow.core.Account(app.pictureshow.core.Server("server", "Demo", "http://127.0.0.1:1", "12.4.0"), app.pictureshow.core.User("viewer", "Viewer"), "token")
     private val owner = DesktopOffline(
         DesktopOfflineEngine(kotlin.io.path.createTempDirectory("downloads-page").toFile(), AccountStore(object : TextPersistence {
             override suspend fun read(): String? = null
             override suspend fun write(value: String) = Unit
         }), identity, scope = scope),
-        DesktopOfflineApi(identity), scope, flowOf(null), { null }
+        DesktopOfflineApi(identity), scope, flowOf(viewer), { viewer }
     )
 
     private fun entry(id: String, title: String, phase: OfflinePhase, failure: String? = null) = OfflineEntry(
@@ -46,7 +47,7 @@ class DesktopDownloadsPageTest {
     )
 
     private val state = DesktopOfflineState(
-        accountKey = "server:viewer",
+        accountKey = viewer.key,
         library = OfflineLibrary(OfflineManifest(
             entries = listOf(entry("ready", "A Film Saved For The Plane", OfflinePhase.ready), entry("failed", "One That Stopped", OfflinePhase.failed, "http")),
             budget = OfflineBudget(capBytes = 20L * 1024 * 1024 * 1024, usedBytes = 1_000_000)
