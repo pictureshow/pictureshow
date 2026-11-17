@@ -95,8 +95,8 @@ enum LiveVectorRunner {
         case "sort": return LiveRules.sortChannels(try decode([LiveChannel].self, c["channels"])).map(\.id)
         case "tune": return LiveRules.canTune(try decode(LiveProgram.self, c["program"]), nowMs: try long(c, "now"))
         case "draft":
-            return LiveRules.timerDraft(defaults: try schedule(c["defaults"]), program: try decode(LiveProgram.self, c["program"]), series: try flag(c, "series"))
-                .fields.mapValues(\.foundation)
+            return LiveRules.timerDraft(defaults: try schedule(c["defaults"]), program: try decode(LiveProgram.self, c["program"]), series: try flag(c, "series"))?
+                .fields.mapValues(\.foundation) ?? NSNull()
         case "edit":
             do {
                 return try LiveRules.editSchedule(try schedule(c["original"]), edits: try decode([String: JSONValue].self, c["edits"]), series: try flag(c, "series"))

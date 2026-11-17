@@ -19,9 +19,13 @@ import PictureshowCore
         didSet {
             if player == nil { pictureInPictureMoved(active: false, playing: false) }
             // MUS-11: music stops once before any video opens, whichever route opened it, and keeps its queue.
-            else { music?.beforeVideo() }
+            else { music?.beforeVideo(); finishedViewings.clear() }
         }
     }
+    /// PLAY-17: a new viewing (above) ends an earlier finished line; the player records its own natural end.
+    @Published private(set) var finishedViewings = FinishedViewings()
+    func playbackFinished(_ item: MediaItem) { finishedViewings.finished(item) }
+    func leftDetail(_ id: String) { finishedViewings.clear(detailID: id) }
     /// AUTH-18 with TOUCH-15: whether a picture-in-picture window is up and whether its viewing plays, and the scene's
     /// last phase. Together they decide whether the time away runs (`ProfileLocks.swift`).
     var pictureInPictureActive = false

@@ -55,3 +55,27 @@ final class TextSubtitleTests: XCTestCase {
         XCTAssertEqual(try TextSubtitles.parse(data:Data(),format:"srt"),[])
     }
 }
+
+/// PLAY-11: Earlier/Reset/Later in 100 ms steps within ±10 s; positive is later, and the label says which way.
+final class SubtitleTimingTests: XCTestCase {
+    func testStepsClampAndLabel() {
+        XCTAssertEqual(SubtitleTiming.step(0, by: 1), 100)
+        XCTAssertEqual(SubtitleTiming.step(0, by: -1), -100)
+        XCTAssertEqual(SubtitleTiming.step(9_950, by: 1), 10_000)
+        XCTAssertEqual(SubtitleTiming.step(10_000, by: 1), 10_000)
+        XCTAssertEqual(SubtitleTiming.step(-10_000, by: -1), -10_000)
+        XCTAssertFalse(SubtitleTiming.canStep(10_000, by: 1))
+        XCTAssertTrue(SubtitleTiming.canStep(10_000, by: -1))
+        XCTAssertEqual(SubtitleTiming.label(0), "Timing: in sync")
+        XCTAssertEqual(SubtitleTiming.label(300), "Timing: +300 ms (later)")
+        XCTAssertEqual(SubtitleTiming.label(-1_200), "Timing: \u{2212}1,200 ms (earlier)")
+    }
+
+    func testALaterDelayShowsACueAfterItsAuthoredTime() throws {
+        let cues = try TextSubtitles.parse(data: Data("WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nHello\n".utf8), format: "vtt")
+        XCTAssertEqual(TextSubtitles.text(cues: cues, positionMs: SubtitleTiming.cueTime(positionMs: 1_500, delayMs: 0)), "Hello")
+        XCTAssertNil(TextSubtitles.text(cues: cues, positionMs: SubtitleTiming.cueTime(positionMs: 1_500, delayMs: 1_000)))
+        XCTAssertEqual(TextSubtitles.text(cues: cues, positionMs: SubtitleTiming.cueTime(positionMs: 2_500, delayMs: 1_000)), "Hello")
+        XCTAssertEqual(TextSubtitles.text(cues: cues, positionMs: SubtitleTiming.cueTime(positionMs: 500, delayMs: -1_000)), "Hello")
+    }
+}

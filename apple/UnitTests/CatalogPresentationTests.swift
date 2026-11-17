@@ -35,6 +35,41 @@ final class CatalogPresentationTests: XCTestCase {
         XCTAssertNil(Catalog.detailPlayItem(item: season, nextUp: [], episodes: [missing]))
     }
 
+    /// PLAY-17 (Android DetailFinishedLineTest): the page open under the player shows the line, a later visit doesn't,
+    /// leaving that page ends it, and a new viewing ends an earlier one.
+    func testFinishedLineBelongsToThePageTheViewingReturnsTo() {
+        var ledger = FinishedViewings()
+        let film = MediaItem(id: "film", name: "Invented film", type: "Movie")
+        let under = ledger.serial
+        XCTAssertNil(ledger.line(detailID: "film", arrival: under))
+        ledger.finished(film)
+        XCTAssertEqual(ledger.line(detailID: "film", arrival: under), "Finished. You watched Invented film to the end.")
+        XCTAssertNil(ledger.line(detailID: "film", arrival: ledger.serial), "a page opened after the end is a later visit")
+        ledger.clear(detailID: "other")
+        XCTAssertNotNil(ledger.line(detailID: "film", arrival: under), "an unrelated page leaving keeps the line")
+        ledger.clear(detailID: "film")
+        XCTAssertNil(ledger.line(detailID: "film", arrival: under))
+
+        var finale = MediaItem(id: "finale", name: "  Invented finale ", type: "Episode")
+        finale.seriesId = "series"; finale.seasonId = "season"
+        ledger.finished(finale)
+        XCTAssertEqual(ledger.line(detailID: "series", arrival: under), "Finished. You watched Invented finale to the end.")
+        XCTAssertNotNil(ledger.line(detailID: "season", arrival: under))
+        XCTAssertNil(ledger.line(detailID: "film", arrival: under))
+        ledger.clear()
+        XCTAssertNil(ledger.line(detailID: "series", arrival: under), "a new viewing ends an earlier line")
+    }
+
+    func testFinishedPagePlaysAgainButASeriesKeepsNamingItsEpisode() {
+        let film = MediaItem(id: "film", type: "Movie", userData: ItemUserData(playbackPositionTicks: 99))
+        XCTAssertEqual(CatalogPresentation.playLabel(container: film, target: film), "Resume")
+        XCTAssertEqual(CatalogPresentation.playLabel(container: film, target: film, finished: true), "Play again")
+        let series = MediaItem(id: "series", type: "Series")
+        var first = MediaItem(id: "e1", name: "Pilot", type: "Episode")
+        first.parentIndexNumber = 1; first.indexNumber = 1
+        XCTAssertEqual(CatalogPresentation.playLabel(container: series, target: first, finished: true), "Play S1:E1 · Pilot")
+    }
+
     func testHomeCacheSurvivesReloadAndKeepsViewersSeparate() throws {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: "pictureshow.catalog.tests.\(UUID().uuidString)"))
         let layouts = ["server|a": HomePreferences(mergeWatching: false), "server|b": HomePreferences()]

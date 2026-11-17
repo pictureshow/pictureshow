@@ -112,6 +112,13 @@ public enum DetailFeedback {
     public static func retryAttemptSucceeded(baseline: Int64, attempt: Int64, loading: Bool, failed: Bool) -> Bool { attempt > baseline && !loading && !failed }
     public static func retryCueCanWait(accessibilityEnabled: Bool, elapsedMillis: Int64) -> Bool { accessibilityEnabled && elapsedMillis < 30_000 }
     public static func completionPresentedPlayed(played: Bool, completionIntent: Bool) -> Bool { played || completionIntent }
+
+    /// PLAY-17: the line on the detail page a film or a series' last episode returns to after playing to its end. The title
+    /// is the item that played, trimmed; a nameless item reads "this".
+    public static func playbackFinishedLine(title: String?) -> String {
+        let trimmed = title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return "Finished. You watched \(trimmed.isEmpty ? "this" : trimmed) to the end."
+    }
     public static func completionIntentRetained(reportFailed: Bool, reportPending: Bool, rawReadSucceeded: Bool) -> Bool { !reportFailed && (reportPending || !rawReadSucceeded) }
     public static func rawReadMatchesAcknowledgement(raw: ItemUserData?, acknowledged: ItemUserData) -> Bool { raw == acknowledged }
     public static func playedRequestNotice(wanted: Bool, current: Bool) -> String? {

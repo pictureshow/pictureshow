@@ -8,7 +8,25 @@ struct SettingsView: View {
     @State private var signOutAccount: Account?
     @ObservedObject private var viewing = ViewingSettings.shared
 
+    #if os(tvOS)
+    @ObservedObject private var seerrRowFocus = SeerrRowFocus.shared
+    #endif
+
     var body: some View {
+        #if os(tvOS)
+        ScrollViewReader { proxy in
+            form.task(id: seerrRowFocus.wanted) {
+                guard seerrRowFocus.wanted else { return }
+                try? await Task.sleep(for: .milliseconds(250))
+                proxy.scrollTo(SeerrRowFocus.rowID, anchor: .center)
+            }
+        }
+        #else
+        form
+        #endif
+    }
+
+    private var form: some View {
         Form {
             accounts
             ProfilePinSettingsSection()

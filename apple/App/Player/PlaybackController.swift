@@ -13,7 +13,14 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
 /// handles track changes, segment skipping and the next episode. Platform views only draw it.
 @MainActor final class PlaybackController: ObservableObject {
     // What the views draw.
-    @Published private(set) var item: MediaItem
+    @Published private(set) var item: MediaItem {
+        // PLAY-11: subtitle timing belongs to one viewing; the next title starts in sync.
+        didSet { if oldValue.id != item.id { subtitleDelayMs = 0; adjustingSubtitleTiming = false } }
+    }
+    /// PLAY-11: this viewing's subtitle delay; positive shows the app-drawn captions later. Survives track reopens.
+    @Published private(set) var subtitleDelayMs = 0
+    /// Apple TV: Earlier/Reset/Later are on screen as the player's contextual buttons, over the video, while this is set.
+    @Published var adjustingSubtitleTiming = false
     @Published private(set) var decision: PlayDecision?
     @Published private(set) var isPlaying = false
     @Published private(set) var isBuffering = true
@@ -380,6 +387,24 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
         Task { await renegotiate(audio: selectedAudio, subtitle: index) }
     }
 
+    /// PLAY-11: what the Subtitles menu offers for timing: nothing with subtitles Off, one line for a picture track the
+    /// server burns into the video, otherwise Earlier/Reset/Later for the captions this app draws.
+    enum SubtitleTimingOffer: Equatable { case none, burnedIn, adjustable }
+    var subtitleTimingOffer: SubtitleTimingOffer {
+        guard selectedSubtitle >= 0 else { return .none }
+        if local != nil { return .adjustable }
+        guard let stream = subtitleStreams.first(where: { $0.index == selectedSubtitle }) else { return .none }
+        return Captions.isText(stream) ? .adjustable : .burnedIn
+    }
+
+    /// Earlier (-1), Later (+1) or Reset (0); the caption on screen follows at once, paused or playing.
+    func adjustSubtitleTiming(_ direction: Int) {
+        subtitleDelayMs = direction == 0 ? 0 : SubtitleTiming.step(subtitleDelayMs, by: direction)
+        if !cues.isEmpty {
+            cue = TextSubtitles.text(cues: cues, positionMs: SubtitleTiming.cueTime(positionMs: Int64(currentSeconds * 1000), delayMs: subtitleDelayMs))
+        }
+    }
+
     private func renegotiate(audio: Int?, subtitle: Int) async {
         let ticks = Ticks.from(seconds: currentSeconds)
         do { try await load(startTicks: ticks, audio: audio, subtitle: subtitle) }
@@ -616,7 +641,7 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
         if isLive { position = seconds; sampleLive(); reportProgress(force: false); return }
         position = seconds
         let ms = Int64(seconds * 1000)
-        if !cues.isEmpty { cue = TextSubtitles.text(cues: cues, positionMs: ms) } else if cue != nil { cue = nil }
+        if !cues.isEmpty { cue = TextSubtitles.text(cues: cues, positionMs: SubtitleTiming.cueTime(positionMs: ms, delayMs: subtitleDelayMs)) } else if cue != nil { cue = nil }
         updateSegment(ms)
         updateNextCard(ms)
         reportProgress(force: false)
@@ -675,7 +700,7 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
         if let local {
             app.downloads.recordCompleted(local.accountKey, itemID: local.entry.itemId)
             // Read again at the end, so an episode that finished downloading during this one follows it.
-            if app.preferences.autoplayNextEpisode, !nextCardDismissed, app.downloads.next(after: local) != nil { playNextLocal() } else { close() }
+            if app.preferences.autoplayNextEpisode, !nextCardDismissed, app.downloads.next(after: local) != nil { playNextLocal() } else { finishedToEnd() }
             return
         }
         let action = NaturalEndAction.decide(
@@ -693,8 +718,15 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
             // PLAY-30: with the countdown Off the card stays at the end and waits for Play now.
             nextCountdown = -1; countdownTask?.cancel(); heldAtEnd = true
         case .close:
-            close()
+            finishedToEnd()
         }
+    }
+
+    /// PLAY-17: this viewing played to its end with nothing next, so the page it returns to says it finished.
+    private func finishedToEnd() {
+        guard !finished else { return }
+        app.playbackFinished(item)
+        close()
     }
 
     private func reportProgress(force: Bool) {

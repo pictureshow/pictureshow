@@ -102,3 +102,33 @@ public enum TextSubtitles {
         return text
     }
 }
+
+/// PLAY-11: one viewing's subtitle timing. Positive shows captions later than their authored time; 100 ms steps, bounded
+/// to ±10 s. Wording follows web's panel (`player-subtitles.ts`).
+public enum SubtitleTiming {
+    public static let stepMs = 100
+    public static let limitMs = 10_000
+    public static let help = "Use Later if captions appear too early."
+    public static let burnedIn = "These subtitles are encoded into the video. Timing and appearance cannot be changed."
+
+    /// The delay after one Earlier (-1) or Later (+1) press, clamped and kept on the 100 ms grid.
+    public static func step(_ ms: Int, by direction: Int) -> Int {
+        let next = ms + direction.signum() * stepMs
+        return min(limitMs, max(-limitMs, next / stepMs * stepMs))
+    }
+
+    public static func canStep(_ ms: Int, by direction: Int) -> Bool { step(ms, by: direction) != ms }
+
+    /// "Timing: in sync", or the signed delay and which way it moves the captions ("Timing: +1,200 ms (later)").
+    public static func label(_ ms: Int) -> String {
+        if ms == 0 { return "Timing: in sync" }
+        let formatter = NumberFormatter()
+        formatter.locale = Locale(identifier: "en_US")
+        formatter.numberStyle = .decimal
+        let amount = formatter.string(from: NSNumber(value: abs(ms))) ?? String(abs(ms))
+        return ms > 0 ? "Timing: +\(amount) ms (later)" : "Timing: \u{2212}\(amount) ms (earlier)"
+    }
+
+    /// The authored cue time to show at `positionMs` with this delay: a later delay looks further back.
+    public static func cueTime(positionMs: Int64, delayMs: Int) -> Int64 { positionMs - Int64(delayMs) }
+}

@@ -68,6 +68,22 @@ struct PlayerOverlays: View {
     }
 }
 
+/// PLAY-11 on Apple TV: the current timing while Earlier/Reset/Later are on screen.
+struct SubtitleTimingStatus: View {
+    let delayMs: Int
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(SubtitleTiming.label(delayMs)).font(.headline).monospacedDigit()
+            Text(SubtitleTiming.help).font(.callout).foregroundStyle(.white.opacity(0.8))
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 28).padding(.vertical, 18)
+        .background(RoundedRectangle(cornerRadius: 18).fill(.black.opacity(0.7)))
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("player:subtitle-timing")
+    }
+}
+
 struct SubtitleText: View {
     let text: String
     let scale: Double
@@ -201,6 +217,12 @@ struct PlayerContent: View {
         ZStack(alignment: .bottomTrailing) {
             SystemPlayer(controller: controller, syncRevision: syncRevision) { findingSubtitles = true }
             PlayerOverlays(controller: controller, controlsVisible: false)
+            if controller.adjustingSubtitleTiming, controller.subtitleTimingOffer == .adjustable {
+                SubtitleTimingStatus(delayMs: controller.subtitleDelayMs)
+                    .padding(.top, 60).padding(.leading, 80)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .allowsHitTesting(false)
+            }
             VStack(alignment: .trailing, spacing: 20) {
                 if let notice = controller.notice, !controller.noticeDismissed {
                     ConversionNoticeCard(notice: notice) { controller.noticeDismissed = true }
@@ -264,6 +286,15 @@ struct SystemPlayer: UIViewControllerRepresentable {
         }
         // LIVE-05: the system bar shows Live itself; Go Live returns from a pause or rewind, and a stream that can't
         // time-shift can't be scrubbed or paused.
+        if controller.adjustingSubtitleTiming, controller.subtitleTimingOffer == .adjustable {
+            // Titles stay the same as the delay moves, so AVKit keeps the button in focus; the value is shown above. The
+            // system focuses the last action, so Later (what the help suggests) goes last and Done first.
+            let ms = controller.subtitleDelayMs
+            actions.append(UIAction(title: "Done", image: UIImage(systemName: "checkmark")) { [weak controller] _ in controller?.adjustingSubtitleTiming = false })
+            actions.append(UIAction(title: "Earlier", image: UIImage(systemName: "minus.circle"), attributes: SubtitleTiming.canStep(ms, by: -1) ? [] : .disabled) { [weak controller] _ in controller?.adjustSubtitleTiming(-1) })
+            actions.append(UIAction(title: "Reset", image: UIImage(systemName: "arrow.counterclockwise")) { [weak controller] _ in controller?.adjustSubtitleTiming(0) })
+            actions.append(UIAction(title: "Later", image: UIImage(systemName: "plus.circle"), attributes: SubtitleTiming.canStep(ms, by: 1) ? [] : .disabled) { [weak controller] _ in controller?.adjustSubtitleTiming(1) })
+        }
         if controller.isLive {
             if controller.live.canGoLive {
                 actions.append(UIAction(title: "Go Live", image: UIImage(systemName: "dot.radiowaves.forward")) { [weak controller] _ in controller?.goLive() })
@@ -296,6 +327,21 @@ struct SystemPlayer: UIViewControllerRepresentable {
             subtitleItems.append(UIMenu(options: [.displayInline, .singleSelection], children: [off] + subtitles.map { stream in
                 UIAction(title: controller.label(stream), state: stream.index == controller.selectedSubtitle ? .on : .off) { [weak controller] _ in controller?.selectSubtitle(stream.index) }
             }))
+        }
+        switch controller.subtitleTimingOffer {
+        case .none: break
+        case .burnedIn:
+            // PLAY-11: one line, no controls that would do nothing.
+            subtitleItems.append(UIMenu(title: "Subtitle timing", options: .displayInline, children: [UIAction(title: SubtitleTiming.burnedIn) { _ in }]))
+        case .adjustable:
+            // PLAY-11: the row names the current timing and opens Earlier/Reset/Later as on-screen buttons, so the viewer
+            // sees the captions move while adjusting (a menu covers them and closes when its rows change). The help is the
+            // section heading: the menu cuts row titles to one line at its fixed width, and the heading type fits it.
+            subtitleItems.append(UIMenu(title: SubtitleTiming.help, options: .displayInline, children: [
+                UIAction(title: SubtitleTiming.label(controller.subtitleDelayMs), subtitle: "Adjust", image: UIImage(systemName: "timer")) { [weak controller] _ in
+                    controller?.adjustingSubtitleTiming = true
+                },
+            ]))
         }
         if target.playable {
             subtitleItems.append(UIMenu(options: .displayInline, children: [UIAction(title: "Download subtitles", image: UIImage(systemName: "arrow.down.circle")) { _ in findSubtitles() }]))
@@ -563,6 +609,25 @@ struct PlayerContent: View {
                     ForEach(controller.subtitleStreams) { Text(controller.label($0)).tag($0.index) }
                 }
                 .pickerStyle(.menu)
+            }
+            switch controller.subtitleTimingOffer {
+            case .none: EmptyView()
+            case .burnedIn: Section("Subtitle timing") { MenuNotice(text: SubtitleTiming.burnedIn) }
+            case .adjustable:
+                // PLAY-11: the menu stays open so several presses add up.
+                Section {
+                    Button { controller.adjustSubtitleTiming(-1) } label: { Label("Earlier", systemImage: "minus.circle") }
+                        .disabled(!SubtitleTiming.canStep(controller.subtitleDelayMs, by: -1))
+                        .menuActionDismissBehavior(.disabled)
+                    Button { controller.adjustSubtitleTiming(0) } label: { Label("Reset", systemImage: "arrow.counterclockwise") }
+                        .disabled(controller.subtitleDelayMs == 0)
+                        .menuActionDismissBehavior(.disabled)
+                    Button { controller.adjustSubtitleTiming(1) } label: { Label("Later", systemImage: "plus.circle") }
+                        .disabled(!SubtitleTiming.canStep(controller.subtitleDelayMs, by: 1))
+                        .menuActionDismissBehavior(.disabled)
+                } header: {
+                    Text("\(SubtitleTiming.label(controller.subtitleDelayMs)). \(SubtitleTiming.help)")
+                }
             }
             if controller.subtitleDownloadTarget.playable {
                 Button { findingSubtitles = true } label: { Label("Download subtitles…", systemImage: "arrow.down.circle") }

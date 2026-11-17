@@ -204,7 +204,11 @@ protocol LiveTVService: AnyObject {
             guard policy.access, policy.manage else { state.notice = "Recording management is disabled for this viewer."; return nil }
             let fresh = try await service.program(account: account, id: program.id)
             let defaults = try await service.defaults(account: account, programID: program.id)
-            return LiveRules.timerDraft(defaults: defaults, program: fresh, series: series)
+            guard let draft = LiveRules.timerDraft(defaults: defaults, program: fresh, series: series) else {
+                state.notice = LiveRules.invalidDraftNotice
+                return nil
+            }
+            return draft
         } catch {
             state.notice = Self.message(error)
             return nil

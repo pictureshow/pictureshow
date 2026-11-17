@@ -62,7 +62,7 @@ final class SpecVectorTests:XCTestCase {
         try await runVectors(operations: ["reason", "method", "subtitle", "bitrate", "speed"])
     }
     func testF4PolicyVectors() async throws {
-        try await runVectors(operations: ["detail-completion-read", "detail-cold-pending", "detail-requested-label", "catalog-refresh-revision", "detail-read-band", "detail-session-read", "detail-read-failure", "detail-request-cue-active", "detail-confirmed-leaf", "detail-read-dependencies", "seek-step", "playback-report-fields"])
+        try await runVectors(operations: ["detail-finished-line", "detail-completion-read", "detail-cold-pending", "detail-requested-label", "catalog-refresh-revision", "detail-read-band", "detail-session-read", "detail-read-failure", "detail-request-cue-active", "detail-confirmed-leaf", "detail-read-dependencies", "seek-step", "playback-report-fields"])
     }
     func testF4AdaptersRejectUnknownOperationsAndMalformedInputs() async throws {
         let invalid: [(String, [String: Any])] = [
@@ -303,6 +303,7 @@ final class SpecVectorTests:XCTestCase {
             var feedback = DetailRequestOnceFeedback()
             return try required([Step].self,i,"steps").map { feedback.update(request:$0.request,eligible:$0.eligible,submitted:$0.submitted) }
         case "visibility-play":return PlaybackVisibility.playWhenReady(requested:try required(Bool.self,i,"requested"),foregroundRequired:try required(Bool.self,i,"foregroundRequired"),foreground:try required(Bool.self,i,"foreground"),pauseLatched:try required(Bool.self,i,"pauseLatched"))
+        case "detail-finished-line":return DetailFeedback.playbackFinishedLine(title:try required(String?.self,i,"title"))
         case "detail-completion-read":return DetailFeedback.readCanReplaceCompletion(completionItem:try required(String.self,i,"completionItem"),completionRead:try required(Int64.self,i,"completionRead"),item:try required(String.self,i,"item"),read:try required(Int64.self,i,"read"),succeeded:try required(Bool.self,i,"succeeded"))
         case "detail-cold-pending":return DetailFeedback.needsPendingControls(loading:try required(Bool.self,i,"loading"),firstArrival:try required(Bool.self,i,"firstArrival"),canQueue:try required(Bool.self,i,"canQueue"),returningFromPlayback:try defaulted(Bool.self,i,"returningFromPlayback",false))
         case "detail-requested-label":return DetailFeedback.requestedActionLabel(target:try required(String.self,i,"target"),newlyAccepted:try required(Bool.self,i,"newlyAccepted"))

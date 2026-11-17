@@ -729,6 +729,9 @@ private struct SeerrSeasonRowStyle: ButtonStyle {
 
 struct SeerrConnectView: View {
     @EnvironmentObject private var app: AppModel
+    @Environment(\.dismiss) private var dismiss
+    /// tvOS: Connect returns to Settings, which puts focus back on its "Requests (Seerr)" row.
+    var onConnected: () -> Void = {}
     @StateObject private var model = SeerrModel()
     @State private var address = ""
     @State private var useKey = false
@@ -809,7 +812,14 @@ struct SeerrConnectView: View {
         }
         Section {
             Button {
-                Task { await model.connect(app, url: address, apiKey: useKey ? apiKey : nil, username: username, password: password) }
+                Task {
+                    await model.connect(app, url: address, apiKey: useKey ? apiKey : nil, username: username, password: password)
+                    #if os(tvOS)
+                    // Connecting adds the Requests tab, which rebuilds the TV's top bar; with the Connect button gone,
+                    // focus fell to that bar. Back on Settings, the row now says who is connected and holds focus.
+                    if app.seerr.config(app.account?.key) != nil { onConnected(); dismiss() }
+                    #endif
+                }
             } label: {
                 HStack {
                     Text(model.connecting ? "Connecting…" : "Connect")
@@ -864,16 +874,52 @@ struct SeerrConnectView: View {
 }
 
 /// Settings' "Requests (Seerr)" row: the connected Seerr user or "Not connected".
+#if os(tvOS)
+/// SEERR on Apple TV: after Connect, focus goes to Settings' "Requests (Seerr)" row. Connecting adds the Requests tab,
+/// which rebuilds the top bar and can rebuild Settings, and the row may be off screen (not yet built), so the request
+/// lives here: Settings scrolls the row in, and the row takes focus once it exists.
+@MainActor final class SeerrRowFocus: ObservableObject {
+    static let shared = SeerrRowFocus()
+    static let rowID = "settings:seerr-row"
+    @Published var wanted = false
+}
+#endif
+
 struct SeerrSettingsSection: View {
     @EnvironmentObject private var app: AppModel
+    #if os(tvOS)
+    @FocusState private var rowFocused: Bool
+    @ObservedObject private var rowFocus = SeerrRowFocus.shared
+    #endif
     var body: some View {
         Section {
-            NavigationLink { SeerrConnectView() } label: {
-                LabeledContent("Requests (Seerr)", value: app.seerr.config(app.account?.key).map { "Connected as \($0.user.name)" } ?? "Not connected")
-            }
+            #if os(tvOS)
+            NavigationLink { SeerrConnectView { rowFocus.wanted = true } } label: { row }
+                .focused($rowFocused)
+                .id(SeerrRowFocus.rowID)
+                .task(id: rowFocus.wanted) {
+                    guard rowFocus.wanted else { return }
+                    // The pop, the top bar's rebuild and Settings' scroll each run a system focus pass that can take focus
+                    // back, so ask again until the row holds it. A page torn down mid-way leaves the request to its successor.
+                    for _ in 0..<8 {
+                        try? await Task.sleep(for: .milliseconds(400))
+                        guard !Task.isCancelled else { return }
+                        if rowFocused { break }
+                        rowFocused = true
+                    }
+                    rowFocus.wanted = false
+                }
+            #else
+            NavigationLink { SeerrConnectView() } label: { row }
+            #endif
         } footer: {
             Text("Ask for movies and series that aren't in your library yet, with Jellyseerr or Overseerr.")
         }
+    }
+
+    private var row: some View {
+        LabeledContent("Requests (Seerr)", value: app.seerr.config(app.account?.key).map { "Connected as \($0.user.name)" } ?? "Not connected")
+            .accessibilityIdentifier("settings:seerr")
     }
 }
 

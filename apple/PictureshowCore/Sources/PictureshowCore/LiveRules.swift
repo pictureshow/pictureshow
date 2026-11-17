@@ -157,17 +157,25 @@ public enum LiveRules {
     private static let seriesEdits: Set<String> = timerEdits.union(["RecordAnyTime", "RecordAnyChannel", "RecordNewOnly", "Days", "KeepUpTo", "SkipEpisodesInLibrary", "KeepUntil"])
 
     /// Defaults are a SeriesTimerInfoDto. A one-off projects only TimerInfoDto's common writable fields; a series keeps every
-    /// default except identity and status. The airing's identity always comes from the program.
-    public static func timerDraft(defaults: LiveSchedule, program: LiveProgram, series: Bool) -> LiveSchedule {
+    /// default except identity and status. The airing's identity and times always come from the freshly read program.
+    ///
+    /// Jellyfin's TimerInfoDto declares StartDate and EndDate as non-nullable, so a draft without both, with a time that
+    /// isn't an instant, or one that ends before it starts could only be refused by the server. There is no draft then
+    /// (nil), and the caller tells the viewer to refresh Live TV instead of sending that body.
+    public static func timerDraft(defaults: LiveSchedule, program: LiveProgram, series: Bool) -> LiveSchedule? {
+        guard let start = program.startDate, let end = program.endDate,
+              let from = instant(start), let to = instant(end), to > from else { return nil }
         var fields = defaults.fields.filter { series ? !["Id", "SeriesTimerId", "Status"].contains($0.key) : timerFields.contains($0.key) }
         fields["ProgramId"] = .string(program.id)
         fields["ChannelId"] = .string(program.channelId)
         fields["Name"] = .string(program.name)
-        // Android requires both times; a program without them cannot be scheduled and the server refuses the draft.
-        fields["StartDate"] = program.startDate.map(JSONValue.string) ?? .null
-        fields["EndDate"] = program.endDate.map(JSONValue.string) ?? .null
+        fields["StartDate"] = .string(start)
+        fields["EndDate"] = .string(end)
         return LiveSchedule(fields: fields)
     }
+
+    /// LIVE-06: what the viewer reads when the fresh program has no schedulable times.
+    public static let invalidDraftNotice = "This program no longer has valid schedule dates. Refresh Live TV."
 
     /// Only explicit dirty fields change; missing provider capabilities are not invented by an editor.
     public static func editSchedule(_ original: LiveSchedule, edits: [String: JSONValue], series: Bool) throws -> LiveSchedule {

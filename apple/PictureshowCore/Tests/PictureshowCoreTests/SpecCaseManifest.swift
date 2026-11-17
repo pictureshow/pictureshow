@@ -302,6 +302,10 @@ enum SpecCaseManifest {
         detail.f3.completion-same-read|application/detail-completion-read
         detail.f3.completion-new-failure|application/detail-completion-read
         detail.f3.completion-other-item|application/detail-completion-read
+        detail-finished-line-title|application/detail-finished-line
+        detail-finished-line-trimmed|application/detail-finished-line
+        detail-finished-line-blank|application/detail-finished-line
+        detail-finished-line-missing|application/detail-finished-line
         detail.f3.cold-0|application/detail-cold-pending
         detail.f3.cold-1|application/detail-cold-pending
         detail.f3.cold-2|application/detail-cold-pending
@@ -3196,6 +3200,11 @@ enum SpecCaseManifest {
         live-guide.preview-line-no-channel|live-guide/preview-line
         live-dvr.oneoff-projects-series-defaults-with-provider-common-fields|live-dvr/draft
         live-dvr.series-keeps-unrecognized-provider-defaults|live-dvr/draft
+        live-dvr.draft-missing-start|live-dvr/draft
+        live-dvr.draft-null-end|live-dvr/draft
+        live-dvr.draft-malformed-end|live-dvr/draft
+        live-dvr.draft-end-before-start|live-dvr/draft
+        live-dvr.draft-offset-times-kept-verbatim|live-dvr/draft
         live-dvr.edit-does-not-replace-unedited-defaults|live-dvr/edit
         live-dvr.missing-provider-retention-is-disabled|live-dvr/edit
         live-dvr.oneoff-cannot-silently-become-series|live-dvr/edit
@@ -3221,6 +3230,16 @@ enum SpecCaseManifest {
         expired-pause|live-source/observed-window
         pause-at-start|live-source/observed-window
         pause-at-end|live-source/observed-window
+        midnight-paused-inside|live-source/observed-window
+        midnight-paused-before-window|live-source/observed-window
+        midnight-paused-past-window|live-source/observed-window
+        dst-paused-in-repeated-hour|live-source/observed-window
+        dst-paused-at-window-end|live-source/observed-window
+        dst-paused-past-window|live-source/observed-window
+        negative-skew-paused-at-start|live-source/observed-window
+        negative-skew-paused-before-start|live-source/observed-window
+        negative-skew-paused-at-end|live-source/observed-window
+        negative-skew-paused-past-end|live-source/observed-window
         future-invalid-pause|live-source/observed-window
         nonseekable|live-source/observed-window
         unknown-window|live-source/observed-window

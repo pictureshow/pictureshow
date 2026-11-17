@@ -112,10 +112,13 @@ private final class FakeLive: LiveTVService {
     }
     func channel(account: Account, id: String) async throws -> LiveChannel { LiveChannel(id: id) }
     func programs(account: Account, channelIDs: [String], startUTC: String, endUTC: String, startIndex: Int, limit: Int) async throws -> LivePage<LiveProgram> { LivePage() }
-    func program(account: Account, id: String) async throws -> LiveProgram { LiveProgram(id: id) }
+    var programTimes: (start: String?, end: String?) = (nil, nil)
+    func program(account: Account, id: String) async throws -> LiveProgram {
+        LiveProgram(id: id, channelId: "c", startDate: programTimes.start, endDate: programTimes.end)
+    }
     func recordings(account: Account, startIndex: Int, limit: Int) async throws -> ItemPage { try JSONDecoder().decode(ItemPage.self, from: Data(#"{"Items":[],"TotalRecordCount":0}"#.utf8)) }
     func timers(account: Account, series: Bool) async throws -> [LiveSchedule] { [] }
-    func defaults(account: Account, programID: String) async throws -> LiveSchedule { LiveSchedule(fields: [:]) }
+    func defaults(account: Account, programID: String) async throws -> LiveSchedule { LiveSchedule(fields: ["PrePaddingSeconds": .integer(0)]) }
     func createTimer(account: Account, draft: LiveSchedule, series: Bool) async -> LiveWrite { LiveWrite("ok") }
     func updateTimer(account: Account, schedule: LiveSchedule, series: Bool) async -> LiveWrite { LiveWrite("ok") }
     func cancelTimer(account: Account, id: String, series: Bool) async -> LiveWrite { LiveWrite("ok") }
@@ -131,6 +134,25 @@ final class LiveTVModelTests: XCTestCase {
 
     private func model(_ service: FakeLive) -> LiveTVModel {
         LiveTVModel(account: account, service: service, now: { [unowned self] in self.clock })
+    }
+
+    /// LIVE-06: a fresh program without two instants, end after start, has no draft; the viewer is told to refresh
+    /// instead of an editor opening on a body the server must refuse (live-dvr draft-* vectors).
+    func testDraftWithoutValidScheduleDatesTellsTheViewerToRefresh() async {
+        let service = FakeLive()
+        let live = model(service)
+        for times in [(nil, "2030-01-01T01:00:00Z"), ("2030-01-01T00:00:00Z", nil), ("2030-01-01T00:00:00Z", "soon"),
+                      ("2030-01-01T01:00:00Z", "2030-01-01T00:00:00Z")] as [(String?, String?)] {
+            service.programTimes = times
+            let draft = await live.draft(program: LiveProgram(id: "p"), series: false)
+            XCTAssertNil(draft, "\(times)")
+            XCTAssertEqual(live.state.notice, "This program no longer has valid schedule dates. Refresh Live TV.")
+        }
+        service.programTimes = ("2030-01-01T00:00:00Z", "2030-01-01T01:00:00Z")
+        let draft = await live.draft(program: LiveProgram(id: "p"), series: false)
+        XCTAssertEqual(draft?.fields["StartDate"], .string("2030-01-01T00:00:00Z"))
+        XCTAssertEqual(draft?.fields["EndDate"], .string("2030-01-01T01:00:00Z"))
+        XCTAssertNil(live.state.notice)
     }
 
     /// LIVE-11: a slow answer to an older request never lands over the newer one.

@@ -23,11 +23,13 @@ struct DetailView: View {
     @EnvironmentObject private var app: AppModel
     let seed: MediaItem
     @StateObject private var content = Loader<DetailContent>()
+    /// PLAY-17: the finished-viewing serial when this page opened; only a later finish is a return to this page.
+    @State private var arrival: Int?
 
     var body: some View {
         Group {
             if let value = content.value {
-                DetailPage(content: value)
+                DetailPage(content: value, finishedLine: arrival.flatMap { app.finishedViewings.line(detailID: seed.id, arrival: $0) })
             } else if case .failed(let message) = content.phase {
                 MessageView(symbol: "exclamationmark.triangle", title: "Couldn't open \(seed.name)", message: message, actionTitle: "Try again") { Task { await reload() } }
             } else {
@@ -39,6 +41,9 @@ struct DetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .task(id: app.catalogRevision) { await reload() }
+        .onAppear { if arrival == nil { arrival = app.finishedViewings.serial } }
+        // PLAY-17: the line is for the return from that viewing, not a later visit to this page.
+        .onDisappear { app.leftDetail(seed.id) }
     }
 
     private func reload() async {
@@ -79,7 +84,12 @@ struct DetailView: View {
 struct DetailPage: View {
     @EnvironmentObject private var app: AppModel
     let content: DetailContent
+    /// PLAY-17: "Finished. You watched {title} to the end." when a viewing that played to its end returned here.
+    var finishedLine: String? = nil
     private var item: MediaItem { content.item }
+    #if os(tvOS)
+    @FocusState private var playFocused: Bool
+    #endif
     /// True once the header has scrolled under the navigation bar: the bar then gets its material and the title,
     /// so scrolled text never runs under the status bar unprotected.
     @State private var pastHeader = false
@@ -111,6 +121,17 @@ struct DetailPage: View {
         .navigationTitle(pastHeader ? item.name : "")
         .toolbarBackgroundVisibility(pastHeader ? .visible : .hidden, for: .navigationBar)
         #endif
+        // PLAY-17: the return lands on Play; a screen reader hears the line (Android marks it a polite live region).
+        .task(id: finishedLine) {
+            guard let finishedLine else { return }
+            #if os(tvOS)
+            // After the player's cover closes, the system restores focus first; this lands after it.
+            try? await Task.sleep(for: .milliseconds(350))
+            playFocused = true
+            #else
+            AccessibilityNotification.Announcement(finishedLine).post()
+            #endif
+        }
         .sheet(isPresented: $findingSubtitles) {
             if let account = app.account, let client = app.client {
                 // SUB-DL-01: from a title page the panel only adds the file; the player picks it up next time.
@@ -157,12 +178,28 @@ struct DetailPage: View {
                 if let missing = CatalogPresentation.missingLabel(item) {
                     Text(missing).font(.headline).foregroundStyle(Theme.muted)
                 }
+                #if os(tvOS)
+                finishedText
+                #endif
                 actions.padding(.top, 6)
+                #if !os(tvOS)
+                finishedText
+                #endif
             }
             .padding(.horizontal, Theme.gutter)
             .padding(.bottom, 12)
             .frame(maxWidth: .infinity, alignment: .leading)
             .heroScrim()
+        }
+    }
+
+    @ViewBuilder private var finishedText: some View {
+        if let finishedLine {
+            Text(finishedLine)
+                .font(platformValue(tv: .headline, touch: .subheadline.weight(.semibold)))
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("detail:finished")
         }
     }
 
@@ -207,13 +244,13 @@ struct DetailPage: View {
     private var stackedActions: some View {
         VStack(alignment: .leading, spacing: 12) {
             if let target = playTarget {
-                Button { app.play(target) } label: {
+                Button { play(target) } label: {
                     Label(playLabel(target), systemImage: "play.fill").labelStyle(.titleAndIcon).frame(maxWidth: .infinity)
                 }
                 .primaryAction()
             }
             HStack(spacing: 12) {
-                if playTarget != nil, CatalogPresentation.offersRestart(item) { restartButton }
+                if playTarget != nil, offersRestart { restartButton }
                 secondaryButtons
             }
             .fixedSize(horizontal: true, vertical: false)
@@ -223,12 +260,23 @@ struct DetailPage: View {
 
     @ViewBuilder private var playButtons: some View {
         if let target = playTarget {
-            Button { app.play(target) } label: {
+            Button { play(target) } label: {
                 Label(playLabel(target), systemImage: "play.fill")
             }
             .primaryAction()
-            if CatalogPresentation.offersRestart(item) { restartButton }
+            #if os(tvOS)
+            .focused($playFocused)
+            #endif
+            if offersRestart { restartButton }
         }
+    }
+
+    /// PLAY-17: after a viewing played to its end, Play is "Play again" and From the beginning isn't offered.
+    private var playsAgain: Bool { finishedLine != nil && !["Series", "Season"].contains(item.type) }
+    private var offersRestart: Bool { CatalogPresentation.offersRestart(item) && !playsAgain }
+
+    private func play(_ target: MediaItem) {
+        if playsAgain { app.play(target, fromStart: true) } else { app.play(target) }
     }
 
     private var restartButton: some View {
@@ -260,7 +308,7 @@ struct DetailPage: View {
     }
 
     private func playLabel(_ target: MediaItem) -> String {
-        CatalogPresentation.playLabel(container: item, target: target)
+        CatalogPresentation.playLabel(container: item, target: target, finished: finishedLine != nil)
     }
 
     private func toggleWatched() async {
