@@ -164,8 +164,10 @@ public enum CatalogRules {
 
     /// The primary detail action's words. A series or season names the episode Play starts ("Play S1:E1 · A Quiet
     /// Morning", "Resume S1:E2 · Arrivals"); a movie or episode keeps "Play" or "Resume from 12:34".
-    public static func detailPlayLabel(item: MediaItem, playItem: MediaItem?) -> String {
+    public static func detailPlayLabel(item: MediaItem, playItem: MediaItem?, finished: Bool = false) -> String {
         if item.isMissing { return "Not in your library" }
+        // PLAY-17: the return from a natural end replays a film or episode from the start; a series or season names its episode.
+        if finished && !["Series", "Season"].contains(item.type) { return "Play again" }
         let position = playItem?.userData.playbackPositionTicks ?? 0
         guard let playItem, ["Series", "Season"].contains(item.type), playItem.type == "Episode" else {
             return position > 0 ? Catalog.resumeLabel(position) : "Play"

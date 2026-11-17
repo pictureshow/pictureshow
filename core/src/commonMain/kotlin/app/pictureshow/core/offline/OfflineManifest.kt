@@ -67,6 +67,8 @@ data class OfflineLabels(
     val seasonNumber: Int? = null,
     val episodeNumber: Int? = null,
     val album: String? = null,
+    /** A track's album: its saved artwork is the album's, since a track rarely has an image of its own. */
+    val albumId: String? = null,
     val artist: String? = null,
     val trackNumber: Int? = null,
     val discNumber: Int? = null,

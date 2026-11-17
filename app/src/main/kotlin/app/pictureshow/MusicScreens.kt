@@ -37,6 +37,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -57,6 +58,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -196,15 +198,81 @@ private fun TvDialog(title: String, onDismiss: () -> Unit, content: @Composable 
 
 /**
  * Says what the queue did on its own, such as skipping a track it couldn't reach (MUS-10), wherever the viewer is: TV had no
- * place that showed these, so a skip went by in silence. Shown once, then cleared, as on touch.
+ * place that showed these, so a skip went by in silence. Shown once for about as long as a long toast, then cleared. It is
+ * drawn here rather than as a system toast because Android places a text toast itself (setGravity is ignored for them since
+ * API 30), and its spot is on top of the music bar; [modifier] lifts it clear of whatever sits at the bottom.
  */
 @Composable
-internal fun TvMusicMessage(message: String?, onShown: () -> Unit) {
-    val context = androidx.compose.ui.platform.LocalContext.current
+internal fun TvMusicMessage(message: String?, onShown: () -> Unit, modifier: Modifier = Modifier) {
+    var shown by remember { mutableStateOf<Pair<Long, String>?>(null) }
+    var serial by remember { mutableLongStateOf(0L) }
     LaunchedEffect(message) {
         val text = message ?: return@LaunchedEffect
-        android.widget.Toast.makeText(context, text, android.widget.Toast.LENGTH_LONG).show()
+        serial += 1
+        shown = serial to text
         onShown()
+    }
+    LaunchedEffect(shown) {
+        if (shown == null) return@LaunchedEffect
+        delay(TV_MUSIC_MESSAGE_MS)
+        shown = null
+    }
+    val text = shown?.second ?: return
+    Text(
+        text,
+        modifier
+            .widthIn(max = 720.dp)
+            .background(Color(0xFF262D3D), MaterialTheme.shapes.medium)
+            .padding(horizontal = 20.dp, vertical = 12.dp)
+            .semantics { liveRegion = LiveRegionMode.Polite }
+            .testTag("music:message"),
+        style = MaterialTheme.typography.bodyMedium
+    )
+}
+
+/** About Android's long toast, so a message reads as it did before it moved into the app. */
+internal const val TV_MUSIC_MESSAGE_MS = 4_000L
+
+/**
+ * The bottom of the TV screen: the sync reminder and the music bar when they show, with the queue's messages just above
+ * them, never over the bar. [onHeight] reports the docked part's height so the screens above can sit clear of it.
+ */
+@Composable
+internal fun TvMusicDock(
+    host: MusicHost,
+    barShown: Boolean,
+    stayShown: Boolean,
+    onHeight: (Int) -> Unit,
+    onOpen: () -> Unit,
+    stay: @Composable () -> Unit
+) {
+    val ui by host.state.collectAsStateWithLifecycle()
+    TvMusicDockLayout(ui.message.takeIf { !ui.canRetrySave }, host::dismissMessage, barShown || stayShown, onHeight) {
+        stay()
+        if (barShown) TvMusicBar(host, onOpen)
+    }
+}
+
+@Composable
+internal fun TvMusicDockLayout(
+    message: String?,
+    onShown: () -> Unit,
+    docked: Boolean,
+    onHeight: (Int) -> Unit,
+    dock: @Composable () -> Unit
+) {
+    var height by remember { mutableIntStateOf(0) }
+    val lift = with(LocalDensity.current) { if (docked) height.toDp() else 0.dp }
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
+        if (docked) {
+            Column(
+                Modifier.onSizeChanged {
+                    height = it.height
+                    onHeight(it.height)
+                }
+            ) { dock() }
+        }
+        TvMusicMessage(message, onShown, Modifier.padding(start = 48.dp, end = 48.dp, bottom = lift + 16.dp))
     }
 }
 
@@ -212,7 +280,6 @@ internal fun TvMusicMessage(message: String?, onShown: () -> Unit) {
 internal fun TvMusicPrompts(host: MusicHost, onDestination: (MusicPlay) -> Unit) {
     val ui by host.state.collectAsStateWithLifecycle()
     val first = remember { FocusRequester() }
-    TvMusicMessage(ui.message.takeIf { !ui.canRetrySave }, host::dismissMessage)
     if (ui.canRetrySave) {
         TvDialog("Queue not saved", host::dismissMessage) {
             Text(ui.message ?: "Couldn't save the queue on this device.")

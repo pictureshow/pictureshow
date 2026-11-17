@@ -154,11 +154,11 @@ class OfflineDownloadsDesignTest {
     }
 
     private fun tv() = compose.setContent {
-        OfflineDownloadsTvScreen(account, true, { played = it.id }, { storageOpened++ }, {}, {})
+        OfflineDownloadsTvScreen(account, true, { e, _ -> played = e.id }, { storageOpened++ }, {}, {})
     }
 
     private fun touch() = compose.setContent {
-        OfflineDownloadsTouchScreen(account, true, { played = it.id }, { storageOpened++ }, {}, {})
+        OfflineDownloadsTouchScreen(account, true, { e, _ -> played = e.id }, { storageOpened++ }, {}, {})
     }
 
     private fun settle() {
@@ -303,7 +303,7 @@ class OfflineDownloadsDesignTest {
         var error = Color.Unspecified
         compose.setContent {
             error = androidx.compose.material3.MaterialTheme.colorScheme.error
-            OfflineDownloadsTouchScreen(account, true, {}, {}, {}, {})
+            OfflineDownloadsTouchScreen(account, true, { _, _ -> }, {}, {}, {})
         }
         settle()
         tag("downloads:delete:a").performScrollTo().performClick()
@@ -380,7 +380,7 @@ class OfflineDownloadsDesignTest {
     private fun rowContent(phase: OfflinePhase, tv: Boolean) {
         val row = meteredRow(phase)
         compose.setContent {
-            val controller = OfflineDownloadsController(account, engine, rememberCoroutineScope(), {})
+            val controller = OfflineDownloadsController(account, engine, rememberCoroutineScope(), { _, _ -> })
             if (tv) {
                 OfflineRowTv(account, row, controller, onStorage = { storageOpened++ })
             } else {

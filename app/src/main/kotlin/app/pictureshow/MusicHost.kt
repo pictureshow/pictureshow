@@ -89,9 +89,13 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.distinctUntilChangedBy
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -153,6 +157,12 @@ internal interface MusicLocal {
 
     /** A local listen's report ("start", "progress" or "stopped"), into the same outbox video downloads use. */
     suspend fun report(account: Account, media: String, serial: Long, report: String, ticks: Long, runtimeTicks: Long?)
+
+    /** The saved artwork of a downloaded track, as a file URI; null when it isn't downloaded or has no saved art. */
+    fun art(account: Account, media: String): String? = null
+
+    /** Emits whenever this device's downloads change, so a track that finishes downloading is picked up without a rebuild. */
+    val changes: Flow<Any?> get() = emptyFlow()
 }
 
 /** The server side of the host, narrow so tests can answer with a real file on a mock server. */
@@ -272,11 +282,11 @@ internal class MusicHost(
         val q = ui.queue ?: return
         val entries = q.order.mapNotNull { entry ->
             val media = q.entries.firstOrNull { it.id == entry }?.media ?: return@mapNotNull null
-            val track = ui.tracks[media] ?: return@mapNotNull null
+            val track = tracks[media] ?: ui.tracks[media] ?: return@mapNotNull null
             CastPlayItem(
                 track.id,
                 track.title,
-                track.artUrl,
+                castArt(track.artUrl),
                 track.durationTicks?.div(MS_TO_TICKS),
                 music = true,
                 artist = track.artist,
@@ -461,6 +471,7 @@ internal class MusicHost(
         sequence = 0
         tracks = emptyMap()
         queue = QueueStoreState(QueueState(next?.server?.id ?: "", next?.user?.id ?: ""))
+        readDownloads()
         publish { MusicUi(account = next, queue = next?.let { queue.committed }) }
         if (next != null) {
             val bound = binding
@@ -713,7 +724,7 @@ internal class MusicHost(
                     CastPlayItem(
                         it.id,
                         it.title,
-                        it.artUrl,
+                        castArt(it.artUrl),
                         it.durationTicks?.div(MS_TO_TICKS),
                         music = true,
                         artist = it.artist,
@@ -1115,6 +1126,35 @@ internal class MusicHost(
         return MusicSnapshot(q, playContext, contextName, sequence, media.mapNotNull(tracks::get))
     }
 
+    /** The viewer's downloaded tracks as last read, and a count that moves each time they're read, so shown art follows. */
+    private var downloadedNow: Set<String> = emptySet()
+    private var downloadsRead = 0
+    private var shownFor: Pair<Map<String, MusicTrack>, Int>? = null
+    private var shown: Map<String, MusicTrack> = emptyMap()
+
+    private fun readDownloads() {
+        downloadedNow = account?.let { active -> local?.downloaded(active) }.orEmpty()
+        downloadsRead++
+    }
+
+    /**
+     * The queue's tracks as the screens and the media session show them: a downloaded track's art is its saved file, so it
+     * shows with no server wherever the track was queued from (MUS-10). What's saved with the queue keeps the server's URL.
+     */
+    private fun shownTracks(): Map<String, MusicTrack> {
+        val active = account
+        val files = local
+        if (active == null || files == null || downloadedNow.isEmpty()) return tracks
+        val last = shownFor
+        if (last == null || last.first !== tracks || last.second != downloadsRead) {
+            shown = tracks.mapValues { (media, track) ->
+                if (media in downloadedNow) files.art(active, media)?.let { track.copy(artUrl = it) } ?: track else track
+            }
+            shownFor = tracks to downloadsRead
+        }
+        return shown
+    }
+
     private inline fun publish(change: (MusicUi) -> MusicUi = { it }) {
         val cast = remoteMusic()?.state?.value
         if (cast != null) {
@@ -1170,7 +1210,7 @@ internal class MusicHost(
                 queue = q.takeIf { account != null },
                 context = playContext,
                 contextName = contextName,
-                tracks = tracks,
+                tracks = shownTracks(),
                 outputActive = running != null,
                 isPlaying = running?.isPlaying == true,
                 buffering = running?.playbackState == Player.STATE_BUFFERING
@@ -1201,6 +1241,7 @@ internal class MusicHost(
         }
         val entries = q.entries.associateBy(QueueEntry::id)
         prepared.keys.retainAll(target.toSet())
+        adoptDownloads(active)
         target.forEachIndexed { index, entry ->
             if (entry !in prepared) {
                 val media = entries[entry]?.media ?: return
@@ -1211,7 +1252,9 @@ internal class MusicHost(
                     offline != null -> prepared[entry] = PreparedTrack(offline, entry, media, local = true)
 
                     outcome is ClientResult.Success && outcome.value is PlayOutcome.Play ->
-                        prepared[entry] = PreparedTrack((outcome.value as PlayOutcome.Play).decision, entry, media)
+                        // A download that finished while the server was answering wins: it's the same track, from here.
+                        prepared[entry] = local?.decision(active, media)?.let { PreparedTrack(it, entry, media, local = true) }
+                            ?: PreparedTrack((outcome.value as PlayOutcome.Play).decision, entry, media)
 
                     index > 0 -> return applyWindow(active, target)
 
@@ -1296,6 +1339,24 @@ internal class MusicHost(
         publish { it.copy(message = "This account needs to sign in again. Your queue is saved for when it does.") }
     }
 
+    /**
+     * Tracks held as streams that have since finished downloading play from the file instead, the next time they start
+     * (MUS-10). The track being heard is never swapped: it keeps its stream to the end, and only a later start uses the file.
+     */
+    private fun adoptDownloads(active: Account) {
+        val running = player ?: return
+        val files = local ?: return
+        val playing = running.currentMediaItem?.mediaId
+        prepared.values.filter { !it.local && it.entry != playing }.forEach { held ->
+            val file = files.decision(active, held.media) ?: return@forEach
+            val swapped = PreparedTrack(file, held.entry, held.media, local = true)
+            prepared[held.entry] = swapped
+            val at = (0 until running.mediaItemCount).firstOrNull { running.getMediaItemAt(it).mediaId == held.entry } ?: return@forEach
+            running.removeMediaItem(at)
+            running.addMediaSource(at, source(active, swapped))
+        }
+    }
+
     private fun applyWindow(active: Account, target: List<String>) {
         val running = player ?: return
         val ready = target.takeWhile { it in prepared }
@@ -1323,7 +1384,7 @@ internal class MusicHost(
                 .setUri(track.decision.url)
                 .setMediaId(track.entry)
                 .setMimeType(if (track.decision.method == PlayMethod.Transcode) MimeTypes.APPLICATION_M3U8 else null)
-                .setMediaMetadata(metadata(tracks[track.media]))
+                .setMediaMetadata(metadata(shownTracks()[track.media]))
                 .build()
         )
 
@@ -1815,6 +1876,20 @@ internal class MusicHost(
                 }
             }
         }
+        local?.let { files ->
+            scope.launch {
+                files.changes
+                    .map { account?.let(files::downloaded) }
+                    .distinctUntilChanged()
+                    .collect {
+                        enqueue {
+                            readDownloads()
+                            account?.let(::adoptDownloads)
+                            publish()
+                        }
+                    }
+            }
+        }
         scope.launch {
             accounts.load()
             accounts.snapshots
@@ -1828,6 +1903,9 @@ internal class MusicHost(
         }
     }
 }
+
+/** A Cast receiver can't open this device's files, so a saved-art file URI is sent as no art. */
+private fun castArt(url: String?): String? = url?.takeUnless { it.startsWith("file:") }
 
 private val NETWORK_ERRORS = setOf(
     PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,

@@ -66,7 +66,7 @@ private fun TouchSection(title: String) {
 internal fun OfflineDownloadsTouchScreen(
     account: Account,
     offline: Boolean,
-    onPlay: (OfflineEntry) -> Unit,
+    onPlay: (OfflineEntry, String?) -> Unit,
     onStorage: () -> Unit,
     onOnline: () -> Unit,
     onBack: (() -> Unit)?
@@ -109,7 +109,7 @@ internal fun OfflineDownloadsTouchScreen(
         }
         if (sections.isEmpty && !view.library.recoverable) {
             Text(
-                "Nothing downloaded yet. Open a movie or an episode and choose Download.",
+                "Nothing downloaded yet. Open a movie, an episode or an album and choose Download.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
@@ -126,10 +126,19 @@ internal fun offlineDestructiveTouchColors() = ButtonDefaults.outlinedButtonColo
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun OfflineRowTouch(account: Account, row: OfflineRow, controller: OfflineDownloadsController, onStorage: () -> Unit = {}) {
-    val confirming = (controller.confirm as? OfflineConfirm.One)?.row?.entry?.id == row.entry.id
-    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth().testTag("downloads:row:${row.entry.id}")) {
+    val confirming = (controller.confirm as? OfflineConfirm.One)?.row?.key == row.key
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.fillMaxWidth().padding(start = if (row.parent != null) 32.dp else 0.dp).testTag("downloads:row:${row.key}")
+    ) {
         val art = offlineArtwork(account.key, row.entry)
-        Box(Modifier.size(width = 64.dp, height = 96.dp).background(Color(0xFF1F2433))) {
+        // Music art is square; a track under its album needs only a small one.
+        val artSize = when {
+            row.parent != null -> Modifier.size(40.dp)
+            row.collection != null -> Modifier.size(96.dp)
+            else -> Modifier.size(width = 64.dp, height = 96.dp)
+        }
+        Box(artSize.background(Color(0xFF1F2433))) {
             if (art != null) AsyncImage(art, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -139,10 +148,10 @@ internal fun OfflineRowTouch(account: Account, row: OfflineRow, controller: Offl
                 row.status,
                 style = MaterialTheme.typography.bodyMedium,
                 color = if (row.statusIsError) MaterialTheme.colorScheme.error else Color.Unspecified,
-                modifier = Modifier.testTag("downloads:status:${row.entry.id}")
+                modifier = Modifier.testTag("downloads:status:${row.key}")
             )
             row.fraction?.let { fraction -> LinearProgressIndicator(progress = { fraction }, modifier = Modifier.fillMaxWidth()) }
-            if (row.indeterminate) LinearProgressIndicator(Modifier.fillMaxWidth().testTag("downloads:working:${row.entry.id}"))
+            if (row.indeterminate) LinearProgressIndicator(Modifier.fillMaxWidth().testTag("downloads:working:${row.key}"))
             row.entry.warning?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
             row.notDownloadedSummary?.let {
                 Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -153,7 +162,9 @@ internal fun OfflineRowTouch(account: Account, row: OfflineRow, controller: Offl
                 // off the top after rotation, leaving a viewer unable to tell what Delete will remove.
                 Column(Modifier.bringIntoViewRequester(bringIn), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
-                        if (row.entry.job.phase == OfflinePhase.ready) {
+                        if (row.collection != null) {
+                            offlineCollectionDeleteQuestion(row)
+                        } else if (row.entry.job.phase == OfflinePhase.ready) {
                             "Delete ${row.title} from this device?"
                         } else {
                             "Stop and delete ${row.title}?"
@@ -179,24 +190,26 @@ internal fun OfflineRowTouch(account: Account, row: OfflineRow, controller: Offl
                 if (OfflineAction.AllowCellular in row.actions) {
                     FilledTonalButton(
                         onClick = { controller.act(row, OfflineAction.AllowCellular) },
-                        modifier = Modifier.heightIn(min = 48.dp).testTag("downloads:allowcellular:${row.entry.id}")
+                        modifier = Modifier.heightIn(min = 48.dp).testTag("downloads:allowcellular:${row.key}")
                     ) { Text(offlineActionLabel(OfflineAction.AllowCellular)) }
                 }
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     row.actions.filter { it != OfflineAction.AllowCellular }.forEach { action ->
-                        val modifier = Modifier.heightIn(min = 48.dp).testTag("downloads:${action.name.lowercase()}:${row.entry.id}")
+                        val modifier = Modifier.heightIn(min = 48.dp).testTag("downloads:${action.name.lowercase()}:${row.key}")
                         if (action == OfflineAction.Play) {
                             FilledTonalButton(onClick = { controller.act(row, action) }, modifier = modifier) {
                                 Text(offlineActionLabel(action))
                             }
                         } else {
-                            TextButton(onClick = { controller.act(row, action) }, modifier = modifier) { Text(offlineActionLabel(action)) }
+                            TextButton(onClick = { controller.act(row, action) }, modifier = modifier) {
+                                Text(offlineRowActionLabel(row, action))
+                            }
                         }
                     }
                     if (offlineOffersStorage(row.entry.job)) {
                         TextButton(
                             onClick = onStorage,
-                            modifier = Modifier.heightIn(min = 48.dp).testTag("downloads:open-storage:${row.entry.id}")
+                            modifier = Modifier.heightIn(min = 48.dp).testTag("downloads:open-storage:${row.key}")
                         ) { Text("Storage and Wi-Fi") }
                     }
                 }
@@ -224,7 +237,7 @@ private fun OfflinePasswordTouch(controller: OfflineDownloadsController) {
 
 @Composable
 internal fun OfflineStorageTouchScreen(account: Account, onBack: () -> Unit) {
-    val view = rememberOfflineDownloads(account) {}
+    val view = rememberOfflineDownloads(account) { _, _ -> }
     val controller = view.controller
     val engine: OfflineEngine = koinInject()
     val manifest = view.library.manifest

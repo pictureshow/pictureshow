@@ -1712,6 +1712,9 @@ fun CatalogDetail(
         "Season" -> state.episodes.isNotEmpty() || pendingItem?.isEmptyContainer == false
         else -> false
     }
+    // PLAY-17: back from this title's natural end, Play reads "Play again" and starts at the beginning.
+    val playsAgain = pendingItem?.let { app.pictureshow.core.detailPlaysAgain(it, state.finishedLine != null) } == true
+    val latestPlaysAgain by rememberUpdatedState(playsAgain)
     val latestPlaybackReady by rememberUpdatedState(!recoveryActive && !state.loading && !playbackWaiting && state.error == null)
     val latestPlayItem by rememberUpdatedState(playItem)
     val latestOnPlay by rememberUpdatedState(onPlay)
@@ -1973,6 +1976,7 @@ fun CatalogDetail(
                 pendingExpired || expiryReported -> app.pictureshow.core.detailUnavailableActionLabel("primary")
                 playQueued == "resume" -> app.pictureshow.core.detailRequestedActionLabel("primary", requestCueTarget == "primary")
                 playQueued == "start" -> "Start already requested"
+                playsAgain -> "Play again when ready"
                 else -> "Play when ready"
             },
             fromStartLabel = when {
@@ -2006,7 +2010,7 @@ fun CatalogDetail(
                         if (latestPlaybackReady) {
                             val fresh = latestPlayItem
                             if (fresh != null) {
-                                latestOnPlay(fresh, fresh.userData.playbackPositionTicks > 0)
+                                latestOnPlay(fresh, !latestPlaysAgain && fresh.userData.playbackPositionTicks > 0)
                             } else {
                                 commandNotice = "No playable episodes are available."
                             }
@@ -2074,12 +2078,16 @@ fun CatalogDetail(
                 presentHeldLabels,
                 target in actions.requestedTargets,
                 actions.available,
-                app.pictureshow.core.detailPendingPlainLabel(
-                    target,
-                    state.item != null,
-                    pendingItem?.isWatched == true,
-                    pendingItem?.userData?.isFavorite == true
-                ),
+                if (target == "primary" && playsAgain) {
+                    "Play again"
+                } else {
+                    app.pictureshow.core.detailPendingPlainLabel(
+                        target,
+                        state.item != null,
+                        pendingItem?.isWatched == true,
+                        pendingItem?.userData?.isFavorite == true
+                    )
+                },
                 pending
             )
             actions.copy(
@@ -2531,7 +2539,8 @@ fun CatalogDetail(
                                             }
                                         },
                                         blocked = recoveryActive || (playbackWaiting && pendingActions == null),
-                                        onWrapped = { if (it) actionsWrapped = true }
+                                        onWrapped = { if (it) actionsWrapped = true },
+                                        playsAgain = playsAgain
                                     ) {
                                         if (trackSelection) selectedSection = "header"
                                     }
@@ -2595,6 +2604,7 @@ fun CatalogDetail(
                                         },
                                         blocked = recoveryActive || (playbackWaiting && pendingActions == null),
                                         onWrapped = { if (it) actionsWrapped = true },
+                                        playsAgain = playsAgain,
                                         onSubtitles = onSubtitleDownload
                                             ?.takeIf { subtitleDownloadOffered(item.type) && !item.isMissing }
                                             ?.let { open -> { open(item) } }
@@ -3183,6 +3193,8 @@ private fun DetailActions(
     onWrapped: (Boolean) -> Unit = {},
     /** SUB-DL: Find subtitles, on titles the server can attach a subtitle file to. */
     onSubtitles: (() -> Unit)? = null,
+    /** PLAY-17: the return from this title's natural end; Play reads "Play again", starts at 0, and From start goes. */
+    playsAgain: Boolean = false,
     onFocus: () -> Unit
 ) {
     val bringIntoView = remember { BringIntoViewRequester() }
@@ -3195,9 +3207,10 @@ private fun DetailActions(
     var focusedTarget by remember { mutableStateOf<String?>(null) }
     val position = playItem?.userData?.playbackPositionTicks ?: 0
     // CAT-21: a missing episode offers nothing that plays, including the returning layout's reserved Play from start.
-    val offersFromStart = !item.isMissing
+    val offersFromStart = !item.isMissing && !playsAgain
+    val resumes = !playsAgain && position > 0
     val labels = mapOf(
-        "primary" to (pending?.playLabel ?: app.pictureshow.core.detailPlayLabel(item, playItem)),
+        "primary" to (pending?.playLabel ?: app.pictureshow.core.detailPlayLabel(item, playItem, playsAgain)),
         "from-start" to (pending?.fromStartLabel ?: "Play from start"),
         "played" to (
             pending?.playedLabel ?: if (blocked) {
@@ -3396,7 +3409,7 @@ private fun DetailActions(
                     when (target) {
                         "primary" -> {
                             val click: () -> Unit = pending?.onPlay ?: {
-                                playItem?.let { onPlay(it, position > 0) }
+                                playItem?.let { onPlay(it, resumes) }
                                 Unit
                             }
                             Button(
@@ -3474,7 +3487,7 @@ private fun DetailActions(
             key("primary") {
                 Box(Modifier.onSizeChanged { primaryHeight = it.height }) {
                     val click: () -> Unit = pending?.onPlay ?: {
-                        playItem?.let { onPlay(it, position > 0) }
+                        playItem?.let { onPlay(it, resumes) }
                         Unit
                     }
                     Button(

@@ -4,6 +4,8 @@
 package app.pictureshow
 
 import app.pictureshow.core.Account
+import app.pictureshow.core.offline.OfflineCollection
+import app.pictureshow.core.offline.OfflineCollectionKind
 import app.pictureshow.core.offline.OfflineEntry
 import app.pictureshow.core.offline.OfflineJob
 import app.pictureshow.core.offline.OfflineManifest
@@ -13,6 +15,7 @@ import app.pictureshow.core.offline.OfflinePolicy
 import app.pictureshow.core.offline.OfflinePreset
 import app.pictureshow.core.offline.OfflinePresetChoice
 import app.pictureshow.core.offline.OfflineTrack
+import app.pictureshow.core.offline.collectionProgress
 import app.pictureshow.core.offline.committedBytes
 import app.pictureshow.core.offline.offlinePresets
 import app.pictureshow.core.offline.offlineSelect
@@ -24,7 +27,7 @@ import kotlin.math.roundToInt
  */
 internal val OFFLINE_QUALIFIED_PRESETS = setOf(OfflinePreset.video720, OfflinePreset.video1080)
 
-internal enum class OfflineAction { Play, Pause, Resume, Retry, Redownload, AllowCellular, Delete }
+internal enum class OfflineAction { Play, Pause, Resume, Retry, Redownload, AllowCellular, Delete, Tracks }
 
 internal data class OfflineRow(
     val entry: OfflineEntry,
@@ -38,7 +41,17 @@ internal data class OfflineRow(
     val notDownloadedSummary: String? = null,
     /** Working with no total to measure against: motion, not a number (OFF-03b). */
     val indeterminate: Boolean = false,
-    val statusIsError: Boolean = false
+    val statusIsError: Boolean = false,
+    /** The row's identity on the page: the entry's id, or "collection:{id}" for an album or playlist row. */
+    val key: String = entry.id,
+    /** Set on an album or playlist row, which stands for all its tracks; [entry] is its first track (its art, its Play). */
+    val collection: OfflineCollection? = null,
+    /** On an album or playlist row: its tracks are showing below it. */
+    val open: Boolean = false,
+    /** On an album or playlist row: every track it still holds is downloaded. */
+    val collectionReady: Boolean = false,
+    /** On a track row shown under its album or playlist: that collection's id. */
+    val parent: String? = null
 )
 
 internal data class OfflineSections(
@@ -52,7 +65,7 @@ internal data class OfflineSections(
 
     /** Top to bottom on both form factors: what needs the viewer comes first. */
     val ordered: List<Pair<String, List<OfflineRow>>>
-        get() = listOf("Needs attention" to failed, "In progress" to active, "Ready to watch" to ready).filter { it.second.isNotEmpty() }
+        get() = listOf("Needs attention" to failed, "In progress" to active, "Ready to play" to ready).filter { it.second.isNotEmpty() }
 }
 
 internal const val OFFLINE_NEEDS_PASSWORD = "needs-password"
@@ -100,17 +113,17 @@ internal fun offlineFirstFocus(
     if (passwordNeeded) return OfflineFirstFocus.Password
     conflicts.firstOrNull()?.let { return OfflineFirstFocus.Conflict(it) }
     val row = sections.ordered.flatMap { it.second }.firstOrNull { it.primaryAction() != null } ?: return OfflineFirstFocus.Storage
-    return OfflineFirstFocus.Row(row.entry.id, requireNotNull(row.primaryAction()))
+    return OfflineFirstFocus.Row(row.key, requireNotNull(row.primaryAction()))
 }
 
 /** The row that takes a deleted row's place, else the one above it, else the top of the page. Rows with nothing to press don't count. */
 internal fun offlineFocusAfterDelete(sections: OfflineSections, deleted: String): OfflineFirstFocus {
     val rows = sections.ordered.flatMap { it.second }
-    val at = rows.indexOfFirst { it.entry.id == deleted }
+    val at = rows.indexOfFirst { it.key == deleted }
     val row = rows.drop(at + 1).firstOrNull { it.primaryAction() != null }
         ?: rows.take(at.coerceAtLeast(0)).lastOrNull { it.primaryAction() != null }
         ?: return OfflineFirstFocus.Storage
-    return OfflineFirstFocus.Row(row.entry.id, requireNotNull(row.primaryAction()))
+    return OfflineFirstFocus.Row(row.key, requireNotNull(row.primaryAction()))
 }
 
 /** Where a row sits among the list's section headings and rows, which is how the list finds one that isn't on screen yet. */
@@ -118,7 +131,7 @@ internal fun offlineRowPosition(sections: OfflineSections, entryId: String): Int
     var position = 0
     sections.ordered.forEach { (_, rows) ->
         position++
-        val at = rows.indexOfFirst { it.entry.id == entryId }
+        val at = rows.indexOfFirst { it.key == entryId }
         if (at >= 0) return position + at
         position += rows.size
     }
@@ -275,11 +288,17 @@ internal fun offlineSubtitle(entry: OfflineEntry): String? {
     return listOfNotNull(labels.seriesName, place, offlinePresetLabel(entry.preset)).joinToString(" · ").ifEmpty { null }
 }
 
-internal fun offlineSections(library: OfflineLibrary, network: OfflineNetwork, tv: Boolean = false): OfflineSections {
+internal fun offlineSections(
+    library: OfflineLibrary,
+    network: OfflineNetwork,
+    tv: Boolean = false,
+    /** Albums and playlists whose tracks show below their row. */
+    open: Set<String> = emptySet()
+): OfflineSections {
     val manifest: OfflineManifest = library.manifest
-    val rows = manifest.entries.sortedBy { it.createdSequence }.map { entry ->
+    fun row(entry: OfflineEntry, parent: String? = null): OfflineRow {
         val live = library.progress[entry.id]
-        OfflineRow(
+        return OfflineRow(
             entry,
             entry.labels.title,
             offlineSubtitle(entry),
@@ -291,14 +310,73 @@ internal fun offlineSections(library: OfflineLibrary, network: OfflineNetwork, t
             entry.tracks.filter { !it.available }.map { "${it.label} (${it.type})" },
             offlineNotDownloadedSummary(entry.tracks),
             offlineIndeterminate(entry.job, live),
-            offlineStatusIsError(entry.job)
+            offlineStatusIsError(entry.job),
+            key = if (parent == null) entry.id else "$parent:${entry.id}",
+            parent = parent
         )
     }
+    val sorted = manifest.entries.sortedBy { it.createdSequence }
+    // MUS-10: one row per album or playlist; it lists every track it holds, so a track two of them share shows under both.
+    val tracksByItem = sorted.filter { it.kind == OfflineMediaKind.audio }.associateBy { it.itemId }
+    val grouped = manifest.collections.associate { collection ->
+        collection.id to collection.itemIds.distinct().mapNotNull { tracksByItem[it] }
+    }.filterValues { it.isNotEmpty() }
+    val collections = manifest.collections.associateBy { it.id }
+    val inGroup = grouped.values.flatten().map { it.id }.toSet()
     val needsAttention = setOf(OfflinePhase.failed, OfflinePhase.missing)
+    val units = mutableListOf<Triple<Long, String, List<OfflineRow>>>()
+    sorted.filter { it.id !in inGroup }.forEach { entry ->
+        val phase = entry.job.phase
+        val section = when {
+            phase == OfflinePhase.ready -> "ready"
+            phase in needsAttention -> "failed"
+            else -> "active"
+        }
+        units += Triple(entry.createdSequence, section, listOf(row(entry)))
+    }
+    grouped.forEach { (collectionId, entries) ->
+        val collection = collections.getValue(collectionId)
+        val progress = manifest.collectionProgress(collectionId) ?: return@forEach
+        val ordered = entries
+        val first = ordered.firstOrNull { it.job.phase == OfflinePhase.ready } ?: ordered.first()
+        val status = musicDownloadStatus(library, collectionId, network, tv)
+        val ready = progress.phase == "ready"
+        val isOpen = collectionId in open
+        val kind = if (collection.kind == OfflineCollectionKind.album) "Album" else "Playlist"
+        val head = OfflineRow(
+            first,
+            collection.title,
+            listOfNotNull(collection.artist, kind).joinToString(" · "),
+            if (ready) {
+                val count = if (progress.absent > 0) "${progress.ready} of ${progress.tracks}" else "${progress.ready}"
+                "$count track${if (progress.tracks == 1) "" else "s"} · ${offlineBytes(progress.readyBytes)}"
+            } else {
+                status?.text ?: "${progress.ready} of ${progress.tracks} tracks"
+            },
+            status?.fraction,
+            listOfNotNull(OfflineAction.Play.takeIf { progress.ready > 0 }, OfflineAction.Tracks, OfflineAction.Delete),
+            emptyList(),
+            statusIsError = progress.phase == "failed",
+            key = "collection:$collectionId",
+            collection = collection,
+            open = isOpen,
+            collectionReady = ready
+        )
+        val section = when (progress.phase) {
+            "ready" -> "ready"
+            "failed" -> "failed"
+            else -> "active"
+        }
+        val tracks = if (isOpen) ordered.map { row(it, collectionId) } else emptyList()
+        // In the list where the viewer downloaded it, as a film sits where it was downloaded.
+        units += Triple(collection.createdSequence, section, listOf(head) + tracks)
+    }
+    units.sortBy { it.first }
+    fun section(name: String) = units.filter { it.second == name }.flatMap { it.third }
     return OfflineSections(
-        ready = rows.filter { it.entry.job.phase == OfflinePhase.ready },
-        active = rows.filter { it.entry.job.phase != OfflinePhase.ready && it.entry.job.phase !in needsAttention },
-        failed = rows.filter { it.entry.job.phase in needsAttention },
+        ready = section("ready"),
+        active = section("active"),
+        failed = section("failed"),
         usedBytes = manifest.budget.usedBytes,
         capBytes = manifest.budget.capBytes
     )

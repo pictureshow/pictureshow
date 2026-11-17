@@ -8938,6 +8938,67 @@
       "expected": "Play"
     },
     {
+      "id": "detail-play-label-movie-finished",
+      "operation": "detail-play-label",
+      "input": {
+        "item": {
+          "Id": "m",
+          "Type": "Movie",
+          "UserData": {
+            "PlaybackPositionTicks": 7000000000
+          }
+        },
+        "playItem": {
+          "Id": "m",
+          "Type": "Movie",
+          "UserData": {
+            "PlaybackPositionTicks": 7000000000
+          }
+        },
+        "finished": true
+      },
+      "expected": "Play again"
+    },
+    {
+      "id": "detail-play-label-episode-finished",
+      "operation": "detail-play-label",
+      "input": {
+        "item": {
+          "Id": "e9",
+          "Type": "Episode",
+          "ParentIndexNumber": 1,
+          "IndexNumber": 9
+        },
+        "playItem": {
+          "Id": "e9",
+          "Type": "Episode",
+          "ParentIndexNumber": 1,
+          "IndexNumber": 9
+        },
+        "finished": true
+      },
+      "expected": "Play again"
+    },
+    {
+      "id": "detail-play-label-series-finished-names-episode",
+      "operation": "detail-play-label",
+      "input": {
+        "item": {
+          "Id": "s",
+          "Type": "Series"
+        },
+        "playItem": {
+          "Id": "e1",
+          "Name": "A Quiet Morning",
+          "Type": "Episode",
+          "ParentIndexNumber": 1,
+          "IndexNumber": 1
+        },
+        "finished": true
+      },
+      "expected": "Play S1:E1 · A Quiet Morning"
+    },
+    {
       "id": "track-menu-empty-no-subtitles",
       "operation": "track-menu-empty",
       "input": {

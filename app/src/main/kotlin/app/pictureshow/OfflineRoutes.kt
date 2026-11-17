@@ -299,7 +299,9 @@ internal fun NavGraphBuilder.offlineTvScreens(
             current,
             nav.previousBackStackEntry == null,
             // A track plays in the music player with its album or playlist around it; a film or episode in the video player.
-            onPlay = { if (playMusic(it)) nav.navigate(MUSIC_NOW_ROUTE) else nav.navigate(offlinePlayerRoute(it)) },
+            onPlay = { entry, collection ->
+                if (playMusic(entry, collection)) nav.navigate(MUSIC_NOW_ROUTE) else nav.navigate(offlinePlayerRoute(entry))
+            },
             onStorage = { nav.navigate(OFFLINE_STORAGE_ROUTE) },
             onOnline = nav::openLibrary,
             onBack = back
@@ -362,7 +364,9 @@ internal fun NavGraphBuilder.offlineTouchScreens(
             current,
             root,
             // A track plays in the music player with its album or playlist around it; a film or episode in the video player.
-            onPlay = { if (playMusic(it)) nav.navigate(MUSIC_NOW_ROUTE) else nav.navigate(offlinePlayerRoute(it)) },
+            onPlay = { entry, collection ->
+                if (playMusic(entry, collection)) nav.navigate(MUSIC_NOW_ROUTE) else nav.navigate(offlinePlayerRoute(entry))
+            },
             onStorage = { nav.navigate(OFFLINE_STORAGE_ROUTE) },
             onOnline = nav::openLibrary,
             onBack = if (root) null else back

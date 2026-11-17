@@ -43,6 +43,8 @@ import app.pictureshow.core.ClientIdentity
 import app.pictureshow.core.Server
 import app.pictureshow.core.TextPersistence
 import app.pictureshow.core.User
+import app.pictureshow.core.offline.OfflineCollection
+import app.pictureshow.core.offline.OfflineCollectionKind
 import app.pictureshow.core.offline.OfflineConflict
 import app.pictureshow.core.offline.OfflineEntry
 import app.pictureshow.core.offline.OfflineJob
@@ -54,6 +56,7 @@ import app.pictureshow.core.offline.OfflinePhase
 import app.pictureshow.core.offline.OfflinePreset
 import app.pictureshow.core.offline.OfflineUserData
 import app.pictureshow.core.offline.offlineEncodeManifest
+import app.pictureshow.core.offline.offlineEntryId
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -110,10 +113,10 @@ class OfflineDownloadsScreenTest {
     }
 
     /** A test that needs another list starts over with it: the engine reads the manifest once. */
-    private fun install(vararg entries: OfflineEntry) {
+    private fun install(vararg entries: OfflineEntry, collections: List<OfflineCollection> = emptyList()) {
         if (GlobalContext.getOrNull() != null) stopKoin()
         File(context.noBackupFilesDir, "offline").deleteRecursively()
-        val manifest = OfflineManifest(entries = entries.toList())
+        val manifest = OfflineManifest(entries = entries.toList(), collections = collections)
         OfflineFiles(context.noBackupFilesDir).manifest(account.key).apply {
             parentFile!!.mkdirs()
             writeText(offlineEncodeManifest(manifest))
@@ -154,9 +157,9 @@ class OfflineDownloadsScreenTest {
         File(context.noBackupFilesDir, "offline").deleteRecursively()
     }
 
-    private fun tv() = compose.setContent { OfflineDownloadsTvScreen(account, true, { played = it.id }, {}, {}, {}) }
+    private fun tv() = compose.setContent { OfflineDownloadsTvScreen(account, true, { e, _ -> played = e.id }, {}, {}, {}) }
 
-    private fun touch() = compose.setContent { OfflineDownloadsTouchScreen(account, true, { played = it.id }, {}, {}, {}) }
+    private fun touch() = compose.setContent { OfflineDownloadsTouchScreen(account, true, { e, _ -> played = e.id }, {}, {}, {}) }
 
     private fun settle() {
         repeat(8) {
@@ -242,6 +245,29 @@ class OfflineDownloadsScreenTest {
         compose.onNodeWithTag("downloads:storage").assertIsFocused()
     }
 
+    /** A track sits indented under its album, so the nearest button below the album's Hide tracks is the track's Delete. */
+    @Test
+    fun `TV Down from an open album lands on its first track's Play`() {
+        fun track(id: String) = entry(offlineEntryId(id, OfflinePreset.original), OfflinePhase.ready).copy(
+            itemId = id,
+            kind = OfflineMediaKind.audio,
+            preset = OfflinePreset.original,
+            labels = OfflineLabels("Song $id", album = "Album", artist = "Artist")
+        )
+        val album = OfflineCollection("al", OfflineCollectionKind.album, "Album", "Artist", listOf("t1", "t2"))
+        install(track("t1"), track("t2"), collections = listOf(album))
+        tv()
+        settle()
+        compose.onNodeWithTag("downloads:tracks:collection:al").performSemanticsAction(SemanticsActions.OnClick)
+        settle()
+        compose.onNodeWithTag("downloads:tracks:collection:al").performSemanticsAction(SemanticsActions.RequestFocus)
+        settle()
+        compose.onNodeWithText("Hide tracks").assertExists()
+        compose.onNodeWithTag("downloads:tracks:collection:al").performKeyInput { pressKey(Key.DirectionDown) }
+        settle()
+        compose.onNodeWithTag("downloads:play:al:t1:original").assertIsFocused()
+    }
+
     /** A window this short holds one row, so the next one isn't composed until the list scrolls to it. */
     @Test
     @Config(qualifiers = "w960dp-h200dp")
@@ -291,7 +317,7 @@ class OfflineDownloadsScreenTest {
     fun `TV back from the player goes to a notice, whole, and OK returns to the row`() {
         install(*Array(4) { entry("r$it", OfflinePhase.ready) })
         val back = androidx.compose.ui.test.junit4.StateRestorationTester(compose)
-        back.setContent { OfflineDownloadsTvScreen(account, true, { played = it.id }, {}, {}, {}) }
+        back.setContent { OfflineDownloadsTvScreen(account, true, { e, _ -> played = e.id }, {}, {}, {}) }
         settle()
         compose.onNode(hasScrollAction()).performScrollToNode(hasTestTag("downloads:play:r2"))
         compose.onNodeWithTag("downloads:play:r2").performSemanticsAction(SemanticsActions.OnClick)
@@ -447,7 +473,7 @@ class OfflineDownloadsScreenTest {
             }
             CompositionLocalProvider(LocalConfiguration provides configuration) {
                 Box(Modifier.requiredSize(700.dp, height).testTag("viewport")) {
-                    OfflineDownloadsTouchScreen(account, true, { played = it.id }, {}, {}, {})
+                    OfflineDownloadsTouchScreen(account, true, { e, _ -> played = e.id }, {}, {}, {})
                 }
             }
         }

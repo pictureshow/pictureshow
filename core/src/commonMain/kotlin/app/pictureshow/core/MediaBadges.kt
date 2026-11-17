@@ -67,12 +67,20 @@ private fun spatialBadge(stream: MediaStream): String? {
 }
 
 /**
+ * PLAY-17: on the page a viewing returned to after playing this film or episode to its natural end ([finished]), Play
+ * reads "Play again", starts at the beginning, and Play from start isn't offered. A series or season keeps naming the
+ * episode it plays; Stop and a SyncPlay group ending never set [finished].
+ */
+fun detailPlaysAgain(item: MediaItem, finished: Boolean): Boolean = finished && !item.isMissing && item.type !in setOf("Series", "Season")
+
+/**
  * The primary detail action's words. A series or season names the episode Play will start ("Play S1:E1 · A Quiet
  * Morning", "Resume S1:E2 · Arrivals"), so nobody has to guess; a movie or episode keeps "Play" or "Resume from 12:34".
  */
-fun detailPlayLabel(item: MediaItem, playItem: MediaItem?): String {
+fun detailPlayLabel(item: MediaItem, playItem: MediaItem?, finished: Boolean = false): String {
     // CAT-21: nothing plays an episode the library doesn't have; the primary says why instead.
     if (item.isMissing) return "Not in your library"
+    if (detailPlaysAgain(item, finished)) return "Play again"
     val position = playItem?.userData?.playbackPositionTicks ?: 0
     if (playItem == null || item.type !in setOf("Series", "Season") || playItem.type != "Episode") {
         return if (position > 0) resumeLabel(position) else "Play"

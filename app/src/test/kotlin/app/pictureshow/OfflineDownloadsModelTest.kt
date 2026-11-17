@@ -300,7 +300,7 @@ class OfflineDownloadsModelTest {
             library(row("a", OfflinePhase.ready), row("b", OfflinePhase.paused), row("c", OfflinePhase.failed, "network")),
             OfflineNetwork.none
         )
-        assertEquals(listOf("Needs attention", "In progress", "Ready to watch"), sections.ordered.map { it.first })
+        assertEquals(listOf("Needs attention", "In progress", "Ready to play"), sections.ordered.map { it.first })
     }
 
     @Test
