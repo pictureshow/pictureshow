@@ -25,6 +25,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.context.startKoin
@@ -121,7 +122,8 @@ class PictureshowApplication : Application() {
                                 app.pictureshow.core.AuthorizationHeader.build(identity(account), account.accessToken)
                             },
                             nowMs = android.os.SystemClock::elapsedRealtime,
-                            trace = PlaybackDiagnostics::write
+                            trace = PlaybackDiagnostics::write,
+                            admitted = get<app.pictureshow.core.ProfileLockStore>().let { lock -> { account -> lock.admits(account.key) } }
                         )
                     }
                     single {
@@ -200,7 +202,8 @@ class PictureshowApplication : Application() {
                             ),
                             preferences = playbackPreferences::read,
                             remoteAttached = { controller.state.value.controller?.target?.name },
-                            remoteTarget = { get<RemoteTargetHost>() }
+                            remoteTarget = { get<RemoteTargetHost>() },
+                            admitted = get<app.pictureshow.core.ProfileLockStore>().let { lock -> { account -> lock.admits(account.key) } }
                         )
                     }
                     single<app.pictureshow.core.UserConfigurationService> {
@@ -261,8 +264,28 @@ class PictureshowApplication : Application() {
         }
         // AUTH-18: five minutes with no Pictureshow screen visible locks again. The process lifecycle stops only when
         // nothing of ours is on screen, so the in-app screensaver and picture-in-picture never count as away.
-        androidx.lifecycle.ProcessLifecycleOwner.get().lifecycle.addObserver(ProfileRelockObserver(dependencyGraph.koin.get()))
+        // A relock also ends what kept going while away: music and its controls, being a remote target, and following a
+        // Watch-together group. The open video goes with the screens the lock replaces.
+        val koin = dependencyGraph.koin
+        val lock = koin.get<app.pictureshow.core.ProfileLockStore>()
+        androidx.lifecycle.ProcessLifecycleOwner.get().lifecycle.addObserver(
+            ProfileRelockObserver(lock, onRelock = { profileRelocked(lock, koin.get(), koin.get(), koin.get()) })
+        )
+        val remoteTarget = koin.get<RemoteTargetHost>()
+        CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate).launch {
+            kotlinx.coroutines.flow.combine(lock.unlocked, lock.locks) { _, _ -> }.collect { remoteTarget.lockChanged() }
+        }
     }
+}
+
+/**
+ * AUTH-18: what a relock ends besides the screens, when the viewer on screen is really behind its PIN (a viewer with
+ * none, or with the opening question off, carries on). Being a remote target follows the lock state on its own.
+ */
+internal fun profileRelocked(lock: app.pictureshow.core.ProfileLockStore, accounts: AccountStore, music: MusicHost, sync: SyncPlayHost) {
+    if (lock.admits(accounts.snapshots.value.currentAccount?.key)) return
+    music.lockOut()
+    sync.background()
 }
 
 /** Avoid blocking Application.onCreate on a disk read just to construct the protocol client. */

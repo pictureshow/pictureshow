@@ -417,6 +417,18 @@ final class SpecVectorTests:XCTestCase {
         case "touch-pip-aspect":let a=PictureInPicture.aspect(width:try required(Int.self,i,"width"),height:try required(Int.self,i,"height"),pixelRatio:try required(Double.self,i,"pixelRatio"));return [a.width,a.height]
         case "touch-player-back":return TouchPlayerBack.action(sheetOpen:try required(Bool.self,i,"sheetOpen"),menuOpen:try required(Bool.self,i,"menuOpen"))
         case "quick-connect-code":let input=try required(String.self,i,"input");return ["normalized":QuickConnectApproval.normalize(input),"valid":QuickConnectApproval.valid(input)]
+        // AUTH-17: a 403 is an access refusal, never a wrong password.
+        case "access-refusal": return ClientError.accessRefusal(signIn: bool(i, "signIn"))
+        // AUTH-16..19: the profile PIN rules, run on the real core functions.
+        case "profile-pin-valid":return ProfilePin.valid(try required(String.self,i,"pin"))
+        case "profile-pin-needed":return ProfilePin.needed(try required(Bool.self,i,"hasPin") ? ProfileLock(hash:"hash",askOnStart:try required(Bool.self,i,"askOnStart")) : nil,reason:try XCTUnwrap(ProfileUnlockReason(rawValue:try required(String.self,i,"reason"))),unlocked:try required(Bool.self,i,"unlocked"))
+        case "profile-pin-attempt":
+            let now=try required(Int64.self,i,"now")
+            let next=ProfilePin.attempt(ProfileLock(hash:"hash",failures:try required(Int.self,i,"failures"),failedAt:try required(Int64.self,i,"failedAt")),now:now,correct:try required(Bool.self,i,"correct"))
+            let lockedOut=ProfilePin.lockedOut(next)
+            return ["failures":next.failures,"failedAt":next.failedAt,"cooldownMs":lockedOut ? NSNull() as Any : ProfilePin.cooldown(next,now:now) as Any,"lockedOut":lockedOut]
+        case "profile-pin-relock":return ProfilePin.relock(backgroundedAt:try required(Int64?.self,i,"backgroundedAt"),now:try required(Int64.self,i,"now"))
+        case "profile-pin-change":return ProfilePin.changeAllowed(hasPin:try required(Bool.self,i,"hasPin"),pinConfirmed:try required(Bool.self,i,"pinConfirmed"),passwordProven:try required(Bool.self,i,"passwordProven"))
         case "quick-connect-approval-result":return QuickConnectApproval.result(status:try required(Int.self,i,"status"),approved:try required(Bool?.self,i,"approved")).rawValue
         default:throw NSError(domain:"Unknown vector operation \(operation)",code:1)
         }

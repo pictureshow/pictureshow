@@ -222,6 +222,12 @@ internal class CastSenderHost(
     private val mutable = MutableStateFlow(CastUi())
     val state = mutable.asStateFlow()
     private var account: Account? = null
+
+    /**
+     * Whether the viewer is past its profile lock (AUTH-18). Behind it the receiver keeps what it is doing (it is another
+     * screen), but the notification and this phone can't start it again.
+     */
+    var admitted: (Account) -> Boolean = { true }
     private var link: CastLink? = null
     private var routesJob: Job? = null
     private var searchJob: Job? = null
@@ -1398,7 +1404,10 @@ internal class CastSenderHost(
 
     fun pause() = command("pause")
 
-    fun play() = command("play")
+    fun play() {
+        if (account?.let { !admitted(it) } == true) return
+        command("play")
+    }
 
     fun seekTo(ticks: Long) = command("seek-absolute", ticks.toString())
 

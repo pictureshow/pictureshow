@@ -64,7 +64,11 @@ internal fun castSenderHost(context: Context, http: HttpClient, identity: Device
         AndroidCastEnvironment(context.applicationContext),
         ClientCastGateway(http, identity, deviceDisplayName(context)),
         SystemClock::elapsedRealtime
-    )
+    ).also { host ->
+        org.koin.mp.KoinPlatform.getKoinOrNull()?.getOrNull<app.pictureshow.core.ProfileLockStore>()?.let { lock ->
+            host.admitted = { lock.admits(it.key) }
+        }
+    }
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)

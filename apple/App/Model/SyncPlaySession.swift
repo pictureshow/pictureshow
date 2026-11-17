@@ -218,6 +218,8 @@ final class SyncPlaySession: ObservableObject {
                 let item = try await client.item(account: account, id: request.itemId)
                 guard let self, let app, self.engine.membership.generation == request.generation, self.accountKey == account.key,
                       self.engine.following, self.engine.membership.queue?.current?.playlistItemId == request.playlistItemId else { return }
+                // AUTH-16: the group's entry never opens behind the PIN lock.
+                guard app.pastPinGate(account) else { self.log.info("group entry held: viewer locked"); return }
                 if let current = app.activeController {
                     if current.sync?.playlistItemId == request.playlistItemId && current.sync?.generation == request.generation { return }
                     current.closeReplacedBySync()
