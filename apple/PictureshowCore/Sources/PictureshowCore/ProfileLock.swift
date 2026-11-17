@@ -301,7 +301,8 @@ public protocol ProfileLockPersistence {
     }
 
     /// Pictureshow left the screen. `now` is the monotonic clock.
-    public func backgrounded(now: Int64) { backgroundedAt = now }
+    /// Away from `now`, unless already away: a paused picture-in-picture window that then closes keeps its earlier start.
+    public func backgrounded(now: Int64) { if backgroundedAt == nil { backgroundedAt = now } }
 
     /// Pictureshow is in use again without coming to the front (a picture-in-picture window playing): the time away
     /// stops counting until it is left again.

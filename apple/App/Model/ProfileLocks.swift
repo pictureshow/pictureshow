@@ -58,7 +58,8 @@ extension AppModel {
     }
 
     /// The picture-in-picture window opened, closed, paused or played. Pausing or finishing in the background starts
-    /// the time away; playing again ends it, locking first if it reached five minutes.
+    /// the time away, and closing the window keeps that earlier start; playing again or returning to full screen (the
+    /// scene becoming visible) ends it, locking first if it reached five minutes.
     @discardableResult func pictureInPictureMoved(active: Bool, playing: Bool, now: Int64 = ProfilePin.monotonicNow()) -> Bool {
         guard active != pictureInPictureActive || playing != pictureInPicturePlaying else { return false }
         pictureInPictureActive = active
@@ -68,8 +69,8 @@ extension AppModel {
 
     private func awayChanged(now: Int64) -> Bool {
         if ProfilePin.awayRuns(sceneVisible: !sceneInBackground, pictureInPicture: pictureInPictureActive, playing: pictureInPicturePlaying) {
-            // Already away keeps the earlier start.
-            if pins.backgroundedAt == nil { pins.backgrounded(now: now) }
+            // Already away keeps the earlier start: a paused window that then closes counts from the pause.
+            pins.backgrounded(now: now)
             return false
         }
         guard pins.backgroundedAt != nil else { return false }

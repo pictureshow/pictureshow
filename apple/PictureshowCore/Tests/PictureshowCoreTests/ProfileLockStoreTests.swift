@@ -145,6 +145,9 @@ import XCTest
         XCTAssertTrue(pins.gateNeeded("a"), "asked like a fresh start")
         XCTAssertTrue(pins.changeNeedsPin("a"), "the password proof went with it")
         XCTAssertFalse(pins.foregrounded(now: 9_000_000), "coming back without having left doesn't lock")
+        pins.backgrounded(now: 10_000_000)
+        pins.backgrounded(now: 10_240_000)
+        XCTAssertEqual(pins.backgroundedAt, 10_000_000, "already away keeps the earlier start")
     }
 
     func testRelockFollowsAskOnStartAndARestartLocks() async throws {

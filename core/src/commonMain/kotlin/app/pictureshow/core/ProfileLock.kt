@@ -150,8 +150,8 @@ fun profilePinProofKept(event: ProfilePinProofEvent): Boolean = when (event) {
 
 /**
  * AUTH-18: whether the time away runs. It runs while no Pictureshow screen is visible, except while a picture-in-picture
- * window plays: picture-in-picture counts as in use only while it plays. (The Android app's relock observer doesn't
- * consult this yet; the shared vectors pin the rule.)
+ * window plays: a paused or ended window counts as away from that moment. The shared vectors pin the rule each
+ * platform's relock wiring follows.
  */
 fun profilePinAwayRuns(sceneVisible: Boolean, pictureInPicture: Boolean, playing: Boolean): Boolean =
     !sceneVisible && !(pictureInPicture && playing)
@@ -215,8 +215,9 @@ class ProfileLockStore(private val persistence: TextPersistence, private val has
     private var backgroundedAt: Long? = null
 
     /** Pictureshow left the screen (the process stopped being visible). [now] is the monotonic clock. */
+    /** Away from now, unless already away: a paused picture-in-picture window that then closes keeps its earlier start. */
     fun backgrounded(now: Long) {
-        backgroundedAt = now
+        if (backgroundedAt == null) backgroundedAt = now
     }
 
     /**

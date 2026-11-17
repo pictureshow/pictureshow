@@ -254,6 +254,27 @@ import PictureshowCore
         XCTAssertTrue(left.sceneMoved(to: .active, now: 2_000_000 + 3_600_000), "an hour with the window paused is away")
     }
 
+    /// Closing a paused window in the background keeps the pause as the start of the time away, and returning to full
+    /// screen ends it like playing again.
+    func testClosingAPausedWindowKeepsTheEarlierStart() async throws {
+        let closed = try await unlockedModel()
+        closed.sceneMoved(to: .background, now: 1_000_000)
+        closed.pictureInPictureMoved(active: true, playing: true, now: 1_000_001)
+        closed.pictureInPictureMoved(active: true, playing: false, now: 2_000_000)
+        closed.pictureInPictureMoved(active: false, playing: false, now: 2_000_000 + 240_000)
+        XCTAssertEqual(closed.pins.backgroundedAt, 2_000_000, "the close doesn't restart the time away")
+        XCTAssertTrue(closed.sceneMoved(to: .active, now: 2_000_000 + 300_000), "five minutes from the pause locks, one from the close")
+        XCTAssertTrue(closed.pinGateNeeded(viewer))
+
+        let restored = try await unlockedModel()
+        restored.sceneMoved(to: .background, now: 1_000_000)
+        restored.pictureInPictureMoved(active: true, playing: true, now: 1_000_001)
+        restored.pictureInPictureMoved(active: true, playing: false, now: 2_000_000)
+        XCTAssertFalse(restored.sceneMoved(to: .active, now: 2_000_000 + 299_999), "back to full screen within five minutes stays open")
+        XCTAssertNil(restored.pins.backgroundedAt, "and ends the time away")
+        XCTAssertFalse(restored.pinGateNeeded(viewer))
+    }
+
     /// A torn-down viewing takes the window's in-use state with it, whatever ends it, so the time away runs.
     func testTearingDownThePlayerClearsPictureInPicture() async throws {
         for teardown in ["close", "signOut", "leaveLockedViewer"] {
