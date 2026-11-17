@@ -25,7 +25,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import app.pictureshow.core.Account
 import app.pictureshow.core.MediaItem
+import app.pictureshow.core.music.trackIsAvailable
 import app.pictureshow.core.offline.OfflineEntry
 import app.pictureshow.core.offline.OfflinePhase
 import app.pictureshow.core.offline.OfflinePreset
@@ -166,7 +168,8 @@ private fun StorageRow(s: DesktopOfflineState, owner: DesktopOffline) {
 
 @Composable
 private fun DownloadRow(row: OfflineRow, watched: Set<String>, onAct: (OfflineAction) -> Unit) {
-    Surface(color = MaterialTheme.colorScheme.surfaceContainer, shape = RoundedCornerShape(10.dp)) {
+    // A track under its open album or playlist sits indented beneath it.
+    Surface(Modifier.padding(start = if (row.parent != null) 32.dp else 0.dp), color = MaterialTheme.colorScheme.surfaceContainer, shape = RoundedCornerShape(10.dp)) {
         FlowRow(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp),
             itemVerticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.widthIn(min = 240.dp).weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -182,9 +185,10 @@ private fun DownloadRow(row: OfflineRow, watched: Set<String>, onAct: (OfflineAc
                         LinearProgressIndicator(progress = { row.fraction }, modifier = Modifier.widthIn(max = 360.dp).fillMaxWidth().height(3.dp))
                 }
             }
-            row.actions.filter { it != OfflineAction.Tracks }.forEachIndexed { index, action ->
+            row.actions.filter { it != OfflineAction.Tracks || row.collection != null }.forEachIndexed { index, action ->
                 val tag = "downloads:${action.name.lowercase()}:${row.key}"
-                val label = desktopOfflineActionLabel(action)
+                // An album or playlist row opens to its tracks in their saved order (MUS-10).
+                val label = if (action == OfflineAction.Tracks && row.open) "Hide tracks" else desktopOfflineActionLabel(action)
                 if (index == 0 && action != OfflineAction.Delete) {
                     Button({ onAct(action) }, Modifier.controlFocus().probe(tag).semantics { contentDescription = "$label ${row.title}" }) { Text(label) }
                 } else {
@@ -298,3 +302,56 @@ private fun DesktopOfflineStream.label(): String = displayTitle ?: title ?: lang
 
 private fun DesktopOfflineItem.seasonEpisodeLabel(): String? =
     if (seasonNumber != null && episodeNumber != null) "S$seasonNumber E$episodeNumber" else null
+
+/**
+ * MUS-02/MUS-10: an album or playlist page's download, its state and its actions. Albums and playlists download whole in their
+ * original quality; an artist, genre or single song has no Download here (a track downloads with its album or playlist).
+ */
+@Composable
+internal fun DesktopMusicDownload(c: DesktopController, account: Account, s: DesktopMusicDetailState) {
+    if (desktopMusicDownloadKind(s) == null) return
+    val offline by c.offline.state.collectAsState()
+    val downloader = remember(account.key, s.item.id) { c.offline.musicDownloader(account) }
+    val ask by downloader.ask.collectAsState()
+    val library = if (offline.accountKey == account.key) offline.library else c.offline.engine.libraries.collectAsState().value[account.key]
+    val status = desktopMusicDownloadStatus(library, s.item.id, offline.network)
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        status?.let {
+            Text(it.text, style = MaterialTheme.typography.bodyMedium, color = if (it.error) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.probe("music:download-status").semantics { liveRegion = LiveRegionMode.Polite })
+            it.fraction?.let { f -> LinearProgressIndicator(progress = { f }, modifier = Modifier.widthIn(max = 360.dp).fillMaxWidth().height(3.dp)) }
+        }
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (status == null) {
+                OutlinedButton({ downloader.request(s) }, enabled = s.tracks.any(::trackIsAvailable) && s.tracksComplete && !s.busy && ask != DesktopMusicDownloadAsk.Checking,
+                    modifier = Modifier.controlFocus().probe("music:download")) {
+                    Icon(DesktopGlyph.Download, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp))
+                    Text(if (ask == DesktopMusicDownloadAsk.Checking) "Checking…" else "Download")
+                }
+            } else {
+                OutlinedButton({ downloader.askRemove(s, status.ready) }, Modifier.controlFocus().probe("music:download-remove")) {
+                    Text(if (status.ready) "Remove download" else "Stop download")
+                }
+                TextButton(c::downloads, Modifier.controlFocus().probe("music:downloads")) { Text("Open Downloads") }
+            }
+        }
+    }
+    val question = ask
+    if (question != null && question != DesktopMusicDownloadAsk.Checking) {
+        val cancel = remember { FocusRequester() }
+        LaunchedEffect(question) { withFrameNanos { }; runCatching { cancel.requestFocus() } }
+        CompositionLocalProvider(LocalModalOpen provides true) {
+            when (question) {
+                is DesktopMusicDownloadAsk.Confirm -> AlertDialog(onDismissRequest = downloader::dismiss, title = { Text("Download ${s.item.name}?") }, text = { Text(question.text) },
+                    dismissButton = { TextButton(downloader::dismiss, Modifier.focusRequester(cancel).controlFocus(allowInModal = true).probe("music:download:cancel")) { Text("Cancel") } },
+                    confirmButton = { TextButton({ downloader.start(question.items) }, Modifier.controlFocus(allowInModal = true).probe("music:download:start")) { Text("Download") } })
+                is DesktopMusicDownloadAsk.Remove -> AlertDialog(onDismissRequest = downloader::dismiss, title = { Text(question.confirm + "?") }, text = { Text(question.text) },
+                    dismissButton = { TextButton(downloader::dismiss, Modifier.focusRequester(cancel).controlFocus(allowInModal = true).probe("music:download:cancel")) { Text("Cancel") } },
+                    confirmButton = { TextButton(downloader::remove, Modifier.controlFocus(allowInModal = true).probe("music:download:remove")) { Text(question.confirm) } })
+                is DesktopMusicDownloadAsk.Notice -> AlertDialog(onDismissRequest = downloader::dismiss, title = { Text("Download") }, text = { Text(question.text) },
+                    confirmButton = { TextButton(downloader::dismiss, Modifier.focusRequester(cancel).controlFocus(allowInModal = true).probe("music:download:ok")) { Text("OK") } })
+                DesktopMusicDownloadAsk.Checking -> Unit
+            }
+        }
+    }
+}

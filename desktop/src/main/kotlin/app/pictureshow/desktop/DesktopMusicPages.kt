@@ -268,6 +268,7 @@ internal fun DesktopMusicItemPage(state: DesktopState, c: DesktopController) {
                             if (!s.isGenre) MusicIcon(if (head.userData.isFavorite) DesktopGlyph.Favorite else DesktopGlyph.FavoriteOutline,
                                 if (head.userData.isFavorite) "Remove from favorites" else "Add to favorites", "music:favorite", selected = head.userData.isFavorite) { model.favorite() }
                         }
+                        DesktopMusicDownload(c, account, s)
                         if (s.isPlaylist && !s.loading && !s.canEdit) Text("You can play this playlist, but only its owner can change it.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         head.overview?.takeIf { it.isNotBlank() && s.isArtist }?.let { Text(it, maxLines = 4, overflow = TextOverflow.Ellipsis) }
                     }

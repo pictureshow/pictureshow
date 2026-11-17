@@ -448,7 +448,8 @@ internal fun offlinePreviewChoices(policy: OfflinePolicy, items: List<DesktopOff
 internal data class OfflineCollectionStatus(val text: String, val fraction: Float?)
 
 @Suppress("UNUSED_PARAMETER")
-internal fun offlineCollectionStatus(library: OfflineLibrary, collectionId: String, network: OfflineNetwork, tv: Boolean): OfflineCollectionStatus? = null
+internal fun offlineCollectionStatus(library: OfflineLibrary, collectionId: String, network: OfflineNetwork, tv: Boolean): OfflineCollectionStatus? =
+    desktopMusicDownloadStatus(library, collectionId, network)?.let { OfflineCollectionStatus(it.text, it.fraction) }
 
 internal const val OFFLINE_PREVIEW_UNREACHABLE = "Can't reach the server. Downloads need it to start; you can still watch what's already saved."
 

@@ -70,9 +70,11 @@ internal data class DesktopOfflineState(
     /** The last server answer at start or on a page load: out of reach (no answer at all, not a refusal). */
     val serverUnreachable: Boolean = false,
     /** After a local viewing: where its progress went (P-11). */
-    val notice: String? = null
+    val notice: String? = null,
+    /** Albums and playlists whose tracks show below their row on the Downloads page. */
+    val open: Set<String> = emptySet()
 ) {
-    val sections: OfflineSections get() = offlineSections(library, network)
+    val sections: OfflineSections get() = offlineSections(library, network, open = open)
     val passwordNeeded: Boolean get() = library.passwordNeeded()
     val hasReady: Boolean get() = library.hasReadyDownloads()
 
@@ -199,18 +201,34 @@ internal class DesktopOffline(
 
     // Downloads list actions (OFF-03/04)
 
+    /** Tests set a library without running transfers. */
+    internal fun publishForTest(state: DesktopOfflineState) { mutable.value = state }
+
+    /** One album or playlist page's download (MUS-10). */
+    fun musicDownloader(account: Account) = DesktopMusicDownloader(account, engine, api, scope)
+
+    /** The music player's Play, set by the controller; Downloads' Play on a music row goes there (MUS-10). */
+    @Volatile var musicPlayer: ((DesktopMusicPlay) -> Unit)? = null
+
     fun act(row: OfflineRow, action: OfflineAction, play: (OfflineEntry) -> Unit) {
-        val key = currentAccount()?.key ?: return
+        val account = currentAccount() ?: return
+        val key = account.key
         val id = row.entry.id
         when (action) {
-            OfflineAction.Play -> play(row.entry)
+            OfflineAction.Play -> if (row.entry.kind == app.pictureshow.core.offline.OfflineMediaKind.audio) {
+                val music = desktopOfflineMusicPlay(account, mutable.value.library, row.entry, row.collection?.id ?: row.parent) { engine.artFile(key, it) }
+                if (music != null) musicPlayer?.invoke(music)
+                else mutable.update { it.copy(notice = "Some of these tracks aren't downloaded yet. Play them once they are, or stream them from your server.") }
+            } else play(row.entry)
             OfflineAction.Delete -> mutable.update { it.copy(confirm = OfflineConfirm.One(row)) }
             OfflineAction.Pause -> scope.launch { engine.pause(key, id) }
             OfflineAction.Resume -> scope.launch { engine.resume(key, id) }
             OfflineAction.Retry -> scope.launch { engine.retry(key, id) }
             OfflineAction.Redownload -> scope.launch { engine.redownload(key, id) }
             OfflineAction.AllowCellular -> scope.launch { engine.setCellular(key, id, true); engine.networkChanged() }
-            OfflineAction.Tracks -> Unit
+            OfflineAction.Tracks -> row.collection?.id?.let { collection ->
+                mutable.update { it.copy(open = if (collection in it.open) it.open - collection else it.open + collection) }
+            }
         }
     }
 

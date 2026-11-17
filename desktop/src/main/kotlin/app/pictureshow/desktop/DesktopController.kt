@@ -77,6 +77,11 @@ class DesktopController(
     val music = DesktopMusic(scope, store, DesktopMusicStore(File(directory, "music")), ClientDesktopMusicGateway(playbackClient, client),
         { volume -> MpvMusicOutput(File(directory, "music-output"), volume) }, { mutable.value.settings.musicQuality }, events::log)
     val musicBrowse = DesktopMusicBrowse(client, store, scope)
+    init {
+        // MUS-10: downloaded tracks play from their files and their listening goes to the offline outbox; Downloads' Play on music opens the queue.
+        music.local = DesktopEngineMusicLocal(offline.engine)
+        offline.musicPlayer = music::request
+    }
     private val inputDiagnostics = DesktopInputDiagnostics(events::log)
     private val inputListener = java.awt.event.AWTEventListener { event ->
         val source = event.source as? java.awt.Component
