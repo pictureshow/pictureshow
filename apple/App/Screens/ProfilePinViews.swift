@@ -325,6 +325,9 @@ struct ProfilePinSettingsSection: View {
             .sheet(item: $flow, onDismiss: { app.pins.dropChangeGrant() }) { current in
                 sheet(current, account: account, askOnStart: lock?.askOnStart ?? true).environmentObject(app)
             }
+            // Leaving the PIN settings ends a password proof too (AUTH-19). A sheet over the section (tvOS presents
+            // it full screen) is not leaving.
+            .onDisappear { if flow == nil { app.pins.leftPinSettings() } }
         }
     }
 

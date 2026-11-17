@@ -3024,6 +3024,12 @@ enum SpecCaseManifest {
         profile-pin-change-open-viewer-is-not-enough|application/profile-pin-change
         profile-pin-change-current-pin-typed|application/profile-pin-change
         profile-pin-change-password-sign-in|application/profile-pin-change
+        profile-pin-proof-change-made|application/profile-pin-proof
+        profile-pin-proof-viewer-changed|application/profile-pin-proof
+        profile-pin-proof-relocked|application/profile-pin-proof
+        profile-pin-proof-settings-left|application/profile-pin-proof
+        profile-pin-proof-sign-in-landed|application/profile-pin-proof
+        profile-pin-proof-setup-cancelled|application/profile-pin-proof
         quick-connect-code-pasted-with-spaces|application/quick-connect-code
         quick-connect-code-too-short|application/quick-connect-code
         quick-connect-code-too-long|application/quick-connect-code

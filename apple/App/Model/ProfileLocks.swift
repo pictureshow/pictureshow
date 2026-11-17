@@ -53,9 +53,12 @@ extension AppModel {
     /// so nothing plays behind the lock. Returns whether it locked.
     @discardableResult func sceneMoved(to phase: ScenePhase, now: Int64 = ProfilePin.monotonicNow()) -> Bool {
         if phase == .background {
-            pins.backgrounded(now: now)
+            sceneInBackground = true
+            // A playing picture-in-picture window is Pictureshow in use, not away.
+            if !pictureInPictureActive { pins.backgrounded(now: now) }
             return false
         }
+        sceneInBackground = false
         guard pins.backgroundedAt != nil else { return false }
         pins.retryUnreadable()
         guard pins.foregrounded(now: now) else { return false }
@@ -63,9 +66,19 @@ extension AppModel {
             // Nothing plays behind the lock: the viewing closes and a watch-together group is left (not paused), since
             // following a group would start the next entry behind the lock.
             if syncPlay.participating { syncPlay.leave() }
+            // A viewing still open (a picture-in-picture window included) ends through its normal stop.
+            activeController?.close()
             player = nil
         }
         return true
+    }
+
+    /// The picture-in-picture window opened or closed. While it plays in the background the time away doesn't run;
+    /// closing it there starts it, as leaving the app would.
+    func pictureInPictureMoved(active: Bool, now: Int64 = ProfilePin.monotonicNow()) {
+        pictureInPictureActive = active
+        guard sceneInBackground else { return }
+        if active { pins.inUse() } else { pins.backgrounded(now: now) }
     }
 
     /// Whether the app-wide lock covers the current viewer instead of the app.

@@ -418,6 +418,8 @@ struct PlayerContent: View {
         // TOUCH-15: the window follows the gate: no error or loading card, no finished title, nothing on AirPlay.
         .onChange(of: PictureInPictureHost.settings(for: controller), initial: true) { _, settings in pip.update(settings) }
         .onChange(of: pip.active) { _, active in
+            // AUTH-18: a playing window keeps Pictureshow in use; the time away starts when it closes in the background.
+            controller.app.pictureInPictureMoved(active: active)
             if active {
                 // Sheets and menus close on entering the window; the controls come back with the full player.
                 findingSubtitles = false

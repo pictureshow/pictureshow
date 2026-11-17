@@ -428,6 +428,9 @@ final class SpecVectorTests:XCTestCase {
             let lockedOut=ProfilePin.lockedOut(next)
             return ["failures":next.failures,"failedAt":next.failedAt,"cooldownMs":lockedOut ? NSNull() as Any : ProfilePin.cooldown(next,now:now) as Any,"lockedOut":lockedOut]
         case "profile-pin-relock":return ProfilePin.relock(backgroundedAt:try required(Int64?.self,i,"backgroundedAt"),now:try required(Int64.self,i,"now"))
+        case "profile-pin-proof":
+            guard let event = ProfilePinProofEvent(rawValue: try required(String.self,i,"event")) else { throw NSError(domain:"Unknown proof event",code:1) }
+            return ProfilePin.proofKept(event)
         case "profile-pin-change":return ProfilePin.changeAllowed(hasPin:try required(Bool.self,i,"hasPin"),pinConfirmed:try required(Bool.self,i,"pinConfirmed"),passwordProven:try required(Bool.self,i,"passwordProven"))
         case "quick-connect-approval-result":return QuickConnectApproval.result(status:try required(Int.self,i,"status"),approved:try required(Bool?.self,i,"approved")).rawValue
         default:throw NSError(domain:"Unknown vector operation \(operation)",code:1)

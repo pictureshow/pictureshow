@@ -200,6 +200,35 @@ import PictureshowCore
         XCTAssertFalse(app.sceneMoved(to: .active, now: 2_300_001), "the same return isn't counted twice")
     }
 
+    /// TOUCH-15 with AUTH-18: a playing picture-in-picture window is Pictureshow in use, so no time away runs while it
+    /// plays, whichever comes first (the window or the scene going to the background); the time starts when it closes.
+    func testPictureInPictureIsNotTimeAwayAndClosingItStartsTheTimer() async throws {
+        let pins = FakeKeychain()
+        pins.items[ProfileLockKeychain.service(viewer.key)] = try savedLock("1234")
+        let app = try model(pins: pins)
+        _ = await app.pins.verify(viewer.key, pin: "1234", now: 10)
+        app.player = PlayerRequest(account: viewer, item: MediaItem(id: "m1", type: "Movie"), fromStart: false)
+
+        app.pictureInPictureMoved(active: true, now: 1_000_000)
+        app.sceneMoved(to: .background, now: 1_000_001)
+        XCTAssertFalse(app.sceneMoved(to: .active, now: 1_000_001 + 3_600_000), "an hour of the window playing is not away")
+        XCTAssertFalse(app.pinGateNeeded(viewer))
+
+        app.pictureInPictureMoved(active: false, now: 5_000_000)
+        app.sceneMoved(to: .background, now: 5_000_001)
+        app.pictureInPictureMoved(active: true, now: 5_000_002)
+        XCTAssertFalse(app.sceneMoved(to: .active, now: 5_000_002 + 3_600_000), "the window opening just after the scene left stops the time away")
+
+        app.sceneMoved(to: .background, now: 9_000_000)
+        app.pictureInPictureMoved(active: false, now: 9_600_000)
+        XCTAssertFalse(app.sceneMoved(to: .active, now: 9_600_000 + 299_999), "the time away starts when the window closes")
+        app.sceneMoved(to: .background, now: 9_900_000)
+        XCTAssertTrue(app.sceneMoved(to: .active, now: 9_900_000 + 300_000), "and five minutes from then locks")
+        XCTAssertTrue(app.pinGateNeeded(viewer))
+        XCTAssertNil(app.player, "the viewing closed at the relock")
+        XCTAssertNil(app.shownPlayer, "no player or window past the gate")
+    }
+
     func testARestartWhileAwayLocks() async throws {
         let pins = FakeKeychain()
         pins.items[ProfileLockKeychain.service(viewer.key)] = try savedLock("1234")
