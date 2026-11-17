@@ -21,6 +21,12 @@ private let log = Logger(subsystem: "app.pictureshow", category: "PictureInPictu
     weak var controller: PlaybackController?
     /// Called as the window opens, so the player can close its sheets and menus and hide its controls.
     var onEnter: () -> Void = {}
+    /// AUTH-18: whether the window is up and its viewing plays (rate above 0), reported on every change, so the
+    /// relock timer runs while a window sits paused or finished.
+    var onUse: (_ active: Bool, _ playing: Bool) -> Void = { _, _ in }
+    /// The viewing plays (the player's rate is above 0).
+    private(set) var playing = false
+    private var rateObservation: NSKeyValueObservation?
 
     private(set) var system: AVPictureInPictureController?
     private var possibleObservation: NSKeyValueObservation?
@@ -60,7 +66,21 @@ private let log = Logger(subsystem: "app.pictureshow", category: "PictureInPictu
             log.info("possible=\(possible, privacy: .public)")
             Task { @MainActor in self?.possible = possible }
         }
+        if let player = layer.player {
+            rateObservation = player.observe(\.rate, options: [.initial, .new]) { [weak self] player, _ in
+                let rate = player.rate
+                Task { @MainActor in self?.rateChanged(rate) }
+            }
+        }
         apply()
+    }
+
+    /// The viewing's rate changed (play, pause, the end): reported while the window is up.
+    func rateChanged(_ rate: Float) {
+        let playing = rate > 0
+        guard playing != self.playing else { return }
+        self.playing = playing
+        if active { onUse(true, playing) }
     }
 
     func update(_ settings: Settings) {
@@ -89,11 +109,13 @@ private let log = Logger(subsystem: "app.pictureshow", category: "PictureInPictu
         active = true
         restoring = false
         onEnter()
+        onUse(true, playing)
     }
 
     func failedToStart() {
         log.error("failed to start")
         active = false
+        onUse(false, false)
     }
 
     /// The viewer expanded the window: the full player is still presented underneath, with the same viewing.
@@ -101,6 +123,7 @@ private let log = Logger(subsystem: "app.pictureshow", category: "PictureInPictu
 
     func didStop() {
         active = false
+        onUse(false, false)
         defer { restoring = false }
         // Closing the window (its X) stops the viewing as Stop would: the stopped report, then the player leaves.
         if !restoring { controller?.close() }

@@ -48,17 +48,30 @@ final class ProfileLockKeychain: ProfileLockPersistence {
 }
 
 extension AppModel {
-    /// AUTH-18: no Pictureshow screen visible (`background`) starts the time away; any visible phase ends it. Five
-    /// minutes or more away (or a restart in between) locks again like a fresh start, and a viewing on screen closes
-    /// so nothing plays behind the lock. Returns whether it locked.
+    /// AUTH-18: no Pictureshow screen visible (`background`) starts the time away; any visible phase ends it. A
+    /// picture-in-picture window counts as in use only while it plays. Five minutes or more away (or a restart in
+    /// between) locks again like a fresh start, and a viewing still open closes so nothing plays behind the lock.
+    /// Returns whether it locked.
     @discardableResult func sceneMoved(to phase: ScenePhase, now: Int64 = ProfilePin.monotonicNow()) -> Bool {
-        if phase == .background {
-            sceneInBackground = true
-            // A playing picture-in-picture window is Pictureshow in use, not away.
-            if !pictureInPictureActive { pins.backgrounded(now: now) }
+        sceneInBackground = phase == .background
+        return awayChanged(now: now)
+    }
+
+    /// The picture-in-picture window opened, closed, paused or played. Pausing or finishing in the background starts
+    /// the time away; playing again ends it, locking first if it reached five minutes.
+    @discardableResult func pictureInPictureMoved(active: Bool, playing: Bool, now: Int64 = ProfilePin.monotonicNow()) -> Bool {
+        guard active != pictureInPictureActive || playing != pictureInPicturePlaying else { return false }
+        pictureInPictureActive = active
+        pictureInPicturePlaying = playing
+        return awayChanged(now: now)
+    }
+
+    private func awayChanged(now: Int64) -> Bool {
+        if ProfilePin.awayRuns(sceneVisible: !sceneInBackground, pictureInPicture: pictureInPictureActive, playing: pictureInPicturePlaying) {
+            // Already away keeps the earlier start.
+            if pins.backgroundedAt == nil { pins.backgrounded(now: now) }
             return false
         }
-        sceneInBackground = false
         guard pins.backgroundedAt != nil else { return false }
         pins.retryUnreadable()
         guard pins.foregrounded(now: now) else { return false }
@@ -71,14 +84,6 @@ extension AppModel {
             player = nil
         }
         return true
-    }
-
-    /// The picture-in-picture window opened or closed. While it plays in the background the time away doesn't run;
-    /// closing it there starts it, as leaving the app would.
-    func pictureInPictureMoved(active: Bool, now: Int64 = ProfilePin.monotonicNow()) {
-        pictureInPictureActive = active
-        guard sceneInBackground else { return }
-        if active { pins.inUse() } else { pins.backgrounded(now: now) }
     }
 
     /// Whether the app-wide lock covers the current viewer instead of the app.

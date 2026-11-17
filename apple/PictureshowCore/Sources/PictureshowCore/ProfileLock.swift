@@ -113,6 +113,13 @@ public enum ProfilePin {
     /// Whether a password proof survives `event`. It is one-time like a typed current PIN: the change it was for uses
     /// it up, and so do leaving the PIN settings, leaving that viewer and locking again, so a parent's sign-in can't
     /// leave a viewer whose PIN anyone may then turn off.
+    /// AUTH-18: whether the time away runs. It runs while no Pictureshow screen is visible, except while a
+    /// picture-in-picture window plays: picture-in-picture counts as in use only while it plays, so a paused or
+    /// finished window left open is time away like any other.
+    public static func awayRuns(sceneVisible: Bool, pictureInPicture: Bool, playing: Bool) -> Bool {
+        !sceneVisible && !(pictureInPicture && playing)
+    }
+
     public static func proofKept(_ event: ProfilePinProofEvent) -> Bool {
         switch event {
         case .CHANGE_MADE, .VIEWER_CHANGED, .RELOCKED, .SETTINGS_LEFT: return false

@@ -14,19 +14,17 @@ import PictureshowCore
     @Published var preferences: Preferences { didSet { preferences.save() } }
     /// Set while the viewer is adding another account, so the sign-in flow shows over the app.
     @Published var addingAccount = false
-    @Published var player: PlayerRequest?
-    /// AUTH-18 with TOUCH-15: a playing picture-in-picture window is the app in use, and the scene's last phase, so the
-    /// time away starts when the window closes in the background (`ProfileLocks.swift`).
+    @Published var player: PlayerRequest? {
+        // Every teardown (closing, a relock, signing out, "Switch user") clears the viewing, and the window with it.
+        didSet { if player == nil { pictureInPictureMoved(active: false, playing: false) } }
+    }
+    /// AUTH-18 with TOUCH-15: whether a picture-in-picture window is up and whether its viewing plays, and the scene's
+    /// last phase. Together they decide whether the time away runs (`ProfileLocks.swift`).
     var pictureInPictureActive = false
+    var pictureInPicturePlaying = false
     var sceneInBackground = false
     /// The viewing on screen, which remote commands (REM-02) act on.
-    weak var activeController: PlaybackController? {
-        didSet {
-            remoteTarget.viewingChanged()
-            // A viewing that ends with its picture-in-picture window up takes the window with it.
-            if activeController == nil, pictureInPictureActive { pictureInPictureMoved(active: false) }
-        }
-    }
+    weak var activeController: PlaybackController? { didSet { remoteTarget.viewingChanged() } }
     @Published var homeLayouts: [String: HomePreferences] = HomeLayoutCache.load()
     var homeLayoutGeneration = 0
     @Published var homeLayoutPending: Set<String> = HomeLayoutCache.pending()

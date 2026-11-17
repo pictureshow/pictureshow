@@ -3022,6 +3022,11 @@ enum SpecCaseManifest {
         profile-pin-relock-restart-while-away-locks|application/profile-pin-relock
         profile-pin-change-first-pin-is-free|application/profile-pin-change
         profile-pin-change-open-viewer-is-not-enough|application/profile-pin-change
+        profile-pin-away-visible|application/profile-pin-away
+        profile-pin-away-background|application/profile-pin-away
+        profile-pin-away-pip-playing|application/profile-pin-away
+        profile-pin-away-pip-paused|application/profile-pin-away
+        profile-pin-away-visible-pip-paused|application/profile-pin-away
         profile-pin-change-current-pin-typed|application/profile-pin-change
         profile-pin-change-password-sign-in|application/profile-pin-change
         profile-pin-proof-change-made|application/profile-pin-proof

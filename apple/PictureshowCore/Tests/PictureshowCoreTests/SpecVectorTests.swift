@@ -428,6 +428,7 @@ final class SpecVectorTests:XCTestCase {
             let lockedOut=ProfilePin.lockedOut(next)
             return ["failures":next.failures,"failedAt":next.failedAt,"cooldownMs":lockedOut ? NSNull() as Any : ProfilePin.cooldown(next,now:now) as Any,"lockedOut":lockedOut]
         case "profile-pin-relock":return ProfilePin.relock(backgroundedAt:try required(Int64?.self,i,"backgroundedAt"),now:try required(Int64.self,i,"now"))
+        case "profile-pin-away": return ProfilePin.awayRuns(sceneVisible: try required(Bool.self,i,"sceneVisible"), pictureInPicture: try required(Bool.self,i,"pictureInPicture"), playing: try required(Bool.self,i,"playing"))
         case "profile-pin-proof":
             guard let event = ProfilePinProofEvent(rawValue: try required(String.self,i,"event")) else { throw NSError(domain:"Unknown proof event",code:1) }
             return ProfilePin.proofKept(event)

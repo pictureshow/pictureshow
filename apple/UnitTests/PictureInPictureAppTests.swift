@@ -91,6 +91,22 @@ final class PictureInPictureAppTests: XCTestCase {
         XCTAssertNil(app.player)
     }
 
+    /// AUTH-18: the host reports the window as in use only while its viewing plays, and reports it gone on close or a
+    /// failed start, so the relock timer never waits on a window that isn't there.
+    func testWindowReportsInUseOnlyWhilePlaying() {
+        let host = PictureInPictureHost()
+        var reports: [String] = []
+        host.onUse = { active, playing in reports.append("\(active)/\(playing)") }
+        host.rateChanged(1)
+        XCTAssertEqual(reports, [], "no window, nothing to report")
+        host.willStart()
+        host.rateChanged(0)
+        host.rateChanged(1.5)
+        host.didStop()
+        host.failedToStart()
+        XCTAssertEqual(reports, ["true/true", "true/false", "true/true", "false/false", "false/false"])
+    }
+
     func testAutomaticStartFollowsTheGate() throws {
         guard PictureInPictureHost.deviceSupports else { throw XCTSkip("This simulator has no picture-in-picture") }
         let host = PictureInPictureHost()

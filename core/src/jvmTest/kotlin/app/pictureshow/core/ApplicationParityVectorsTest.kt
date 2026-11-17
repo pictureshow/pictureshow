@@ -166,6 +166,13 @@ class ApplicationParityVectorsTest {
                             input.getValue("passwordProven").jsonPrimitive.boolean
                         )
                     )
+                    "profile-pin-away" -> JsonPrimitive(
+                        profilePinAwayRuns(
+                            input.getValue("sceneVisible").jsonPrimitive.boolean,
+                            input.getValue("pictureInPicture").jsonPrimitive.boolean,
+                            input.getValue("playing").jsonPrimitive.boolean
+                        )
+                    )
                     "profile-pin-proof" -> JsonPrimitive(
                         profilePinProofKept(ProfilePinProofEvent.valueOf(input.getValue("event").jsonPrimitive.content))
                     )

@@ -148,6 +148,14 @@ fun profilePinProofKept(event: ProfilePinProofEvent): Boolean = when (event) {
     ProfilePinProofEvent.SIGN_IN_LANDED, ProfilePinProofEvent.SETUP_CANCELLED -> true
 }
 
+/**
+ * AUTH-18: whether the time away runs. It runs while no Pictureshow screen is visible, except while a picture-in-picture
+ * window plays: picture-in-picture counts as in use only while it plays. (The Android app's relock observer doesn't
+ * consult this yet; the shared vectors pin the rule.)
+ */
+fun profilePinAwayRuns(sceneVisible: Boolean, pictureInPicture: Boolean, playing: Boolean): Boolean =
+    !sceneVisible && !(pictureInPicture && playing)
+
 /** LOCKED_OUT: the hard limit was reached and only the server password opens this viewer now. */
 enum class ProfilePinResult { UNLOCKED, WRONG, WAIT, LOCKED_OUT }
 
