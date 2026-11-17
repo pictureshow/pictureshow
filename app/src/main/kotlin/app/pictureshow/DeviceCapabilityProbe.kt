@@ -39,6 +39,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -57,6 +58,9 @@ internal class CapabilitySnapshotCache {
 
     suspend fun capture(route: () -> Any, load: () -> DeviceCapabilities): CapabilitySnapshot = withContext(Dispatchers.Default) {
         mutex.withLock {
+            // A closed probe's refresh can still win the lock (an uncontended lock doesn't check cancellation); it
+            // mustn't go on to read the codec list after its owner is gone.
+            ensureActive()
             val current = route()
             if (key != current || value == null) {
                 val loaded = load()

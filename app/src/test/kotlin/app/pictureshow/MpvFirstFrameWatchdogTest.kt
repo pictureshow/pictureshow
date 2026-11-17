@@ -40,18 +40,36 @@ class MpvFirstFrameWatchdogTest {
     private val surfaces = mutableListOf<Surface>()
     private val players = mutableListOf<MpvPlayer>()
 
+    /** Events the fake handed to the player's event thread, and how many of those it has passed on to the main looper. */
+    @Volatile private var handedOut = 0
+
+    @Volatile private var passedOn = 0
+
+    /** Marks the mpv command thread reaches in order; see [settle]. */
+    @Volatile private var mpvMarks = 0
+
+    /** Optional pause in the mpv thread's track read, to show the tests don't depend on how quickly it runs. */
+    @Volatile private var trackReadDelayMs = 0L
+
     private val silentMpv = object : MpvApi {
         override fun create(context: Context) = 1L
         override fun setOptionString(handle: Long, name: String, value: String) = 0
         override fun initialize(handle: Long) = 0
         override fun requestLogMessages(handle: Long, level: String) = 0
         override fun observeProperty(handle: Long, replyId: Long, name: String, format: Int) = 0
-        override fun waitEvent(handle: Long, timeoutSeconds: Double): MpvEvent? = events.poll(50, TimeUnit.MILLISECONDS)
+        override fun waitEvent(handle: Long, timeoutSeconds: Double): MpvEvent? {
+            // The event thread asks again only after posting the last event to the main looper.
+            passedOn = handedOut
+            return events.poll(50, TimeUnit.MILLISECONDS)?.also { handedOut++ }
+        }
         override fun destroy(handle: Long) = Unit
         override fun command(handle: Long, args: Array<String>) = 0
         override fun getPropertyString(handle: Long, name: String): String? = when (name) {
             "track-list/0/type" -> "audio"
-            "track-list/0/codec" -> audioCodec
+            "track-list/0/codec" -> {
+                if (trackReadDelayMs > 0) Thread.sleep(trackReadDelayMs)
+                audioCodec
+            }
             else -> null
         }
         override fun getPropertyLong(handle: Long, name: String) = when (name) {
@@ -64,7 +82,10 @@ class MpvFirstFrameWatchdogTest {
         }
         override fun getPropertyFlag(handle: Long, name: String) = if (name == "track-list/0/selected") 1 else 0
         override fun setPropertyString(handle: Long, name: String, value: String) = 0
-        override fun setPropertyDouble(handle: Long, name: String, value: Double) = 0
+        override fun setPropertyDouble(handle: Long, name: String, value: Double): Int {
+            if (name == "sub-delay") mpvMarks++
+            return 0
+        }
         override fun setPropertyLong(handle: Long, name: String, value: Long) = 0
         override fun setPropertyFlag(handle: Long, name: String, value: Boolean) = 0
         override fun attachSurface(handle: Long, surface: Surface) = 0
@@ -100,13 +121,42 @@ class MpvFirstFrameWatchdogTest {
         return actions
     }
 
-    /** Hands [sent] to the player's event thread and lets the main looper apply them. */
+    /**
+     * Hands [sent] to the player's event thread and lets the main looper apply them, then [settle]s. Waits on what the
+     * threads have done, never on a fixed sleep: the watchdog's time is the main looper's, which only the test moves.
+     */
     private fun send(vararg sent: MpvEvent) {
+        val expected = handedOut + events.size + sent.size
         sent.forEach(events::put)
-        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
-        while (events.isNotEmpty() && System.nanoTime() < deadline) Thread.sleep(10)
-        Thread.sleep(100)
+        awaitThreads("the event thread to pass on $expected events") { passedOn >= expected }
         shadowOf(Looper.getMainLooper()).idle()
+        settle()
+    }
+
+    /**
+     * Applying an event can ask the mpv thread for more (the tracks after FILE_LOADED, the video size after
+     * VIDEO_RECONFIG), which answers on the main looper. The mpv thread runs its work in order, so a mark queued behind
+     * that work (the player's subtitle delay, which the fake counts) means the answers are posted; idling then applies
+     * them. Repeats until a round brings nothing new. A CI runner that read the tracks after the test had already moved
+     * the clock 9 s got the watchdog's decision without knowing the track was passed through (PLATFORM, not a retry).
+     */
+    private fun settle() {
+        val main = shadowOf(Looper.getMainLooper())
+        do {
+            val mark = mpvMarks + 1
+            players.last().subtitleDelayMs(0)
+            awaitThreads("the mpv thread to finish its queued work") { mpvMarks >= mark }
+            val more = !main.isIdle
+            main.idle()
+        } while (more)
+    }
+
+    private fun awaitThreads(what: String, done: () -> Boolean) {
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
+        while (!done()) {
+            check(System.nanoTime() < deadline) { "Waited for $what" }
+            Thread.sleep(1)
+        }
     }
 
     private fun waitMs(ms: Long) = shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(ms))
@@ -125,6 +175,25 @@ class MpvFirstFrameWatchdogTest {
         assertEquals(listOf(FirstFrameAction.WithoutPassthrough), actions)
         waitMs(30_000)
         assertEquals(listOf(FirstFrameAction.WithoutPassthrough), actions, "the watchdog answers once per open")
+    }
+
+    /** The flake's shape, made certain: the mpv thread reads the tracks slowly and the decision still knows them. */
+    @Test fun aSlowTrackReadStillRetriesWithDecodedAudio() {
+        trackReadDelayMs = 300
+        val actions = play(listOf("ac3", "eac3"))
+        send(event(MpvEvent.START_FILE), event(MpvEvent.FILE_LOADED), cached(5.0))
+        waitMs(9_000)
+        assertEquals(listOf(FirstFrameAction.WithoutPassthrough), actions)
+    }
+
+    @Test fun aSlowTrackReadDoesNotHideAPicture() {
+        trackReadDelayMs = 300
+        val actions = play(listOf("ac3", "eac3"))
+        send(event(MpvEvent.START_FILE), event(MpvEvent.FILE_LOADED), cached(5.0))
+        send(event(MpvEvent.VIDEO_RECONFIG))
+        send(event(MpvEvent.PLAYBACK_RESTART))
+        waitMs(30_000)
+        assertEquals(emptyList(), actions)
     }
 
     @Test fun aTrackThatIsNotPassedThroughSkipsTheRetry() {

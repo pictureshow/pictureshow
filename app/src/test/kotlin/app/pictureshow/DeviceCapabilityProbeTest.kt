@@ -44,8 +44,18 @@ import org.robolectric.util.ReflectionHelpers
 class DeviceCapabilityProbeTest {
     private val context: Context get() = RuntimeEnvironment.getApplication()
 
+    /**
+     * A started probe reads the codec list on Dispatchers.Default, and closing it can leave that read running. One that
+     * lands after the reset below and before the next test adds its codecs fills MediaCodecList's static cache with
+     * nothing, and Robolectric's addCodec doesn't clear that cache: the next test then sees no decoders (no "mkv"
+     * profile; the passthrough test failed that way on CI after routeReceiverRereadsHdmiChangesAndCanBeClosed).
+     * Taking the process cache's lock waits out a read in progress, and a cancelled refresh that takes it later stops.
+     */
     @AfterTest
-    fun clearCodecs() = ShadowMediaCodecList.reset()
+    fun clearCodecs() {
+        kotlinx.coroutines.runBlocking { DeviceCapabilityProbe(context, ffmpegSupport = { false }).cachedSnapshot() }
+        ShadowMediaCodecList.reset()
+    }
 
     private fun softwareAvc(name: String = "c2.android.avc.decoder", canonicalName: String? = null) = video(
         name,
