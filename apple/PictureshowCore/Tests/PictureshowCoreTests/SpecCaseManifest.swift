@@ -2967,6 +2967,9 @@ enum SpecCaseManifest {
         detail-play-label-movie|application/detail-play-label
         detail-play-label-movie-resume|application/detail-play-label
         detail-play-label-series-nothing-to-play|application/detail-play-label
+        detail-play-label-movie-finished|application/detail-play-label
+        detail-play-label-episode-finished|application/detail-play-label
+        detail-play-label-series-finished-names-episode|application/detail-play-label
         track-menu-empty-no-subtitles|application/track-menu-empty
         track-menu-empty-no-audio|application/track-menu-empty
         track-menu-empty-subtitles-present|application/track-menu-empty

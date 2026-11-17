@@ -197,7 +197,8 @@ class ApplicationParityVectorsTest {
                     "detail-play-label" -> JsonPrimitive(
                         detailPlayLabel(
                             Json.decodeFromJsonElement(input.getValue("item")),
-                            input.getValue("playItem").takeUnless { it is JsonNull }?.let { Json.decodeFromJsonElement<MediaItem>(it) }
+                            input.getValue("playItem").takeUnless { it is JsonNull }?.let { Json.decodeFromJsonElement<MediaItem>(it) },
+                            input["finished"]?.jsonPrimitive?.booleanOrNull ?: false
                         )
                     )
                     "detail-play-item" -> detailPlayItem(

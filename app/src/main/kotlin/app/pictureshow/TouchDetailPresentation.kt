@@ -35,6 +35,7 @@ import app.pictureshow.core.detailPendingPlainLabel
 import app.pictureshow.core.detailPendingPresentationLabel
 import app.pictureshow.core.detailPendingPresentationVisible
 import app.pictureshow.core.detailPlayedRequestNotice
+import app.pictureshow.core.detailPlaysAgain
 import app.pictureshow.core.detailReadHasFailure
 import app.pictureshow.core.detailReadyCue
 import app.pictureshow.core.detailRequestedActionLabel
@@ -199,6 +200,9 @@ internal fun rememberTouchDetailPresentation(
     val latestOnPlayed by rememberUpdatedState(onPlayed)
     val latestOnFavorite by rememberUpdatedState(onFavorite)
     val latestOnPlay by rememberUpdatedState(onPlay)
+    // PLAY-17: back from this title's natural end, Play reads "Play again", starts at the beginning, and From start goes.
+    val playsAgain = pendingItem?.let { detailPlaysAgain(it, state.finishedLine != null) } == true
+    val latestPlaysAgain by rememberUpdatedState(playsAgain)
     val latestOnPlayOnTv by rememberUpdatedState(onPlayOnTv)
     val latestOnPlayNext by rememberUpdatedState(onPlayNext)
     val latestOnAddToQueue by rememberUpdatedState(onAddToQueue)
@@ -378,10 +382,15 @@ internal fun rememberTouchDetailPresentation(
         detailPendingPresentationLabel(heldLabels, requested, captureOpen, plain(target), pending)
 
     val position = playItem?.userData?.playbackPositionTicks ?: 0L
-    val primaryFresh = if (position > 0) resumeLabel(position) else detailHeldActionLabel("primary")
+    val primaryFresh = when {
+        playsAgain -> "Play again"
+        position > 0 -> resumeLabel(position)
+        else -> detailHeldActionLabel("primary")
+    }
     val primaryPending = when {
         !captureOpen -> detailUnavailableActionLabel("primary")
         playQueued == "primary" -> detailRequestedActionLabel("primary", true)
+        playsAgain -> "Play again when ready"
         else -> "Play when ready"
     }
 
@@ -486,9 +495,10 @@ internal fun rememberTouchDetailPresentation(
             TouchDetailAction(
                 target = "primary",
                 label = when {
-                    local != null -> if (local.startTicks > 0) resumeLabel(local.startTicks) else "Play"
+                    local != null -> if (playsAgain) "Play again" else if (local.startTicks > 0) resumeLabel(local.startTicks) else "Play"
                     !pendingEnabled -> if (groupPlay != null && primaryFresh == "Play") groupPlay else primaryFresh
-                    playQueued != null && playQueued != "primary" -> plain("primary")
+                    playQueued != null && playQueued != "primary" -> if (playsAgain) "Play again" else plain("primary")
+                    playsAgain -> detailPendingPresentationLabel(heldLabels, playQueued == "primary", captureOpen, "Play again", primaryPending)
                     else -> label("primary", playQueued == "primary", primaryPending)
                 },
                 // The longest resume wording stands in for any position, so fresh data arriving moves nothing.
@@ -497,6 +507,8 @@ internal fun rememberTouchDetailPresentation(
                     "Resume from 0:00:00",
                     primaryFresh,
                     "Play when ready",
+                    "Play again",
+                    "Play again when ready",
                     "Play requested",
                     "Play unavailable",
                     groupPlay
@@ -508,13 +520,13 @@ internal fun rememberTouchDetailPresentation(
                 requested = local == null && pendingEnabled && playQueued == "primary",
                 onClick = {
                     if (local != null) {
-                        local.play(false)
+                        local.play(playsAgain)
                     } else if (pendingEnabled) {
                         capturePlay("primary", detailRequestedActionLabel("primary", true)) {
-                            latestOnPlay(it, it.userData.playbackPositionTicks > 0)
+                            latestOnPlay(it, !latestPlaysAgain && it.userData.playbackPositionTicks > 0)
                         }
                     } else {
-                        playItem?.let { onPlay(it, it.userData.playbackPositionTicks > 0) }
+                        playItem?.let { onPlay(it, !playsAgain && it.userData.playbackPositionTicks > 0) }
                     }
                 }
             )
@@ -576,7 +588,9 @@ internal fun rememberTouchDetailPresentation(
                 },
                 requested = local == null && pendingEnabled && playQueued == "from-start",
                 // CAT: a resume-only action; the returning layout keeps its place until the fresh position is known.
-                visible = if (local != null) {
+                visible = if (playsAgain) {
+                    false
+                } else if (local != null) {
                     local.startTicks > 0
                 } else {
                     (returning && waiting) || recoveryActive || position > 0 || pendingPosition > 0 || playQueued == "from-start"
@@ -724,7 +738,7 @@ internal fun rememberTouchDetailPresentation(
             when {
                 offlineDetailPlaySource(true, server, explicitStream = true) == OfflineDetailSource.unavailable ->
                     commandNotice = DETAIL_STREAM_NEEDS_SERVER
-                canFreshPlay -> playItem?.let { onPlay(it, it.userData.playbackPositionTicks > 0) }
+                canFreshPlay -> playItem?.let { onPlay(it, !playsAgain && it.userData.playbackPositionTicks > 0) }
                 else -> commandNotice = DETAIL_STREAM_NOT_LOADED
             }
         }

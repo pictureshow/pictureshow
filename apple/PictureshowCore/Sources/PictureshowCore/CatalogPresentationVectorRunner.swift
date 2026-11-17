@@ -53,7 +53,7 @@ public enum CatalogPresentationVectorRunner {
         case ("application", "media-badges"):
             return CatalogRules.mediaBadges(try optional(MediaBadgeSource.self, i["source"]))
         case ("application", "detail-play-label"):
-            return CatalogRules.detailPlayLabel(item: try decode(MediaItem.self, i["item"]), playItem: try optional(MediaItem.self, i["playItem"]))
+            return CatalogRules.detailPlayLabel(item: try decode(MediaItem.self, i["item"]), playItem: try optional(MediaItem.self, i["playItem"]), finished: (i["finished"] as? Bool) ?? false)
         default:
             throw NSError(domain: "Unknown catalog presentation operation \(suite)/\(op)", code: 1)
         }
