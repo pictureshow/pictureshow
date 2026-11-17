@@ -744,12 +744,28 @@ struct SeerrConnectView: View {
                 form
             }
         }
-        .navigationTitle(app.seerr.config(app.account?.key) == nil ? "Connect to Seerr" : "Requests (Seerr)")
         #if os(iOS)
+        .navigationTitle(pageTitle)
         .scrollContentBackground(.hidden)
         .pageBackground()
         #endif
         .onAppear { if username.isEmpty { username = app.account?.username ?? "" } }
+    }
+
+    private var pageTitle: String { app.seerr.config(app.account?.key) == nil ? "Connect to Seerr" : "Requests (Seerr)" }
+
+    /// A section header that, on tvOS, also carries the page title: tvOS pins a navigation title while a Form scrolls
+    /// under it, so (as in Settings, Libraries and Requests) the TV title is content and scrolls away with the page.
+    @ViewBuilder private func header(_ text: String) -> some View {
+        #if os(tvOS)
+        VStack(alignment: .leading, spacing: 28) {
+            Text(pageTitle).font(.title2.weight(.bold)).foregroundStyle(.primary).textCase(nil)
+                .accessibilityAddTraits(.isHeader)
+            Text(text)
+        }
+        #else
+        Text(text)
+        #endif
     }
 
     @ViewBuilder private var form: some View {
@@ -761,14 +777,21 @@ struct SeerrConnectView: View {
                 .textInputAutocapitalization(.never)
                 #endif
                 .autocorrectionDisabled()
-        } header: { Text("Address") } footer: {
+        } header: { header("Address") } footer: {
             Text("Jellyseerr and Overseerr let you ask for movies and series your server doesn't have yet. Enter the address you use to open it in a browser.")
         }
         Section {
+            #if os(tvOS)
+            // A Form picker on tvOS pushes a separate choice page; on Apple TV that page came up blank, so the TV
+            // offers both ways in place, as two choice rows like Android TV's.
+            methodRow("Sign in with Jellyfin", key: false)
+            methodRow("Use an API key", key: true)
+            #else
             Picker("Sign in with", selection: $useKey) {
                 Text("Sign in with Jellyfin").tag(false)
                 Text("Use an API key").tag(true)
             }
+            #endif
             if useKey {
                 SecureField("API key", text: $apiKey)
             } else {
@@ -800,6 +823,20 @@ struct SeerrConnectView: View {
         }
     }
 
+    #if os(tvOS)
+    private func methodRow(_ title: String, key: Bool) -> some View {
+        Button { useKey = key } label: {
+            HStack {
+                Image(systemName: useKey == key ? "largecircle.fill.circle" : "circle").accessibilityHidden(true)
+                Text(title)
+                Spacer()
+            }
+        }
+        .disabled(model.connecting)
+        .accessibilityAddTraits(useKey == key ? .isSelected : [])
+    }
+    #endif
+
     @ViewBuilder private func connected(_ config: SeerrConfig) -> some View {
         Section {
             LabeledContent("Address", value: config.url)
@@ -809,6 +846,10 @@ struct SeerrConnectView: View {
                 Text("This Seerr account can't make requests. Ask whoever runs Seerr to give it the Request permission.")
                     .font(.footnote).foregroundStyle(Theme.warning)
             }
+        } header: {
+            #if os(tvOS)
+            header("Connection")
+            #endif
         } footer: {
             Text("Requests now appears beside Home. Search also shows what Seerr can add.")
         }

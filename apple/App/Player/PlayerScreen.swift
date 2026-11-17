@@ -142,6 +142,9 @@ struct NextEpisodeCard: View {
     @EnvironmentObject private var app: AppModel
     @ObservedObject var controller: PlaybackController
     let next: MediaItem
+    /// Apple TV leaves these out: the system player keeps the remote's focus, so the card's own buttons could never be
+    /// reached there. The same choices are the player's contextual actions, shown just below the card.
+    var showsButtons = true
     var body: some View {
         HStack(spacing: 16) {
             ArtworkImage(url: app.client?.artworkURL(account: controller.account, item: next, kind: .wide, width: 480), placeholderSymbol: "tv")
@@ -157,7 +160,7 @@ struct NextEpisodeCard: View {
                     Text(next.name).font(.headline).foregroundStyle(.white).lineLimit(2)
                     Text(Format.episode(next)).font(.caption).foregroundStyle(.white.opacity(0.75))
                 }
-                HStack(spacing: 12) {
+                if showsButtons { HStack(spacing: 12) {
                     if controller.askingStillWatching {
                         Button { controller.keepWatching() } label: { Label("Keep watching", systemImage: "play.fill") }
                             .primaryAction()
@@ -173,7 +176,7 @@ struct NextEpisodeCard: View {
                 }
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
-                .padding(.top, 4)
+                .padding(.top, 4) }
             }
         }
         .padding(16)
@@ -207,7 +210,9 @@ struct PlayerContent: View {
             .padding(60)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
             if let next = controller.nextEpisode, let countdown = controller.nextCountdown, countdown != 0 {
-                NextEpisodeCard(controller: controller, next: next).padding(80)
+                // Above the contextual action buttons (bottom right), which carry Play now and Hide on TV.
+                NextEpisodeCard(controller: controller, next: next, showsButtons: false)
+                    .padding(.trailing, 80).padding(.bottom, 170)
             }
         }
         .ignoresSafeArea()
@@ -247,10 +252,14 @@ struct SystemPlayer: UIViewControllerRepresentable {
             actions.append(UIAction(title: segment.type == .outro ? "Skip Credits" : segment.type == .recap ? "Skip Recap" : "Skip Intro", image: UIImage(systemName: "forward.end")) { [weak controller] _ in controller?.skipSegment() })
         }
         if controller.nextEpisode != nil, controller.nextCountdown != nil {
+            // PLAY-17/30: the card's choices for the remote. The system focuses the last contextual action (seen with the
+            // card waiting at the end), so the one a plain click should do goes last, at the right edge.
             if controller.askingStillWatching {
+                actions.append(UIAction(title: "Stop") { [weak controller] _ in controller?.close() })
                 actions.append(UIAction(title: "Keep Watching", image: UIImage(systemName: "play.fill")) { [weak controller] _ in controller?.keepWatching() })
             } else {
-                actions.append(UIAction(title: "Next Episode", image: UIImage(systemName: "forward.frame")) { [weak controller] _ in controller?.playNext() })
+                actions.append(UIAction(title: "Hide") { [weak controller] _ in controller?.dismissNextCard() })
+                actions.append(UIAction(title: "Play Now", image: UIImage(systemName: "play.fill")) { [weak controller] _ in controller?.playNext() })
             }
         }
         // LIVE-05: the system bar shows Live itself; Go Live returns from a pause or rewind, and a stream that can't
@@ -318,6 +327,15 @@ struct SystemPlayer: UIViewControllerRepresentable {
 #else
 /// iPhone and iPad: custom controls over the video so the server's audio and subtitle tracks, the
 /// conversion notice and the skip prompts sit where a thumb reaches them.
+/// iPad windows (iPadOS 26) put their close/minimise controls in the top-leading corner, over the edge-to-edge player;
+/// OBSERVED: the player's Close button sat under them in a resized window. Full screen reports no inset.
+enum WindowControls {
+    static func leadingClearance(_ geometry: GeometryProxy) -> CGFloat {
+        if #available(iOS 26.0, *) { return max(0, geometry.containerCornerInsets.topLeading.width - 20) }
+        return 0
+    }
+}
+
 struct PlayerContent: View {
     @ObservedObject var controller: PlaybackController
     @State private var controlsVisible = true
@@ -467,6 +485,7 @@ struct PlayerContent: View {
     }
 
     private var controls: some View {
+        GeometryReader { geometry in
         ZStack {
             LinearGradient(colors: [.black.opacity(0.7), .clear, .clear, .black.opacity(0.8)], startPoint: .top, endPoint: .bottom)
                 .ignoresSafeArea()
@@ -474,6 +493,7 @@ struct PlayerContent: View {
             VStack(spacing: 0) {
                 topBar
                     .padding(.top, topClearance)
+                    .padding(.leading, WindowControls.leadingClearance(geometry))
                 Spacer()
                 centerButtons
                 Spacer()
@@ -491,6 +511,7 @@ struct PlayerContent: View {
             .padding(.horizontal, 20)
             .padding(.vertical, 12)
             .foregroundStyle(.white)
+        }
         }
     }
 
