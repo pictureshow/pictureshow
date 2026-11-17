@@ -2015,6 +2015,79 @@ class SyncPlayHostTest {
         }
     }
 
+    /** sync-create-queue: Create with an item queues it to the new group once GroupJoined confirms membership,
+     * including after leaving an earlier group and when the server sends no PlayQueue for the new Idle group. */
+    @Test fun createWithAnItemQueuesItOnceTheNewGroupIsJoined() = runTest {
+        val roots = generateSequence(java.io.File(requireNotNull(System.getProperty("user.dir")))) { it.parentFile }
+        val vectors = roots.map { java.io.File(it, "spec/vectors/sync-create-queue.json") }.first { it.isFile }
+        val cases = Json.parseToJsonElement(vectors.readText()).jsonObject.getValue("cases").jsonArray
+        assertTrue(cases.isNotEmpty())
+        val membershipOps = setOf("New", "Join", "Leave", "SetNewQueue")
+        for (element in cases) {
+            val case = element.jsonObject
+            val id = case.getValue("id").jsonPrimitive.content
+            val rig = Rig(this)
+            rig.refresh()
+            when (case.getValue("prior").jsonPrimitive.content) {
+                "none" -> Unit
+                "joined-then-left" -> {
+                    rig.join()
+                    rig.snapshot()
+                    rig.host.leave()
+                    runCurrent()
+                }
+                else -> error("$id: unknown prior")
+            }
+            val item = case["item"]?.takeIf { it !is JsonNull }?.jsonObject
+            if (item == null) {
+                rig.host.clearRenderer(rig.renderer)
+            } else {
+                rig.renderer.value = rig.renderer.value.copy(
+                    itemId = item.getValue("itemId").jsonPrimitive.content,
+                    positionTicks = item.getValue("startTicks").jsonPrimitive.content.toLong(),
+                    playlistItemId = null
+                )
+            }
+            rig.sent.clear()
+            rig.host.create("Evening")
+            runCurrent()
+            for (event in case.getValue("events").jsonArray.map { it.jsonPrimitive.content }) {
+                when (event) {
+                    "joined-idle" -> rig.joined("Idle")
+                    "joined-waiting" -> rig.joined("Waiting")
+                    "stop" -> rig.host.receive(rig.command("Stop"))
+                    "queue-empty" -> rig.host.receive(
+                        rig.update(
+                            "PlayQueue",
+                            buildJsonObject {
+                                put("Reason", "NewPlaylist")
+                                put("LastUpdate", syncUtcTimestamp(rig.wall()))
+                                put("Playlist", JsonArray(emptyList()))
+                                put("PlayingItemIndex", -1)
+                                put("StartPositionTicks", 0)
+                                put("IsPlaying", false)
+                                put("RepeatMode", "RepeatNone")
+                                put("ShuffleMode", "Sorted")
+                            }
+                        )
+                    )
+                    "viewer-leave" -> rig.host.leave()
+                    else -> error("$id: unknown event $event")
+                }
+                runCurrent()
+            }
+            val expected = case.getValue("posted").jsonArray.map { it.jsonPrimitive.content }
+            assertEquals(expected, rig.operations().filter { it in membershipOps }, id)
+            if (item != null && "SetNewQueue" in expected) {
+                val body = assertNotNull(rig.sent.single { it.second.operation == "SetNewQueue" }.second.body, id)
+                assertEquals(JsonArray(listOf(JsonPrimitive(item.getValue("itemId").jsonPrimitive.content))), body["PlayingQueue"], id)
+                assertEquals(item.getValue("startTicks").jsonPrimitive.content.toLong(), body.getValue("StartPositionTicks").jsonPrimitive.long, id)
+            }
+            rig.host.leave()
+            runCurrent()
+        }
+    }
+
     @Test fun joinWaitsForTheRotatedMembershipSocketBeforePosting() = runTest {
         val rig = Rig(this)
         rig.refresh()

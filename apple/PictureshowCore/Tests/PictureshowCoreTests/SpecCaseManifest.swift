@@ -2501,6 +2501,12 @@ enum SpecCaseManifest {
         confirmed-server-left-clears-membership|sync-membership-registration/case
         definite-denial-clears-unsent-cancellation|sync-membership-registration/case
         uncertain-post-retains-server-cleanup|sync-membership-registration/case
+        create-item-fresh-idle-group-queues-on-joined|sync-create-queue/case
+        create-item-after-leaving-a-group-queues-on-joined|sync-create-queue/case
+        create-item-waiting-group-queues-once|sync-create-queue/case
+        create-item-waits-for-joined|sync-create-queue/case
+        create-item-leave-before-joined-drops-item|sync-create-queue/case
+        create-without-item-queues-nothing|sync-create-queue/case
         sync-application.deferred-server-7000|sync-application/deferred-seek
         sync-application.deferred-server-0|sync-application/deferred-seek
         sync-application.deferred-viewer-7000|sync-application/deferred-seek

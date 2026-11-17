@@ -305,7 +305,7 @@ public final class SyncSessionEngine {
     public func create(name: String) { begin(.create(name: name), groupId: nil) }
     public func join(groupId: String) { begin(.join(groupId: groupId), groupId: groupId) }
 
-    /// After creating from a viewing, its title becomes the new group's queue once.
+    /// After Create with a title, that title becomes the new group's queue once, when GroupJoined confirms membership.
     public func stageQueue(itemId: String, startTicks: Int64) { stagedQueue = (itemId, max(0, startTicks)) }
 
     private func begin(_ next: SyncMembershipIntent, groupId: String?) {
@@ -314,6 +314,8 @@ public final class SyncSessionEngine {
         cancelTimeline()
         membership = membership.beginningJoin(groupId: groupId)
         intent = next
+        // A title staged for an earlier Create that never reached GroupJoined belongs to no later group.
+        stagedQueue = nil
         following = true
         departure = nil
         lastNotice = nil
@@ -488,7 +490,10 @@ public final class SyncSessionEngine {
         }
         if let command = next.command { accept(command, phaseBefore: before.phase) }
         else if pending != nil && next.phase != before.phase { schedule() }
-        if let staged = stagedQueue, server == .confirmed, next.hasSnapshot, next.queue?.entries.isEmpty == true {
+        // Queue the staged title once the server confirms the new membership. Jellyfin sends a freshly created Idle group
+        // only GroupJoined and a Stop, never a PlayQueue, so waiting for an empty queue snapshot dropped the title
+        // (OBSERVED on Jellyfin 12, 2026-11-17; vector sync-create-queue).
+        if case .joined = event, let staged = stagedQueue, server == .confirmed {
             stagedQueue = nil
             send(try? SyncRequest.newQueue(items: [staged.itemId], startPositionTicks: staged.startTicks))
         }

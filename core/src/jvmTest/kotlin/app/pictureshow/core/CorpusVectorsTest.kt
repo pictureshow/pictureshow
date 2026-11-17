@@ -114,6 +114,8 @@ class CorpusVectorsTest {
                     "sync-speed-intent-origin",
                     "sync-drift",
                     "sync-membership-registration",
+                    // SyncPlayHostTest executes create-with-item queueing through the Android host.
+                    "sync-create-queue",
                     "sync-queue",
                     "sync-completion",
                     "sync-completion-reporting",

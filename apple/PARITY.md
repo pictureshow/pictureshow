@@ -441,7 +441,8 @@ Reference: [syncplay](../spec/features/syncplay.md). The shared reducers already
 `SyncAdapterVectorRunner` (2026-11-16) adds 25 cases through the same engine and the app's presentation policies:
 `sync-completion-reporting` (6/6), `sync-route-consent` (10/10), `sync-group-social-summary-and-picker-role` (7/15:
 directional transport and the chooser's role) and `sync-tv-player-coherence` (2/6: the count text through roster
-changes), for 431 cases in 19 suites.
+changes), for 431 cases in 19 suites. `sync-create-queue` (6/6, 2026-11-17) runs through the host engine: Create with a
+title queues it on GroupJoined, also after leaving an earlier group; 437 cases in 20 suites.
 `SyncSessionEngineTests` and `SyncPlayAppTests` (app socket, player routing, stay, sign-out, stale generation) cover the adapters.
 
 | ID | Status | Production path and verification source | Remaining acceptance limits |
