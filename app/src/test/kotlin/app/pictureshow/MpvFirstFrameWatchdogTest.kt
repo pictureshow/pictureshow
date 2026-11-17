@@ -34,6 +34,9 @@ class MpvFirstFrameWatchdogTest {
 
     /** What mpv's decoder reports; 0 when no video decodes and mpv shows only its window. */
     @Volatile private var decodedWidth = 1920L
+
+    /** mpv's codec name for the file's one audio track, selected; null for a file without audio. */
+    @Volatile private var audioCodec: String? = "eac3"
     private val surfaces = mutableListOf<Surface>()
     private val players = mutableListOf<MpvPlayer>()
 
@@ -46,14 +49,20 @@ class MpvFirstFrameWatchdogTest {
         override fun waitEvent(handle: Long, timeoutSeconds: Double): MpvEvent? = events.poll(50, TimeUnit.MILLISECONDS)
         override fun destroy(handle: Long) = Unit
         override fun command(handle: Long, args: Array<String>) = 0
-        override fun getPropertyString(handle: Long, name: String): String? = null
+        override fun getPropertyString(handle: Long, name: String): String? = when (name) {
+            "track-list/0/type" -> "audio"
+            "track-list/0/codec" -> audioCodec
+            else -> null
+        }
         override fun getPropertyLong(handle: Long, name: String) = when (name) {
             "dwidth" -> 1920L
             "dheight" -> 1080L
             "video-params/w" -> decodedWidth
+            "track-list/count" -> if (audioCodec == null) 0L else 1L
+            "track-list/0/id" -> 1L
             else -> 0L
         }
-        override fun getPropertyFlag(handle: Long, name: String) = 0
+        override fun getPropertyFlag(handle: Long, name: String) = if (name == "track-list/0/selected") 1 else 0
         override fun setPropertyString(handle: Long, name: String, value: String) = 0
         override fun setPropertyDouble(handle: Long, name: String, value: Double) = 0
         override fun setPropertyLong(handle: Long, name: String, value: Long) = 0
@@ -116,6 +125,22 @@ class MpvFirstFrameWatchdogTest {
         assertEquals(listOf(FirstFrameAction.WithoutPassthrough), actions)
         waitMs(30_000)
         assertEquals(listOf(FirstFrameAction.WithoutPassthrough), actions, "the watchdog answers once per open")
+    }
+
+    @Test fun aTrackThatIsNotPassedThroughSkipsTheRetry() {
+        audioCodec = "aac"
+        val actions = play(listOf("ac3", "eac3"))
+        send(event(MpvEvent.START_FILE), event(MpvEvent.FILE_LOADED), cached(5.0))
+        waitMs(9_000)
+        assertEquals(listOf(FirstFrameAction.Platform), actions, "decoding AAC again can't bring a picture")
+    }
+
+    @Test fun aTrackOutsideThePassthroughListSkipsTheRetry() {
+        audioCodec = "dts"
+        val actions = play(listOf("ac3", "eac3"))
+        send(event(MpvEvent.START_FILE), event(MpvEvent.FILE_LOADED), cached(5.0))
+        waitMs(9_000)
+        assertEquals(listOf(FirstFrameAction.Platform), actions)
     }
 
     @Test fun noPictureWithDecodedAudioGivesWayToTheBuiltInPlayer() {

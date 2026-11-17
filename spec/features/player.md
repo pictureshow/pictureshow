@@ -100,12 +100,12 @@ reports drives the same display refresh-rate switch as Media3's.
 an error (OBSERVED on the household projector: its audio passthrough couldn't start, so mpv waited on audio for good and
 held every decoded frame). Once the file has opened, a viewing that has had 2 s of media buffered for 8 s, or that has
 been open 20 s whatever the buffer, without a first frame is stalled; time with the app in the background doesn't count.
-A stalled mpv viewing that passes audio through reopens once on mpv at its position with the audio decoded; a stalled
-viewing with decoded audio reopens at its position on the built-in player, which plays the rest of that viewing, and the
+A stalled mpv viewing whose selected audio track is passed through reopens once on mpv at its position with the audio
+decoded; a stalled viewing whose selected track is decoded (AAC, or a format not passed through) reopens at its position on the built-in player, which plays the rest of that viewing, and the
 player shows "MPV couldn't decode this video on this device; playing with the built-in player" for 8 s once it has a
 picture (never focusable; the player's engine choice then offers MPV again). The next viewing starts on mpv as usual,
-except that a passthrough format that stalled is decoded for the rest of the app's run (on the projector AC-3 passes
-through, E-AC-3 stalls).
+except that a passthrough format that stalled is decoded from then on: the device remembers it across app runs and
+forgets it when the app's version changes (on the projector AC-3 passes through, E-AC-3 stalls).
 `playback-engine` vectors (operation `first-frame`, and `mpvFailed` on `engine`) freeze the rule.
 
 

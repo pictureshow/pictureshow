@@ -6,6 +6,7 @@
 package app.pictureshow
 
 import android.content.Context
+import android.content.SharedPreferences
 import android.os.SystemClock
 import android.util.Log
 import androidx.media3.common.AudioAttributes
@@ -692,8 +693,9 @@ internal class Media3PlaybackOutput(
             proxy.local(delivery)?.let { stream to it }
         }
         // PLAY-61: after passthrough showed no picture, the rest of this viewing decodes its audio, and later viewings
-        // decode the format that stalled.
+        // decode the format that stalled, in this run and later ones.
         val spdif = if (passthroughEnabled && decodedAudioFor != decision.itemId) {
+            MpvPassthroughStalls.load(context)
             mpvPassthrough(context, disabledPassthrough) - MpvPassthroughStalls.formats
         } else {
             emptyList()
@@ -988,46 +990,53 @@ internal class PlaybackEndSignal(private val currentPlayer: () -> Player?, priva
 }
 
 /**
- * PLAY-61: passthrough formats that left mpv without a picture in this app run, in mpv's `audio-spdif` names. On the
+ * PLAY-61: passthrough formats that left mpv without a picture on this device, in mpv's `audio-spdif` names. On the
  * household projector AC-3 passes through but E-AC-3 (a 192 kHz IEC 61937 stream) never starts (OBSERVED), so only the
- * format that stalled is decoded from then on. Kept for the process: the receiver can change between runs.
+ * format that stalled is decoded from then on. Kept across app runs, so each new run doesn't wait out the watchdog
+ * again, and forgotten when the app's version changes (a new build may carry a fixed mpv).
  */
 internal object MpvPassthroughStalls {
+    private const val PREFS = "mpv-passthrough-stalls"
+    private const val KEY_VERSION = "version"
+    private const val KEY_FORMATS = "formats"
+
     @Volatile var formats: Set<String> = emptySet()
         private set
 
-    /** [codec] is mpv's name for the audio track that stalled; DTS covers DTS-HD, which mpv sends as the same codec. */
-    fun stalled(codec: String?) {
-        val added = when (codec?.lowercase()) {
-            "ac3" -> setOf("ac3")
-            "eac3" -> setOf("eac3")
-            "dts" -> setOf("dts", "dts-hd")
-            "truehd" -> setOf("truehd")
-            else -> emptySet()
+    @Volatile private var stored: SharedPreferences? = null
+
+    /** Reads the stalls this device remembered, once per run; [version] identifies the app build. */
+    @Synchronized
+    fun load(context: Context, version: String = "${BuildConfig.VERSION_NAME}+${BuildConfig.VERSION_CODE}") {
+        if (stored != null) return
+        val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        if (prefs.getString(KEY_VERSION, null) == version) {
+            formats = formats + prefs.getStringSet(KEY_FORMATS, emptySet()).orEmpty()
         }
-        formats = formats + added
+        prefs.edit().putString(KEY_VERSION, version).putStringSet(KEY_FORMATS, formats).apply()
+        stored = prefs
     }
 
+    /** mpv's `audio-spdif` names that carry an audio track of [codec]; DTS covers DTS-HD, which mpv reports as dts. */
+    fun spdifNames(codec: String?): Set<String> = when (codec?.lowercase()) {
+        "ac3" -> setOf("ac3")
+        "eac3" -> setOf("eac3")
+        "dts" -> setOf("dts", "dts-hd")
+        "truehd" -> setOf("truehd")
+        else -> emptySet()
+    }
+
+    /** [codec] is mpv's name for the audio track that stalled. */
+    @Synchronized
+    fun stalled(codec: String?) {
+        formats = formats + spdifNames(codec)
+        stored?.edit()?.putStringSet(KEY_FORMATS, formats)?.apply()
+    }
+
+    /** Forgets this run's state (tests); what the device stored stays. */
+    @Synchronized
     fun clear() {
         formats = emptySet()
+        stored = null
     }
-}
-
-/** What mpv reports about its own decoding, for Playback info (PLAY-26/60). */
-internal data class MpvReport(val hwdec: String?, val videoCodec: String?, val audioCodec: String?, val gamma: String?)
-
-/** Encoded formats mpv may send to the receiver: what the route accepts, minus what the viewer turned off (SET-16). */
-@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
-internal fun mpvPassthrough(context: Context, disabled: Set<app.pictureshow.core.playback.PassthroughEncoding>): List<String> {
-    @Suppress("DEPRECATION")
-    val capabilities = androidx.media3.exoplayer.audio.AudioCapabilities.getCapabilities(context)
-    val pairs = listOf(
-        app.pictureshow.core.playback.PassthroughEncoding.AC3 to (C.ENCODING_AC3 to "ac3"),
-        app.pictureshow.core.playback.PassthroughEncoding.EAC3 to (C.ENCODING_E_AC3 to "eac3"),
-        app.pictureshow.core.playback.PassthroughEncoding.DTS to (C.ENCODING_DTS to "dts"),
-        app.pictureshow.core.playback.PassthroughEncoding.DTS_HD to (C.ENCODING_DTS_HD to "dts-hd"),
-        app.pictureshow.core.playback.PassthroughEncoding.TRUEHD to (C.ENCODING_DOLBY_TRUEHD to "truehd")
-    )
-    return pairs.filter { (encoding, android) -> encoding !in disabled && capabilities.supportsEncoding(android.first) }
-        .map { it.second.second }
 }

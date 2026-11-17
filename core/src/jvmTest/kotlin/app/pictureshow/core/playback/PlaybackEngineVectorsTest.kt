@@ -35,7 +35,11 @@ class PlaybackEngineVectorsTest {
                     loadedForMs = input.text("loadedForMs").toLong(),
                     passthrough = input.flag("passthrough")
                 )
-                assertEquals(case.getValue("expected"), JsonObject(mapOf("action" to JsonPrimitive(action.name))), case.getValue("id").jsonPrimitive.content)
+                assertEquals(
+                    case.getValue("expected"),
+                    JsonObject(mapOf("action" to JsonPrimitive(action.name))),
+                    case.getValue("id").jsonPrimitive.content,
+                )
                 continue
             }
             assertEquals("engine", case.getValue("operation").jsonPrimitive.content)

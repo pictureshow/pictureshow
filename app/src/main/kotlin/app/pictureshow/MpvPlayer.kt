@@ -423,7 +423,8 @@ internal class MpvPlayer(
                 firstFrame = firstFrame,
                 dataReadyForMs = dataReadyAt?.let { time - it },
                 loadedForMs = loadedAt?.let { time - it } ?: 0,
-                passthrough = source.spdif.isNotEmpty()
+                // Only a selected track that is passed through can be what stalls; AAC or a decoded track can't.
+                passthrough = MpvPassthroughStalls.spdifNames(audioCodec).any { it in source.spdif }
             )
             if (action == FirstFrameAction.Wait) {
                 main.postDelayed(this, WATCHDOG_TICK_MS)
@@ -432,7 +433,7 @@ internal class MpvPlayer(
             watchdogDone = true
             Log.w(
                 TAG,
-                "first-frame watchdog action=$action spdif=${source.spdif.joinToString(",")} hwdec=$hwdec codec=$videoCodec " +
+                "first-frame watchdog action=$action spdif=${source.spdif.joinToString(",")} audio=$audioCodec hwdec=$hwdec codec=$videoCodec " +
                     "loadedForMs=${loadedAt?.let { time - it }} dataReadyForMs=${dataReadyAt?.let { time - it }} cacheMs=$cacheMs"
             )
             onFirstFrameAction?.invoke(action)
