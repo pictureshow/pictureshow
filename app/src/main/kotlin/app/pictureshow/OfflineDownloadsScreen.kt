@@ -82,6 +82,18 @@ internal fun offlineActionLabel(action: OfflineAction, tv: Boolean = false): Str
     // A TV's only metered link is something like a hotspot; it has no mobile data to speak of.
     OfflineAction.AllowCellular -> if (tv) "Use this connection" else "Use mobile data"
     OfflineAction.Delete -> "Delete"
+    OfflineAction.Tracks -> "Show tracks"
+}
+
+/** Show or hide an album's tracks; every other action has one name. */
+internal fun offlineRowActionLabel(row: OfflineRow, action: OfflineAction, tv: Boolean = false): String =
+    if (action == OfflineAction.Tracks && row.open) "Hide tracks" else offlineActionLabel(action, tv)
+
+/** An album or playlist row's Delete removes its tracks, except any another album or playlist still holds. */
+internal fun offlineCollectionDeleteQuestion(row: OfflineRow): String = if (row.collectionReady) {
+    "Delete ${row.title} from this device? You can still stream it from your server."
+} else {
+    "Stop downloading ${row.title} and delete what's saved so far?"
 }
 
 internal fun offlineConflictText(title: String): String =
@@ -126,7 +138,8 @@ internal fun OfflineDownloadsTvScreen(
     // Where the remote goes after a press that takes the focused control away: a delete, or a notice's OK.
     var moveTo by remember { mutableStateOf<OfflineFirstFocus?>(null) }
     var afterMove by remember { mutableStateOf<(() -> Unit)?>(null) }
-    val cameBackTo = returnToRow?.takeIf { id -> sections.ready.any { it.entry.id == id } }
+    // A track played from under its album comes back to its own row when that's showing, else to the album's.
+    val cameBackTo = returnToRow?.let { id -> sections.ready.firstOrNull { it.entry.id == id }?.key }
     val moved = moveTo?.takeIf { it !is OfflineFirstFocus.Row || offlineRowPosition(sections, it.entryId) != null }
     val target = when {
         passwordNeeded -> OfflineFirstFocus.Password
@@ -209,18 +222,18 @@ internal fun OfflineDownloadsTvScreen(
             }
         }
         if (sections.isEmpty && !view.library.recoverable) {
-            item(key = "empty") { Text("Nothing downloaded yet. Open a movie or an episode and choose Download.", color = OfflineMuted) }
+            item(key = "empty") { Text("Nothing downloaded yet. Open a movie, an episode or an album and choose Download.", color = OfflineMuted) }
         }
         sections.ordered.forEach { (title, rows) ->
             item(key = "section:$title") {
                 Text(title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() }.padding(top = 10.dp))
             }
-            items(rows, key = { it.entry.id }) { row ->
+            items(rows, key = { it.key }) { row ->
                 OfflineRowTv(
                     account,
                     row,
                     controller,
-                    focus = firstRow.takeIf { target is OfflineFirstFocus.Row && target.entryId == row.entry.id },
+                    focus = firstRow.takeIf { target is OfflineFirstFocus.Row && target.entryId == row.key },
                     focusAction = (target as? OfflineFirstFocus.Row)?.action,
                     onStorage = {
                         returnToStorage = true
@@ -228,7 +241,7 @@ internal fun OfflineDownloadsTvScreen(
                     },
                     // The next row takes the remote before this one changes, so focus never falls to the top of the page.
                     onDeleteConfirmed = { delete ->
-                        moveTo = offlineFocusAfterDelete(sections, row.entry.id)
+                        moveTo = offlineFocusAfterDelete(sections, row.key)
                         afterMove = delete
                         refocus++
                     }
@@ -305,13 +318,22 @@ internal fun OfflineRowTv(
     onStorage: () -> Unit = {},
     onDeleteConfirmed: (delete: () -> Unit) -> Unit = { it() }
 ) {
-    val confirming = (controller.confirm as? OfflineConfirm.One)?.row?.entry?.id == row.entry.id
+    val confirming = (controller.confirm as? OfflineConfirm.One)?.row?.key == row.key
     val deleteFocus = remember { FocusRequester() }
     // Set while asking, so every way out of the question but Delete itself (Cancel, Back) returns here.
     var returnToDelete by remember { mutableStateOf(false) }
-    Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.fillMaxWidth().testTag("downloads:row:${row.entry.id}")) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = Modifier.fillMaxWidth().padding(start = if (row.parent != null) 48.dp else 0.dp).testTag("downloads:row:${row.key}")
+    ) {
         val art = offlineArtwork(account.key, row.entry)
-        Box(Modifier.size(width = 80.dp, height = 120.dp).background(OfflineCard)) {
+        // Music art is square; a track under its album needs only a small one.
+        val artSize = when {
+            row.parent != null -> Modifier.size(56.dp)
+            row.collection != null -> Modifier.size(120.dp)
+            else -> Modifier.size(width = 80.dp, height = 120.dp)
+        }
+        Box(artSize.background(OfflineCard)) {
             if (art != null) AsyncImage(art, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -320,7 +342,7 @@ internal fun OfflineRowTv(
             Text(
                 row.status,
                 color = if (row.statusIsError) OfflineErrorTone else Color.Unspecified,
-                modifier = Modifier.testTag("downloads:status:${row.entry.id}")
+                modifier = Modifier.testTag("downloads:status:${row.key}")
             )
             row.fraction?.let { fraction ->
                 Box(Modifier.fillMaxWidth(0.6f).height(6.dp).background(Color(0xFF2B3144))) {
@@ -330,7 +352,7 @@ internal fun OfflineRowTv(
             if (row.indeterminate) {
                 // A still line reads as stuck from a couch. Explicit colours: this is compose-material3, outside the TV theme.
                 androidx.compose.material3.LinearProgressIndicator(
-                    modifier = Modifier.fillMaxWidth(0.6f).height(6.dp).testTag("downloads:working:${row.entry.id}"),
+                    modifier = Modifier.fillMaxWidth(0.6f).height(6.dp).testTag("downloads:working:${row.key}"),
                     color = OfflineSelected,
                     trackColor = Color(0xFF2B3144)
                 )
@@ -340,7 +362,9 @@ internal fun OfflineRowTv(
             if (confirming) {
                 val cancel = remember { FocusRequester() }
                 Text(
-                    if (row.entry.job.phase ==
+                    if (row.collection != null) {
+                        offlineCollectionDeleteQuestion(row)
+                    } else if (row.entry.job.phase ==
                         app.pictureshow.core.offline.OfflinePhase.ready
                     ) {
                         "Delete this download from this device?"
@@ -373,11 +397,11 @@ internal fun OfflineRowTv(
                             modifier = Modifier
                                 .then(if (focus != null && action == focusAction) Modifier.focusRequester(focus) else Modifier)
                                 .then(if (action == OfflineAction.Delete) Modifier.focusRequester(deleteFocus) else Modifier)
-                                .testTag("downloads:${action.name.lowercase()}:${row.entry.id}")
-                        ) { Text(offlineActionLabel(action, tv = true)) }
+                                .testTag("downloads:${action.name.lowercase()}:${row.key}")
+                        ) { Text(offlineRowActionLabel(row, action, tv = true)) }
                     }
                     if (offlineOffersStorage(row.entry.job)) {
-                        Button(onClick = onStorage, modifier = Modifier.testTag("downloads:open-storage:${row.entry.id}")) {
+                        Button(onClick = onStorage, modifier = Modifier.testTag("downloads:open-storage:${row.key}")) {
                             Text("Storage and Wi-Fi")
                         }
                     }

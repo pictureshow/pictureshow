@@ -11,11 +11,13 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.edit
@@ -47,9 +49,17 @@ internal class OfflineDownloadsController(
     val account: Account,
     private val engine: OfflineEngine,
     private val scope: CoroutineScope,
-    private val onPlay: (OfflineEntry) -> Unit
+    private val onPlay: (OfflineEntry) -> Unit,
+    private val openState: MutableState<List<String>> = mutableStateOf(emptyList())
 ) {
     var confirm by mutableStateOf<OfflineConfirm?>(null)
+
+    /** Albums and playlists whose tracks are showing; kept across a trip to the player, so Back returns to the same list. */
+    var open: Set<String>
+        get() = openState.value.toSet()
+        set(value) {
+            openState.value = value.toList()
+        }
 
     fun act(row: OfflineRow, action: OfflineAction) {
         val key = account.key
@@ -57,6 +67,9 @@ internal class OfflineDownloadsController(
         when (action) {
             OfflineAction.Play -> onPlay(row.entry)
             OfflineAction.Delete -> confirm = OfflineConfirm.One(row)
+            OfflineAction.Tracks -> row.collection?.let { collection ->
+                open = if (collection.id in open) open - collection.id else open + collection.id
+            }
             OfflineAction.Pause -> scope.launch { engine.pause(key, id) }
             OfflineAction.Resume -> scope.launch { engine.resume(key, id) }
             OfflineAction.Retry -> scope.launch { engine.retry(key, id) }
@@ -73,7 +86,8 @@ internal class OfflineDownloadsController(
         confirm = null
         scope.launch {
             when (pending) {
-                is OfflineConfirm.One -> engine.delete(account.key, pending.row.entry.id)
+                is OfflineConfirm.One -> pending.row.collection?.let { engine.deleteCollection(account.key, it.id) }
+                    ?: engine.delete(account.key, pending.row.entry.id)
                 OfflineConfirm.All -> engine.deleteMany(account.key, all.map(OfflineEntry::id))
                 null -> Unit
             }
@@ -132,9 +146,10 @@ internal fun rememberOfflineDownloads(account: Account, tv: Boolean = false, onP
             delay(2_000)
         }
     }
-    val controller = remember(account.key) { OfflineDownloadsController(account, engine, scope, onPlay) }
+    val open = rememberSaveable(account.key) { mutableStateOf(listOf<String>()) }
+    val controller = remember(account.key) { OfflineDownloadsController(account, engine, scope, onPlay, open) }
     val library = libraries[account.key] ?: OfflineLibrary()
-    return OfflineDownloadsView(controller, library, offlineSections(library, network, tv), conflicts, network)
+    return OfflineDownloadsView(controller, library, offlineSections(library, network, tv, controller.open), conflicts, network)
 }
 
 /** One preview's choices. Held apart from its screens so TV and touch can't drift on what gets downloaded. */
