@@ -433,7 +433,8 @@ internal class MpvPlayer(
             watchdogDone = true
             Log.w(
                 TAG,
-                "first-frame watchdog action=$action spdif=${source.spdif.joinToString(",")} audio=$audioCodec hwdec=$hwdec codec=$videoCodec " +
+                "first-frame watchdog action=$action spdif=${source.spdif.joinToString(",")} audio=$audioCodec " +
+                    "hwdec=$hwdec codec=$videoCodec " +
                     "loadedForMs=${loadedAt?.let { time - it }} dataReadyForMs=${dataReadyAt?.let { time - it }} cacheMs=$cacheMs"
             )
             onFirstFrameAction?.invoke(action)

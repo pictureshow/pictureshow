@@ -1040,3 +1040,22 @@ internal object MpvPassthroughStalls {
         stored = null
     }
 }
+
+/** What mpv reports about its own decoding, for Playback info (PLAY-26/60). */
+internal data class MpvReport(val hwdec: String?, val videoCodec: String?, val audioCodec: String?, val gamma: String?)
+
+/** Encoded formats mpv may send to the receiver: what the route accepts, minus what the viewer turned off (SET-16). */
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+internal fun mpvPassthrough(context: Context, disabled: Set<app.pictureshow.core.playback.PassthroughEncoding>): List<String> {
+    @Suppress("DEPRECATION")
+    val capabilities = androidx.media3.exoplayer.audio.AudioCapabilities.getCapabilities(context)
+    val pairs = listOf(
+        app.pictureshow.core.playback.PassthroughEncoding.AC3 to (C.ENCODING_AC3 to "ac3"),
+        app.pictureshow.core.playback.PassthroughEncoding.EAC3 to (C.ENCODING_E_AC3 to "eac3"),
+        app.pictureshow.core.playback.PassthroughEncoding.DTS to (C.ENCODING_DTS to "dts"),
+        app.pictureshow.core.playback.PassthroughEncoding.DTS_HD to (C.ENCODING_DTS_HD to "dts-hd"),
+        app.pictureshow.core.playback.PassthroughEncoding.TRUEHD to (C.ENCODING_DOLBY_TRUEHD to "truehd")
+    )
+    return pairs.filter { (encoding, android) -> encoding !in disabled && capabilities.supportsEncoding(android.first) }
+        .map { it.second.second }
+}
