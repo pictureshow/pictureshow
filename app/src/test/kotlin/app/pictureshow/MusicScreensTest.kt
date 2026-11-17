@@ -188,6 +188,19 @@ class MusicScreensTest {
     @Config(qualifiers = "w840dp-h800dp-land-hdpi")
     fun castNowPlayingTablet() = captureCastEntry("tablet-music-play-on")
 
+    /** MUS-10, found on the TV: a skip with no server said nothing there. The reason now shows once and is cleared. */
+    @Test fun tvSaysWhyTheQueueSkippedATrackOnce() {
+        var cleared = 0
+        compose.setContent { TvMusicMessage("Skipped Tone B1: it isn't downloaded, and the server can't be reached.") { cleared++ } }
+        compose.waitForIdle()
+        assertEquals(
+            "Skipped Tone B1: it isn't downloaded, and the server can't be reached.",
+            org.robolectric.shadows.ShadowToast.getTextOfLatestToast()
+        )
+        assertEquals(1, org.robolectric.shadows.ShadowToast.shownToastCount())
+        assertEquals(1, cleared)
+    }
+
     @Test fun tvQueueRowsMoveAndRemoveWithButtons() {
         queueOf("a", "b", "c", "d")
         compose.setContent { TvTheme { TvMusicNow(host) {} } }

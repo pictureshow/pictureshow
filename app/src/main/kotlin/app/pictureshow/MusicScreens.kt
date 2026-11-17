@@ -194,10 +194,25 @@ private fun TvDialog(title: String, onDismiss: () -> Unit, content: @Composable 
     }
 }
 
+/**
+ * Says what the queue did on its own, such as skipping a track it couldn't reach (MUS-10), wherever the viewer is: TV had no
+ * place that showed these, so a skip went by in silence. Shown once, then cleared, as on touch.
+ */
+@Composable
+internal fun TvMusicMessage(message: String?, onShown: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    LaunchedEffect(message) {
+        val text = message ?: return@LaunchedEffect
+        android.widget.Toast.makeText(context, text, android.widget.Toast.LENGTH_LONG).show()
+        onShown()
+    }
+}
+
 @Composable
 internal fun TvMusicPrompts(host: MusicHost, onDestination: (MusicPlay) -> Unit) {
     val ui by host.state.collectAsStateWithLifecycle()
     val first = remember { FocusRequester() }
+    TvMusicMessage(ui.message.takeIf { !ui.canRetrySave }, host::dismissMessage)
     if (ui.canRetrySave) {
         TvDialog("Queue not saved", host::dismissMessage) {
             Text(ui.message ?: "Couldn't save the queue on this device.")
