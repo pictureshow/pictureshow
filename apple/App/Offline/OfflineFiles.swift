@@ -102,18 +102,29 @@ struct OfflineFiles {
         return hasher.finalize().map { String(format: "%02x", $0) }.joined()
     }
 
+    /// The nearest folder of `base` that exists: a volume can't be asked about through a path that isn't there yet, and
+    /// Application Support doesn't exist until the app first writes to it. Asking through it made the first download's
+    /// limit unknown, so every reservation was refused and the download sat at "Waiting for storage space".
+    static var volumeProbe: URL { existingAncestor(of: base) }
+
+    static func existingAncestor(of start: URL) -> URL {
+        var url = start
+        while !FileManager.default.fileExists(atPath: url.path), url.pathComponents.count > 1 { url = url.deletingLastPathComponent() }
+        return url
+    }
+
     static func freeBytes() -> Int64? {
         #if os(tvOS)
-        let values = try? base.deletingLastPathComponent().resourceValues(forKeys: [.volumeAvailableCapacityKey])
+        let values = try? volumeProbe.resourceValues(forKeys: [.volumeAvailableCapacityKey])
         return values?.volumeAvailableCapacity.map(Int64.init)
         #else
-        let values = try? base.deletingLastPathComponent().resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
+        let values = try? volumeProbe.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
         return values?.volumeAvailableCapacityForImportantUsage
         #endif
     }
 
     static func totalBytes() -> Int64? {
-        let values = try? base.deletingLastPathComponent().resourceValues(forKeys: [.volumeTotalCapacityKey])
+        let values = try? volumeProbe.resourceValues(forKeys: [.volumeTotalCapacityKey])
         return values?.volumeTotalCapacity.map(Int64.init)
     }
 }

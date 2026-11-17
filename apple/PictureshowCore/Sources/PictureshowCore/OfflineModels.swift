@@ -445,12 +445,14 @@ public struct OfflineLabels: Codable, Equatable, Sendable {
     public var seasonNumber: Int?
     public var episodeNumber: Int?
     public var album: String?
+    /// A track's album: its saved artwork is the album's, since a track rarely has an image of its own.
+    public var albumId: String?
     public var artist: String?
     public var trackNumber: Int?
     public var discNumber: Int?
     public var year: Int?
     public var overview: String?
-    public init(title: String, seriesName: String? = nil, seriesId: String? = nil, seasonId: String? = nil, seasonNumber: Int? = nil, episodeNumber: Int? = nil, album: String? = nil, artist: String? = nil, trackNumber: Int? = nil, discNumber: Int? = nil, year: Int? = nil, overview: String? = nil) {
+    public init(title: String, seriesName: String? = nil, seriesId: String? = nil, seasonId: String? = nil, seasonNumber: Int? = nil, episodeNumber: Int? = nil, album: String? = nil, albumId: String? = nil, artist: String? = nil, trackNumber: Int? = nil, discNumber: Int? = nil, year: Int? = nil, overview: String? = nil) {
         self.title = title
         self.seriesName = seriesName
         self.seriesId = seriesId
@@ -458,13 +460,14 @@ public struct OfflineLabels: Codable, Equatable, Sendable {
         self.seasonNumber = seasonNumber
         self.episodeNumber = episodeNumber
         self.album = album
+        self.albumId = albumId
         self.artist = artist
         self.trackNumber = trackNumber
         self.discNumber = discNumber
         self.year = year
         self.overview = overview
     }
-    private enum CodingKeys: String, CodingKey { case title, seriesName, seriesId, seasonId, seasonNumber, episodeNumber, album, artist, trackNumber, discNumber, year, overview }
+    private enum CodingKeys: String, CodingKey { case title, seriesName, seriesId, seasonId, seasonNumber, episodeNumber, album, albumId, artist, trackNumber, discNumber, year, overview }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         title = try c.decode(String.self, forKey: .title)
@@ -474,6 +477,7 @@ public struct OfflineLabels: Codable, Equatable, Sendable {
         seasonNumber = c.contains(.seasonNumber) ? try c.decodeIfPresent(Int.self, forKey: .seasonNumber) : nil
         episodeNumber = c.contains(.episodeNumber) ? try c.decodeIfPresent(Int.self, forKey: .episodeNumber) : nil
         album = c.contains(.album) ? try c.decodeIfPresent(String.self, forKey: .album) : nil
+        albumId = c.contains(.albumId) ? try c.decodeIfPresent(String.self, forKey: .albumId) : nil
         artist = c.contains(.artist) ? try c.decodeIfPresent(String.self, forKey: .artist) : nil
         trackNumber = c.contains(.trackNumber) ? try c.decodeIfPresent(Int.self, forKey: .trackNumber) : nil
         discNumber = c.contains(.discNumber) ? try c.decodeIfPresent(Int.self, forKey: .discNumber) : nil
@@ -489,6 +493,7 @@ public struct OfflineLabels: Codable, Equatable, Sendable {
         try c.encode(seasonNumber, forKey: .seasonNumber)
         try c.encode(episodeNumber, forKey: .episodeNumber)
         try c.encode(album, forKey: .album)
+        try c.encode(albumId, forKey: .albumId)
         try c.encode(artist, forKey: .artist)
         try c.encode(trackNumber, forKey: .trackNumber)
         try c.encode(discNumber, forKey: .discNumber)
@@ -578,7 +583,9 @@ public struct OfflineManifest: Codable, Equatable, Sendable {
     public var wifiOnly: Bool
     public var autoCleanWatched: Bool
     public var pendingByteCleanup: [String]
-    public init(schema: Int = OFFLINE_MANIFEST_SCHEMA, entries: [OfflineEntry] = [], nextSequence: Int64 = 1, budget: OfflineBudget = OfflineBudget(), wifiOnly: Bool = true, autoCleanWatched: Bool = false, pendingByteCleanup: [String] = []) {
+    /// Albums and playlists downloaded whole (MUS-10); their tracks are ordinary entries. Older manifests have none.
+    public var collections: [OfflineCollection]
+    public init(schema: Int = OFFLINE_MANIFEST_SCHEMA, entries: [OfflineEntry] = [], nextSequence: Int64 = 1, budget: OfflineBudget = OfflineBudget(), wifiOnly: Bool = true, autoCleanWatched: Bool = false, pendingByteCleanup: [String] = [], collections: [OfflineCollection] = []) {
         self.schema = schema
         self.entries = entries
         self.nextSequence = nextSequence
@@ -586,8 +593,9 @@ public struct OfflineManifest: Codable, Equatable, Sendable {
         self.wifiOnly = wifiOnly
         self.autoCleanWatched = autoCleanWatched
         self.pendingByteCleanup = pendingByteCleanup
+        self.collections = collections
     }
-    private enum CodingKeys: String, CodingKey { case schema, entries, nextSequence, budget, wifiOnly, autoCleanWatched, pendingByteCleanup }
+    private enum CodingKeys: String, CodingKey { case schema, entries, nextSequence, budget, wifiOnly, autoCleanWatched, pendingByteCleanup, collections }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         schema = c.contains(.schema) ? try c.decode(Int.self, forKey: .schema) : OFFLINE_MANIFEST_SCHEMA
@@ -597,6 +605,7 @@ public struct OfflineManifest: Codable, Equatable, Sendable {
         wifiOnly = c.contains(.wifiOnly) ? try c.decode(Bool.self, forKey: .wifiOnly) : true
         autoCleanWatched = c.contains(.autoCleanWatched) ? try c.decode(Bool.self, forKey: .autoCleanWatched) : false
         pendingByteCleanup = c.contains(.pendingByteCleanup) ? try c.decode([String].self, forKey: .pendingByteCleanup) : []
+        collections = c.contains(.collections) ? try c.decode([OfflineCollection].self, forKey: .collections) : []
     }
     public func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
@@ -607,6 +616,7 @@ public struct OfflineManifest: Codable, Equatable, Sendable {
         try c.encode(wifiOnly, forKey: .wifiOnly)
         try c.encode(autoCleanWatched, forKey: .autoCleanWatched)
         try c.encode(pendingByteCleanup, forKey: .pendingByteCleanup)
+        try c.encode(collections, forKey: .collections)
     }
 }
 

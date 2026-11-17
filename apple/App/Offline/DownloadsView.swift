@@ -49,7 +49,10 @@ enum DownloadWords {
 
     static func subtitle(_ entry: OfflineEntry) -> String {
         var parts: [String] = []
-        if entry.kind == .episode {
+        if entry.kind == .audio {
+            if let artist = entry.labels.artist { parts.append(artist) }
+            if let album = entry.labels.album { parts.append(album) }
+        } else if entry.kind == .episode {
             if let series = entry.labels.seriesName { parts.append(series) }
             if let s = entry.labels.seasonNumber, let e = entry.labels.episodeNumber { parts.append("S\(s):E\(e)") }
         } else if let year = entry.labels.year { parts.append(String(year)) }
@@ -71,12 +74,14 @@ private struct DownloadsList: View {
     @ObservedObject var downloads: Downloads
     @State private var asking: OfflineEntry?
     @State private var askingAll = false
+    @State private var askingCollection: DownloadGroup?
+    /// Albums and playlists whose tracks show below their row.
+    @State private var open: Set<String> = []
 
     private var account: Account? { app.account }
     private var entries: [OfflineEntry] { downloads.entries(account) }
-    private var active: [OfflineEntry] { entries.filter { ![.ready, .failed, .missing, .paused].contains($0.job.phase) } }
-    private var ready: [OfflineEntry] { entries.filter { $0.job.phase == .ready } }
-    private var stopped: [OfflineEntry] { entries.filter { [.failed, .missing, .paused].contains($0.job.phase) } }
+    /// MUS-10: one line per album or playlist, a track two of them hold under each; every other download on its own line.
+    private var groups: [DownloadGroup] { downloads.manifest(account).map(DownloadGroup.groups) ?? [] }
 
     var body: some View {
         List {
@@ -98,15 +103,17 @@ private struct DownloadsList: View {
                 Section {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("No downloads yet").font(.headline)
-                        Text("Open a movie or an episode and choose Download to watch it without a connection.")
+                        Text("Open a movie, an episode, an album or a playlist and choose Download to play it without a connection.")
                             .font(.subheadline).foregroundStyle(Theme.muted)
                     }
                     .padding(.vertical, 6)
                 }
             }
-            if !active.isEmpty { Section("Downloading") { ForEach(active, id: \.id) { row($0) } } }
-            if !ready.isEmpty { Section("Ready to watch") { ForEach(ready, id: \.id) { row($0) } } }
-            if !stopped.isEmpty { Section("Stopped") { ForEach(stopped, id: \.id) { row($0) } } }
+            let all = groups
+            ForEach([("Downloading", DownloadGroup.Section.active), ("Ready to play", .ready), ("Stopped", .stopped)], id: \.0) { title, section in
+                let lines = all.filter { $0.section == section }
+                if !lines.isEmpty { Section(title) { ForEach(lines) { group($0) } } }
+            }
             if let account { StorageSection(account: account, downloads: downloads, askingAll: $askingAll) }
         }
         .navigationTitle("Downloads")
@@ -116,6 +123,13 @@ private struct DownloadsList: View {
         } message: {
             Text("It's removed from this device. You can download it again later.")
         }
+        .confirmationDialog(askingCollection.map(collectionQuestion) ?? "", isPresented: Binding(get: { askingCollection != nil }, set: { if !$0 { askingCollection = nil } }), titleVisibility: .visible) {
+            Button("Delete", role: .destructive) {
+                if let account, let id = askingCollection?.collection?.id { downloads.deleteCollection(account, id) }
+                askingCollection = nil
+            }
+            Button("Cancel", role: .cancel) { askingCollection = nil }
+        }
         .confirmationDialog("Delete all downloads?", isPresented: $askingAll, titleVisibility: .visible) {
             Button("Delete all", role: .destructive) { if let account { downloads.deleteAll(account) } }
             Button("Cancel", role: .cancel) {}
@@ -124,11 +138,100 @@ private struct DownloadsList: View {
         }
     }
 
-    @ViewBuilder private func row(_ entry: OfflineEntry) -> some View {
+    /// An album or playlist row's Delete removes its tracks, except any another album or playlist still holds.
+    private func collectionQuestion(_ group: DownloadGroup) -> String {
+        let title = group.collection?.title ?? ""
+        return group.section == .ready ? "Delete \(title) from this device? You can still stream it from your server."
+            : "Stop downloading \(title) and delete what's saved so far?"
+    }
+
+    @ViewBuilder private func group(_ group: DownloadGroup) -> some View {
+        if let collection = group.collection, let progress = group.progress {
+            collectionRow(group, collection, progress)
+            if open.contains(collection.id) {
+                ForEach(group.tracks, id: \.id) { row($0, parent: collection.id).padding(.leading, 24) }
+            }
+        } else {
+            row(group.entry)
+        }
+    }
+
+    @ViewBuilder private func collectionRow(_ group: DownloadGroup, _ collection: OfflineCollection, _ progress: OfflineCollectionProgress) -> some View {
+        let status = account.flatMap { a in MusicDownloadWords.status(downloads.manifest(a), collectionID: collection.id, progress: { downloads.progress(a, $0) }, networkUp: downloads.networkUp) }
+        let isOpen = open.contains(collection.id)
+        VStack(alignment: .leading, spacing: 8) {
+        HStack(alignment: .top, spacing: 12) {
+            LocalArtwork(url: account.flatMap { downloads.savedArt($0.key, group.entry) }, symbol: "square.stack")
+                .frame(width: 72, height: 72).clipShape(RoundedRectangle(cornerRadius: 6))
+            VStack(alignment: .leading, spacing: 4) {
+                Text(collection.title).font(.headline).lineLimit(2)
+                Text([collection.artist, collection.kind == .album ? "Album" : "Playlist"].compactMap { $0 }.joined(separator: " · "))
+                    .font(.caption).foregroundStyle(Theme.muted)
+                Group {
+                    if group.section == .ready {
+                        let count = progress.absent > 0 ? "\(progress.ready) of \(progress.tracks)" : "\(progress.ready)"
+                        Text("\(count) track\(progress.tracks == 1 ? "" : "s") · \(DownloadWords.bytes(progress.readyBytes))")
+                    } else {
+                        Text(status?.text ?? "\(progress.ready) of \(progress.tracks) tracks")
+                    }
+                }
+                .font(.caption).foregroundStyle(progress.phase == "failed" ? Color.red : Theme.muted)
+                if let fraction = status?.fraction, group.section != .ready { ProgressView(value: fraction) }
+            }
+        }
+        // The row's actions get the row's whole width, each on one line (beside the art they broke mid-word on a phone).
+        if let account {
+            ViewThatFits(in: .horizontal) {
+                collectionActions(group, collection, progress, account: account, isOpen: isOpen, style: .titleAndIcon)
+                collectionActions(group, collection, progress, account: account, isOpen: isOpen, style: .iconOnly)
+            }
+        }
+        }
+        .padding(.vertical, 4)
+        .contentShape(Rectangle())
+        .onTapGesture { if progress.ready > 0, let account { play(group.entry, account: account, collection: collection.id) } }
+        .swipeActions { Button("Delete", role: .destructive) { askingCollection = group } }
+    }
+
+    private enum ActionStyle { case titleAndIcon, iconOnly }
+
+    @ViewBuilder private func collectionActions(_ group: DownloadGroup, _ collection: OfflineCollection, _ progress: OfflineCollectionProgress,
+                                                account: Account, isOpen: Bool, style: ActionStyle) -> some View {
+        let content = HStack(spacing: 10) {
+            if progress.ready > 0 {
+                Button { play(group.entry, account: account, collection: collection.id) } label: { Label("Play", systemImage: "play.fill") }
+                    .accessibilityIdentifier("downloads:play:\(collection.id)")
+            }
+            Button { if isOpen { open.remove(collection.id) } else { open.insert(collection.id) } } label: {
+                Label(isOpen ? "Hide tracks" : "Show tracks", systemImage: isOpen ? "chevron.up" : "chevron.down")
+            }
+            Button(role: .destructive) { askingCollection = group } label: { Label("Delete", systemImage: "trash") }
+        }
+        .buttonStyle(.bordered).controlSize(.small).font(.caption).lineLimit(1).fixedSize()
+        switch style {
+        case .titleAndIcon: content.labelStyle(.titleAndIcon)
+        case .iconOnly: content.labelStyle(.iconOnly)
+        }
+    }
+
+    /// Music goes to the music player, in the album or playlist it was downloaded with; a film or episode to the video player.
+    private func play(_ entry: OfflineEntry, account: Account, collection: String? = nil) {
+        if entry.kind == .audio {
+            guard let play = MusicDownloadWords.play(owner: account.key, manifest: downloads.manifest(account), entry: entry, collectionID: collection,
+                                                     art: { downloads.savedArt(account.key, $0) }) else { return }
+            app.music.request(play)
+            // Now playing opens once the queue took it; a "Replace the queue?" question comes first when there is one.
+            Task { await app.music.settle(); if app.music.prompt == nil, app.music.hasQueue { app.music.showingNowPlaying = true } }
+            return
+        }
+        if let media = downloads.local(account.key, entry) { app.playLocal(media) }
+    }
+
+    @ViewBuilder private func row(_ entry: OfflineEntry, parent: String? = nil) -> some View {
         let progress = account.flatMap { downloads.progress($0, entry.id) }
         HStack(alignment: .top, spacing: 12) {
-            LocalArtwork(url: account.flatMap { localArt($0, entry) })
-                .frame(width: 96, height: 54).clipShape(RoundedRectangle(cornerRadius: 6))
+            LocalArtwork(url: account.flatMap { localArt($0, entry) }, symbol: entry.kind == .audio ? "music.note" : "film")
+                .frame(width: entry.kind == .audio ? 54 : 96, height: 54).clipShape(RoundedRectangle(cornerRadius: 6))
             VStack(alignment: .leading, spacing: 4) {
                 Text(entry.labels.title).font(.headline).lineLimit(2)
                 Text(DownloadWords.subtitle(entry)).font(.caption).foregroundStyle(Theme.muted)
@@ -140,21 +243,21 @@ private struct DownloadsList: View {
                 if entry.job.phase == .ready, let summary = entry.notDownloadedSummary {
                     Text(summary).font(.caption2).foregroundStyle(Theme.muted)
                 }
-                actions(entry).padding(.top, 2)
+                actions(entry, parent: parent).padding(.top, 2)
             }
         }
         .padding(.vertical, 4)
         .contentShape(Rectangle())
-        .onTapGesture { if entry.job.phase == .ready, let account, let media = downloads.local(account.key, entry) { app.playLocal(media) } }
+        .onTapGesture { if entry.job.phase == .ready, let account { play(entry, account: account, collection: parent) } }
         .swipeActions { Button("Delete", role: .destructive) { asking = entry } }
     }
 
-    @ViewBuilder private func actions(_ entry: OfflineEntry) -> some View {
+    @ViewBuilder private func actions(_ entry: OfflineEntry, parent: String? = nil) -> some View {
         if let account {
             HStack(spacing: 10) {
                 switch entry.job.phase {
                 case .ready:
-                    Button { if let m = downloads.local(account.key, entry) { app.playLocal(m) } } label: { Label("Play", systemImage: "play.fill") }
+                    Button { play(entry, account: account, collection: parent) } label: { Label("Play", systemImage: "play.fill") }
                 case .paused:
                     Button { downloads.resume(account, entry.id) } label: { Label("Resume", systemImage: "arrow.down.circle") }
                 case .failed where entry.job.failure == "needs-password":
@@ -248,11 +351,12 @@ private struct StorageSection: View {
 
 struct LocalArtwork: View {
     let url: URL?
+    var symbol = "film"
     var body: some View {
         if let url, let image = UIImage(contentsOfFile: url.path) {
             Image(uiImage: image).resizable().scaledToFill()
         } else {
-            Theme.surface.overlay(Image(systemName: "film").foregroundStyle(Theme.muted))
+            Theme.surface.overlay(Image(systemName: symbol).foregroundStyle(Theme.muted))
         }
     }
 }

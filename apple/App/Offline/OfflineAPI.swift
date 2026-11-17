@@ -69,6 +69,49 @@ struct OfflineAPI {
                          canDownload: d["CanDownload"] as? Bool, isInfinite: source["IsInfiniteStream"] as? Bool ?? false)
     }
 
+    /// A track as an album or playlist download needs it (MUS-02): its source's size and download right, and the names and
+    /// album its saved copy keeps for showing it with no server.
+    struct TrackFacts {
+        var item: MediaItem
+        var album: String?
+        var albumId: String?
+        var artist: String?
+        var size: Int64?
+        var canDownload: Bool?
+        /// Whether this device plays the original as it is; one it doesn't is left out and streams as usual.
+        var playsHere: Bool { OriginalSupport.audioExtension(item.mediaSources.first?.container) != nil }
+        var candidate: OfflineCandidate {
+            let source = item.mediaSources.first
+            return OfflineCandidate(itemId: item.id, type: item.type, isInfinite: source?.isInfiniteStream ?? false, sizeBytes: size,
+                                    bitrate: source?.bitrate.map { Int(clamping: $0) }, runtimeTicks: item.runTimeTicks ?? source?.runTimeTicks,
+                                    canDownload: playsHere ? canDownload : false)
+        }
+    }
+
+    /// Every track's facts in one call per hundred, in the order asked; a track the server no longer has is left out.
+    func tracks(_ account: Account, ids: [String]) async throws -> [TrackFacts] {
+        var seen = Set<String>()
+        let unique = ids.filter { seen.insert($0).inserted }
+        var found: [String: TrackFacts] = [:]
+        for start in stride(from: 0, to: unique.count, by: 100) {
+            let batch = Array(unique[start..<min(start + 100, unique.count)])
+            let body = try object(await call(account.server, "Users/\(account.userId)/Items", query: [
+                URLQueryItem(name: "ids", value: batch.joined(separator: ",")),
+                URLQueryItem(name: "fields", value: "MediaSources,MediaStreams,CanDownload"),
+                URLQueryItem(name: "limit", value: String(batch.count)),
+            ], auth: viewer(account)))
+            for raw in body["Items"] as? [[String: Any]] ?? [] {
+                guard let data = try? JSONSerialization.data(withJSONObject: raw), let item = try? JSONDecoder().decode(MediaItem.self, from: data) else { continue }
+                let artists = raw["Artists"] as? [String] ?? []
+                let source = (raw["MediaSources"] as? [[String: Any]])?.first ?? [:]
+                found[item.id] = TrackFacts(item: item, album: raw["Album"] as? String, albumId: raw["AlbumId"] as? String,
+                                            artist: artists.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }.joined(separator: ", ").nilIfEmpty ?? raw["AlbumArtist"] as? String,
+                                            size: (source["Size"] as? NSNumber)?.int64Value, canDownload: raw["CanDownload"] as? Bool)
+            }
+        }
+        return unique.compactMap { found[$0] }
+    }
+
     /// A sync writes only after the login proves it is still the same viewer.
     func sameViewer(_ account: Account) async throws -> Bool {
         let me = try object(await call(account.server, "Users/Me", auth: viewer(account)))
@@ -137,3 +180,5 @@ struct OfflineAPI {
                             auth: authorization(deviceID: deviceID, token: token), method: "DELETE")
     }
 }
+
+private extension String { var nilIfEmpty: String? { isEmpty ? nil : self } }

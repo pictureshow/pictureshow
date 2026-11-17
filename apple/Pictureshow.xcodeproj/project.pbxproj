@@ -15,6 +15,7 @@
 		0F554915C1643BA74ED1E79D /* DownloadsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6DAE332122C47FC6A003F76E /* DownloadsView.swift */; };
 		1087FEF3E07D86A1DB557007 /* Downloads.swift in Sources */ = {isa = PBXBuildFile; fileRef = 904A0CBE1AA604D4D68C7F89 /* Downloads.swift */; };
 		10FF7DE827E875AC9A8B6996 /* PictureshowTransport in Frameworks */ = {isa = PBXBuildFile; productRef = 8DCA7E7F54A8A046DB8216E5 /* PictureshowTransport */; };
+		11617390D9523475784987FA /* MusicDownloads.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B05F5DFC5CED9E3E88EC23C /* MusicDownloads.swift */; };
 		1180B05D0C88046110B56F62 /* LiveTVAppTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 485CC266A8A08214ADA5B9CA /* LiveTVAppTests.swift */; };
 		14686C297522480289D64071 /* AppleHEVCQualificationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E3B0B9F008A6A5D99265A17 /* AppleHEVCQualificationTests.swift */; };
 		14A69ADF3187990585F5A419 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 208DC253481C07A7F4E487B8 /* SettingsView.swift */; };
@@ -98,6 +99,7 @@
 		A32DDB69DCDF46048EC855BD /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F2DDEAB754F5ED386E56980 /* AppModel.swift */; };
 		A3A92BBA87D12CAAC28AD275 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 208DC253481C07A7F4E487B8 /* SettingsView.swift */; };
 		A3D21DE1F721AB5F911B685A /* MusicHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1763A2426241E85369EDFCE /* MusicHost.swift */; };
+		A64B5263FAC595921978227F /* MusicDownloads.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B05F5DFC5CED9E3E88EC23C /* MusicDownloads.swift */; };
 		A755D1E3D1DB82A68857BED0 /* MusicAppTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43B89D9898337A7314EE0529 /* MusicAppTests.swift */; };
 		A76E8DA2E74B1EED2261AE0A /* SyncPlayAppTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0819107160D82B7631BEC43 /* SyncPlayAppTests.swift */; };
 		A89E21AFE9774C03A8774434 /* OfflineFiles.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85BFCB25BD1407FDFF65CF38 /* OfflineFiles.swift */; };
@@ -218,6 +220,7 @@
 		85BFCB25BD1407FDFF65CF38 /* OfflineFiles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfflineFiles.swift; sourceTree = "<group>"; };
 		88F7FE50A883C1081639AA99 /* Pictureshow-tvOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = "Pictureshow-tvOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		898061CF477792FB6546D435 /* LiveProgramDetail.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveProgramDetail.swift; sourceTree = "<group>"; };
+		8B05F5DFC5CED9E3E88EC23C /* MusicDownloads.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MusicDownloads.swift; sourceTree = "<group>"; };
 		904A0CBE1AA604D4D68C7F89 /* Downloads.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Downloads.swift; sourceTree = "<group>"; };
 		90E71B17D96D739F15ADF3BA /* LiveRecordingsAndSchedules.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveRecordingsAndSchedules.swift; sourceTree = "<group>"; };
 		91381893E406B89E3B1DF5C2 /* LivePlayback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LivePlayback.swift; sourceTree = "<group>"; };
@@ -344,6 +347,7 @@
 			children = (
 				904A0CBE1AA604D4D68C7F89 /* Downloads.swift */,
 				6DAE332122C47FC6A003F76E /* DownloadsView.swift */,
+				8B05F5DFC5CED9E3E88EC23C /* MusicDownloads.swift */,
 				63C002EF9DA3AE63E6E6A21A /* OfflineAPI.swift */,
 				85BFCB25BD1407FDFF65CF38 /* OfflineFiles.swift */,
 			);
@@ -667,6 +671,7 @@
 				C6FF3EDD239421C7BD042ACF /* LiveTVModel.swift in Sources */,
 				30E7117B8B9BD270BE012FE8 /* LiveTVParts.swift in Sources */,
 				EA5D3B8D95ABC829E978528F /* LiveTVScreen.swift in Sources */,
+				A64B5263FAC595921978227F /* MusicDownloads.swift in Sources */,
 				FFE3AE97725BE8A76A126C74 /* MusicEngine.swift in Sources */,
 				A3D21DE1F721AB5F911B685A /* MusicHost.swift in Sources */,
 				BF6AB9372CA8C6F1FDFDBC3A /* MusicNowPlaying.swift in Sources */,
@@ -730,6 +735,7 @@
 				4BC8C45EA5EE67433754E79C /* LiveTVModel.swift in Sources */,
 				4917F551E3705E0AF8223469 /* LiveTVParts.swift in Sources */,
 				43172F689262F417001D6971 /* LiveTVScreen.swift in Sources */,
+				11617390D9523475784987FA /* MusicDownloads.swift in Sources */,
 				C669FDAEAF2AABF6BF2EF990 /* MusicEngine.swift in Sources */,
 				61A531BA9010A5A1B41D101A /* MusicHost.swift in Sources */,
 				F9BFA88B0817643FE7C8DE15 /* MusicNowPlaying.swift in Sources */,
