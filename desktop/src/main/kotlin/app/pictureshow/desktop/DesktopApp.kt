@@ -152,10 +152,13 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
 
     val menus = remember { DesktopMenuOwner() }
     val sidebarAccount = state.account
+    val musicUi by controller.music.state.collectAsState()
     val pageKey = state.route.name + when(state.route) {
         DesktopRoute.Library -> ":${state.library?.id}:${state.sortBy}:${state.descending}"
         DesktopRoute.Detail -> ":${state.detail?.id}"
         DesktopRoute.Person -> ":${state.person?.id}"
+        DesktopRoute.MusicLibrary -> ":${state.library?.id}"
+        DesktopRoute.MusicItem -> ":${state.detail?.id}:${state.musicRole}"
         else -> ""
     }
     val savedPages = rememberSaveableStateHolder()
@@ -221,13 +224,14 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                 if (e.type != KeyEventType.KeyDown && typed == null) return@windowFallbackKeys false
                 val press = ShellKeyPress(e.key, e.isCtrlPressed, e.isMetaPressed, e.isAltPressed, e.isShiftPressed, typed)
                 if (typed != null && typed != '?') return@windowFallbackKeys false
-                val action = shellFallbackAction(press, state.route, DesktopUiProbe.focus.values.any { it }, fullscreen, macShortcuts, state.account != null)
+                val action = shellFallbackAction(press, state.route, DesktopUiProbe.focus.values.any { it }, fullscreen, macShortcuts, state.account != null, music = musicUi.visible)
                     ?: return@windowFallbackKeys false
                 when (action) {
                     ShellAction.ExitFullscreen -> onFullscreen()
                     ShellAction.Back -> controller.back()
                     ShellAction.Fullscreen -> onFullscreen()
                     ShellAction.TogglePlay -> controller.playerToggle()
+                    ShellAction.ToggleMusic -> controller.music.toggle()
                     ShellAction.SeekBack -> controller.seek((state.playback?.positionSeconds ?: 0.0) - 10)
                     ShellAction.SeekForward -> controller.seek((state.playback?.positionSeconds ?: 0.0) + 10)
                     ShellAction.Help -> { modalReturnFocus = DesktopUiProbe.focus.entries.firstOrNull { it.value }?.key; help = true }
@@ -246,7 +250,7 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                 Row(Modifier.fillMaxWidth().height(52.dp).background(MaterialTheme.colorScheme.surface).padding(start = if(macChrome) 80.dp else 28.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("PICTURESHOW", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.width(20.dp))
-                    if (state.route in setOf(DesktopRoute.SignIn, DesktopRoute.QuickConnect, DesktopRoute.Detail, DesktopRoute.Player, DesktopRoute.Library, DesktopRoute.LiveTv, DesktopRoute.Settings, DesktopRoute.Search, DesktopRoute.Person) || (state.route == DesktopRoute.Accounts && state.account != null)) TextButton(onClick = controller::back, modifier = Modifier.controlFocus().probe("back")) { Icon(DesktopGlyph.Back, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Back") }
+                    if (state.route in setOf(DesktopRoute.SignIn, DesktopRoute.QuickConnect, DesktopRoute.Detail, DesktopRoute.Player, DesktopRoute.Library, DesktopRoute.LiveTv, DesktopRoute.Settings, DesktopRoute.Search, DesktopRoute.Person, DesktopRoute.MusicLibrary, DesktopRoute.MusicItem, DesktopRoute.MusicNow) || (state.route == DesktopRoute.Accounts && state.account != null)) TextButton(onClick = controller::back, modifier = Modifier.controlFocus().probe("back")) { Icon(DesktopGlyph.Back, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Back") }
                     Spacer(Modifier.weight(1f))
                     DesktopUtility("Keyboard shortcuts", DesktopGlyph.Keyboard, "shortcuts") { modalReturnFocus = "shortcuts"; help = true }
                     DesktopUtility(if(fullscreen) "Exit fullscreen" else "Fullscreen", DesktopGlyph.Fullscreen, "fullscreen", onFullscreen)
@@ -296,14 +300,20 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                                 DesktopRoute.Detail -> DetailPage(state, controller)
                                 DesktopRoute.Player -> PlayerPage(state, controller, onFullscreen)
                                 DesktopRoute.Settings -> SettingsPage(state, controller) { modalReturnFocus = "sign-out"; signOut = state.account }
+                                DesktopRoute.MusicLibrary -> DesktopMusicLibraryPage(state, controller)
+                                DesktopRoute.MusicItem -> DesktopMusicItemPage(state, controller)
+                                DesktopRoute.MusicNow -> DesktopMusicNowPage(controller)
                             }
                             }
                             }
                         }
                     }
                 }
+                // MUS-03/04: music keeps playing while browsing; the bar stays put under every page but the player and Now playing.
+                if (state.account != null && state.route !in setOf(DesktopRoute.Player, DesktopRoute.MusicNow, DesktopRoute.SignIn, DesktopRoute.QuickConnect, DesktopRoute.Servers)) DesktopMusicMiniBar(controller)
             }
             val windowHeight = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.height.toDp() }
+            musicUi.prompt?.let { DesktopMusicReplacePrompt(controller, it) }
             if (help) DesktopShortcutsDialog(macShortcuts, macChrome, (windowHeight - 64.dp).coerceAtLeast(240.dp)) { help = false }
             signOut?.let { a ->
                 SignOutConfirmation(a.user.name, onCancel = { signOut = null }, onConfirm = {
@@ -504,6 +514,9 @@ internal fun desktopEntryTarget(state: DesktopState): String? = when(state.route
     DesktopRoute.Search -> "search-field"
     DesktopRoute.Player -> "player-surface"
     DesktopRoute.Accounts -> state.accounts.firstOrNull()?.let { "account:${it.key}" }
+    DesktopRoute.MusicLibrary -> "music:tab:ALBUMS"
+    DesktopRoute.MusicItem -> "music:play"
+    DesktopRoute.MusicNow -> "music:now:toggle"
     else -> null
 }
 

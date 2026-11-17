@@ -63,6 +63,9 @@ internal fun SettingsPage(state:DesktopState,c:DesktopController,onSignOut:()->U
             SettingRow("Video quality", VIDEO_QUALITY_CAPTION) {
                 Choice("Video quality",listOf(0 to VIDEO_QUALITY_ORIGINAL,4 to "4 Mbps",10 to "10 Mbps",20 to "20 Mbps",40 to "40 Mbps",80 to "80 Mbps"),s.bitrateMbps?:0,"quality",buttonValue = if ((s.bitrateMbps ?: 0) == 0) "Original" else "${s.bitrateMbps} Mbps", buttonWidth = 180.dp, trailingIcon = DesktopGlyph.ChevronDown, fixedWidth = true, menuMinWidth = 340.dp) { c.saveSettings(s.copy(bitrateMbps=it.takeIf{it>0})) }
             }
+            SettingRow("Music quality", "Auto and Original keep the file when this computer can play it. A kbps cap makes the server convert larger files.") {
+                Choice("Music quality",DESKTOP_MUSIC_QUALITY_OPTIONS,s.musicQuality,"music-quality",buttonValue = DESKTOP_MUSIC_QUALITY_OPTIONS.firstOrNull { it.first == s.musicQuality }?.second?.substringBefore(" (") ?: "Auto", buttonWidth = 180.dp, trailingIcon = DesktopGlyph.ChevronDown, fixedWidth = true, menuMinWidth = 340.dp) { c.saveSettings(s.copy(musicQuality=it)) }
+            }
             SettingSwitch("Explain video conversion","Tell me when this computer needs a different video format.",s.conversionNotice,"conversion") { c.saveSettings(s.copy(conversionNotice=it)) }
             SettingSwitch("Play next episode","Continue to the next episode when this one ends.",s.autoplayNext,"autoplay") { c.saveSettings(s.copy(autoplayNext=it)) }
             Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {

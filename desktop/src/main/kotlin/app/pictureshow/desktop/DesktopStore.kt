@@ -45,18 +45,21 @@ class DesktopSettingsStore(private val file: File) {
             conversionNotice = p.getProperty("conversionNotice")?.toBooleanStrictOrNull() ?: true,
             autoplayNext = p.getProperty("autoplayNext")?.toBooleanStrictOrNull() ?: true,
             volume = (p.getProperty("volume")?.toIntOrNull() ?: 80).coerceIn(0, 100),
-            largeInterface = p.getProperty("largeInterface")?.toBooleanStrictOrNull() ?: false
+            largeInterface = p.getProperty("largeInterface")?.toBooleanStrictOrNull() ?: false,
+            musicQuality = p.getProperty("musicQuality")?.takeIf { it in app.pictureshow.core.music.MUSIC_QUALITIES } ?: "auto"
         )
     }
     fun write(settings: DesktopSettings) {
         PlaybackPreferences.validateBitrate(settings.bitrateMbps)
         require(settings.volume in 0..100)
+        require(settings.musicQuality in app.pictureshow.core.music.MUSIC_QUALITIES)
         val p = Properties().apply {
             setProperty("bitrate", settings.bitrateMbps?.toString().orEmpty())
             setProperty("conversionNotice", settings.conversionNotice.toString())
             setProperty("autoplayNext", settings.autoplayNext.toString())
             setProperty("volume", settings.volume.toString())
             setProperty("largeInterface", settings.largeInterface.toString())
+            setProperty("musicQuality", settings.musicQuality)
         }
         val bytes = java.io.ByteArrayOutputStream().use { out -> p.store(out, "Pictureshow desktop preferences"); out.toByteArray() }
         atomicPrivateWrite(file, bytes)

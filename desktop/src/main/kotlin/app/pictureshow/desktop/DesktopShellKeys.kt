@@ -6,7 +6,7 @@ package app.pictureshow.desktop
 import androidx.compose.ui.input.key.Key
 
 /** What a window-level key does once every focused control has had its turn (the bubble phase). */
-internal enum class ShellAction { Back, ExitFullscreen, Fullscreen, TogglePlay, SeekBack, SeekForward, Help, Search, Settings, Left, Right, Up, Down }
+internal enum class ShellAction { Back, ExitFullscreen, Fullscreen, TogglePlay, ToggleMusic, SeekBack, SeekForward, Help, Search, Settings, Left, Right, Up, Down }
 
 /** One key press as the shell sees it; [char] is the typed character when the platform reports one. */
 internal data class ShellKeyPress(
@@ -21,8 +21,10 @@ internal data class ShellKeyPress(
 /** Pages whose fields take typed text, where letters and ? are never shortcuts. */
 internal val DESKTOP_TYPING_ROUTES = setOf(DesktopRoute.Servers, DesktopRoute.SignIn, DesktopRoute.QuickConnect, DesktopRoute.Search)
 /** Pages that show the sidebar, where the Settings shortcut applies. */
-internal val DESKTOP_SIDEBAR_ROUTES = setOf(DesktopRoute.Home, DesktopRoute.Library, DesktopRoute.Detail, DesktopRoute.Settings, DesktopRoute.Search, DesktopRoute.Person)
-private val ARROW_ROUTES = setOf(DesktopRoute.Home, DesktopRoute.Library, DesktopRoute.Detail, DesktopRoute.Accounts, DesktopRoute.Settings, DesktopRoute.Search, DesktopRoute.Person)
+internal val DESKTOP_SIDEBAR_ROUTES = setOf(DesktopRoute.Home, DesktopRoute.Library, DesktopRoute.Detail, DesktopRoute.Settings, DesktopRoute.Search, DesktopRoute.Person,
+    DesktopRoute.MusicLibrary, DesktopRoute.MusicItem, DesktopRoute.MusicNow)
+private val ARROW_ROUTES = setOf(DesktopRoute.Home, DesktopRoute.Library, DesktopRoute.Detail, DesktopRoute.Accounts, DesktopRoute.Settings, DesktopRoute.Search, DesktopRoute.Person,
+    DesktopRoute.MusicLibrary, DesktopRoute.MusicItem, DesktopRoute.MusicNow)
 
 /**
  * The window's fallback key map. It runs only for keys no focused control consumed, so a button's
@@ -32,6 +34,8 @@ private val ARROW_ROUTES = setOf(DesktopRoute.Home, DesktopRoute.Library, Deskto
  *   control focused, arrows move focus between controls instead.
  * - Letters (K, J, L, F) and ? work unless a text field may have focus, and never with Ctrl, Cmd or Alt.
  * - Settings is ⌘, on macOS and Ctrl+, elsewhere, from any page with the sidebar.
+ * - Away from the video player, with music queued ([music]), Space with nothing focused and K play or pause the
+ *   music (MUS-11); a media key's play/pause does it from anywhere but the video player.
  */
 internal fun shellFallbackAction(
     press: ShellKeyPress,
@@ -39,7 +43,8 @@ internal fun shellFallbackAction(
     controlFocused: Boolean,
     fullscreen: Boolean,
     mac: Boolean,
-    signedIn: Boolean
+    signedIn: Boolean,
+    music: Boolean = false
 ): ShellAction? {
     if (press.key == Key.Escape && !press.ctrl && !press.meta && !press.alt) return if (fullscreen) ShellAction.ExitFullscreen else ShellAction.Back
     val command = if (mac) press.meta && !press.ctrl else press.ctrl && !press.meta
@@ -62,6 +67,8 @@ internal fun shellFallbackAction(
         }
         return null
     }
+    if (music && !typing && (press.key == Key.K || (press.key == Key.Spacebar && !controlFocused))) return ShellAction.ToggleMusic
+    if (music && press.key == Key.MediaPlayPause) return ShellAction.ToggleMusic
     if (route in ARROW_ROUTES) return when (press.key) {
         Key.DirectionLeft -> ShellAction.Left
         Key.DirectionRight -> ShellAction.Right
