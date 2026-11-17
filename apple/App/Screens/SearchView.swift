@@ -39,8 +39,6 @@ struct SearchView: View {
                 }
             }
             .padding(.vertical, 20)
-            // The last row's captions sit below its focused cards; keep them clear of the mini player on TV.
-            .padding(.bottom, platformValue(tv: 80, touch: 0))
         }
         .pageBackground()
         .navigationTitle("Search")

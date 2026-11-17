@@ -16,6 +16,11 @@ struct LibrariesView: View {
                 MessageView(symbol: "wifi.exclamationmark", title: "Couldn't load your libraries", message: message, actionTitle: "Try again") { Task { await reload() } }
             case .loaded(let items):
                 ScrollView {
+                    #if os(tvOS)
+                    // tvOS pins a navigation title while the page scrolls under it, so the TV title is content.
+                    Text("Libraries").font(.title2.weight(.bold)).accessibilityAddTraits(.isHeader)
+                        .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, Theme.gutter)
+                    #endif
                     SyncStayBanner(sync: app.syncPlay).padding(.top, 12)
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: platformValue(tv: 420, touch: 300)), spacing: Theme.cardSpacing)], spacing: platformValue(tv: 56, touch: 16)) {
                         // LIVE-01: Live TV is its own card; a server view typed livetv isn't repeated as a library.
@@ -27,7 +32,9 @@ struct LibrariesView: View {
             }
         }
         .pageBackground()
+        #if os(iOS)
         .navigationTitle("Libraries")
+        #endif
         .task(id: app.catalogRevision) { await reload() }
     }
 

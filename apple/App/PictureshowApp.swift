@@ -163,34 +163,66 @@ struct RoutedStack<Root: View>: View {
     @EnvironmentObject private var app: AppModel
     @ViewBuilder var root: () -> Root
     @State private var path = NavigationPath()
+    /// The mini player's height (0 while nothing plays), for the pages' bottom inset on tvOS.
+    @State private var miniPlayerHeight: CGFloat = 0
+
     var body: some View {
         stack
         #if os(iOS)
             .safeAreaInset(edge: .bottom, spacing: 0) { if !RemoteBar.usesAccessory { RemoteBar(remote: app.remote) } }
         #endif
             // MUS-03: what's playing stays one tap away on every tab.
-            .safeAreaInset(edge: .bottom, spacing: 0) { MiniPlayer(music: app.music) }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                MiniPlayer(music: app.music)
+                    // The bar's own height: on tvOS its frame here also spans the screen's bottom safe area, which
+                    // the pages already keep.
+                    .onGeometryChange(for: CGFloat.self) { max(0, $0.size.height - $0.safeAreaInsets.bottom) } action: { miniPlayerHeight = $0 }
+            }
     }
 
     private var stack: some View {
         NavigationStack(path: $path) {
             root()
+                .modifier(MiniPlayerClearance(height: miniPlayerHeight))
                 #if DEBUG
                 .task { if let route = await DebugLaunch.routeFromEnvironment(app) { path.append(route) } }
                 #endif
                 .navigationDestination(for: Route.self) { route in
-                    switch route {
-                    case .item(let item): DetailView(seed: item)
-                    case .library(let library):
-                        if let music = library.musicRoute { MusicRouteView(route: music) } else { LibraryView(library: library) }
-                    case .person(let id, let name): PersonView(personID: id, name: name)
-                    case .photo(let photo, let sortBy, let descending): PhotoViewer(photo: photo, sortBy: sortBy, descending: descending)
-                    case .liveTV: LiveTVRoute()
-                    case .music(let music): MusicRouteView(route: music)
+                    Group {
+                        switch route {
+                        case .item(let item): DetailView(seed: item)
+                        case .library(let library):
+                            if let music = library.musicRoute { MusicRouteView(route: music) } else { LibraryView(library: library) }
+                        case .person(let id, let name): PersonView(personID: id, name: name)
+                        case .photo(let photo, let sortBy, let descending): PhotoViewer(photo: photo, sortBy: sortBy, descending: descending)
+                        case .liveTV: LiveTVRoute()
+                        case .music(let music): MusicRouteView(route: music)
+                        }
                     }
+                    .modifier(MiniPlayerClearance(height: miniPlayerHeight))
                 }
-                .navigationDestination(for: SeerrTitleRoute.self) { SeerrTitleView(route: $0) }
+                .navigationDestination(for: SeerrTitleRoute.self) {
+                    SeerrTitleView(route: $0).modifier(MiniPlayerClearance(height: miniPlayerHeight))
+                }
         }
+    }
+}
+
+/// The one bottom inset every page in a `RoutedStack` gets from the mini player (MUS-03), so scrolling pages end
+/// above it. On tvOS the safe-area inset around the stack doesn't reach its pages: they kept only the screen's safe
+/// area, scrolled under the bar and stopped a focused bottom row with its captions behind it. So on tvOS each page
+/// takes the bar's height as extra safe area, plus room for a caption under a focused card
+/// (`MiniPlayer.captionClearance`). Pages still draw through that area; only where scrolling and focus stop moves.
+/// iOS keeps the stack's inset alone, as before.
+struct MiniPlayerClearance: ViewModifier {
+    let height: CGFloat
+
+    func body(content: Content) -> some View {
+        #if os(tvOS)
+        content.safeAreaPadding(.bottom, height > 0 ? height + MiniPlayer.captionClearance : 0)
+        #else
+        content
+        #endif
     }
 }
 

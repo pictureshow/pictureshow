@@ -371,6 +371,10 @@ struct SeerrHubView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Theme.shelfSpacing) {
+                #if os(tvOS)
+                // tvOS pins a navigation title while the page scrolls under it, so the TV title is content.
+                Text("Requests").font(.title2.weight(.bold)).accessibilityAddTraits(.isHeader).padding(.horizontal, Theme.gutter)
+                #endif
                 Picker("Show", selection: $tab) {
                     ForEach(SeerrHubTab.allCases) { Text($0.rawValue).tag($0) }
                 }
@@ -389,7 +393,9 @@ struct SeerrHubView: View {
             .padding(.vertical, 20)
         }
         .pageBackground()
+        #if os(iOS)
         .navigationTitle("Requests")
+        #endif
         .task { await model.loadTrending(app) }
         .task(id: tab) { if tab == .mine { await model.loadRequests(app) } }
         .task(id: query) { await model.search(app, query: query) }

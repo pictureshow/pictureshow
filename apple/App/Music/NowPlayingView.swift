@@ -8,6 +8,11 @@ struct MiniPlayer: View {
     @EnvironmentObject private var app: AppModel
     @ObservedObject var music: MusicHost
 
+    /// On tvOS a card's caption sits under its focused frame (8 pt gap, then title and subtitle lines, about 67 pt),
+    /// and focus scrolls only the frame into view. Pages keep this much more room above the bar so a focused bottom
+    /// row's caption shows instead of sliding under it.
+    static let captionClearance: CGFloat = platformValue(tv: 90, touch: 0)
+
     var body: some View {
         if let card = music.currentCard {
             HStack(spacing: platformValue(tv: 24, touch: 12)) {
