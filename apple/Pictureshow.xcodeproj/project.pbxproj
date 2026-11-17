@@ -34,6 +34,7 @@
 		30E7117B8B9BD270BE012FE8 /* LiveTVParts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F1AA7A88109F235A876E08B /* LiveTVParts.swift */; };
 		32823B044DE572F8C7BE0388 /* Screensaver.swift in Sources */ = {isa = PBXBuildFile; fileRef = C691C78F11418C1774A08EC6 /* Screensaver.swift */; };
 		37842752121AAF97B96C5928 /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21770514D4CDB9B9A06BAF96 /* LibraryView.swift */; };
+		396878130735C237629240D1 /* PictureInPictureAppTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20457044766A5D62E09FF0C7 /* PictureInPictureAppTests.swift */; };
 		3C8ADFF1D8ECD8504BA2281E /* SyncPlayAppTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0819107160D82B7631BEC43 /* SyncPlayAppTests.swift */; };
 		3D4A66F965F5E903FE06D40D /* SubtitleDownloadView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 588F00E3A8C0CF7F9A5E526B /* SubtitleDownloadView.swift */; };
 		3F2C51E8D81F56BF967603B2 /* MPL-2.0.txt in Resources */ = {isa = PBXBuildFile; fileRef = 7AFB7FB1BED8180AEBEFD99D /* MPL-2.0.txt */; };
@@ -59,9 +60,11 @@
 		5B4211B0A9B8649FB7625B38 /* DownloadRedirectTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5936508D935E89E91DCD94AB /* DownloadRedirectTests.swift */; };
 		5D1C260A97A141996EE19A86 /* RemoteViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09A3FEFEA47908B456C3A355 /* RemoteViews.swift */; };
 		5D9256A70B2E0B1BB6385C24 /* AccountBookTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A863BDF89C97DC08A9A73EB5 /* AccountBookTests.swift */; };
+		637CD8DB5AE4B8F49DEAD040 /* PictureInPictureHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81298277BD56E4141639BCA9 /* PictureInPictureHost.swift */; };
 		65BE9E44567717B4C20096A0 /* RemoteAppTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9A5B6C33DF619C8C187BB21 /* RemoteAppTests.swift */; };
 		6823A4F1B1D927786EA9988A /* OfflineFiles.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85BFCB25BD1407FDFF65CF38 /* OfflineFiles.swift */; };
 		688E2276F883D67112CAAE3F /* PlayerScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78A1DE7E5968B6A48C7CCEE2 /* PlayerScreen.swift */; };
+		6A39D438B44AA1076A6E5C1C /* PictureInPictureAppTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20457044766A5D62E09FF0C7 /* PictureInPictureAppTests.swift */; };
 		6D4E9A4961A8AFCDDF847698 /* SeerrViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 156D1D7A3EB3C5FBF4F64411 /* SeerrViews.swift */; };
 		6E10CC2CD1BA49AE2B16D3B5 /* SeerrStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC4D33D303EBD962B2332E14 /* SeerrStoreTests.swift */; };
 		6FB7EF793C86BF0504BF8FB8 /* DetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1888E9F0F445CD4A406416E7 /* DetailView.swift */; };
@@ -78,6 +81,7 @@
 		9033302B577F153CE9DF1CA5 /* RemoteViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09A3FEFEA47908B456C3A355 /* RemoteViews.swift */; };
 		90441AC588AA02C9BCB67941 /* DesignTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = A23DE8E3C9A071C533008D69 /* DesignTokens.swift */; };
 		943340FDB88EA0E828CAB6D5 /* ViewingSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3C4E018F24A7810A30B593F /* ViewingSettings.swift */; };
+		944A3FCB23D071C7F1F6276E /* PictureInPictureHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81298277BD56E4141639BCA9 /* PictureInPictureHost.swift */; };
 		949FA09CB838F8B10B02A2CF /* RemoteTarget.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD951BB522E4C718E7D86A18 /* RemoteTarget.swift */; };
 		98481734BB9413BFDC2210F4 /* PictureshowApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8DFE48B43481D4DCECA35AE /* PictureshowApp.swift */; };
 		9AFD26A6FEA9EF37C63502DA /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F2DDEAB754F5ED386E56980 /* AppModel.swift */; };
@@ -167,6 +171,7 @@
 		156D1D7A3EB3C5FBF4F64411 /* SeerrViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeerrViews.swift; sourceTree = "<group>"; };
 		1888E9F0F445CD4A406416E7 /* DetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DetailView.swift; sourceTree = "<group>"; };
 		1CD5723AAA6FA2FF9EFD6B8F /* Pictureshow-iOS-UnitTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = "Pictureshow-iOS-UnitTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		20457044766A5D62E09FF0C7 /* PictureInPictureAppTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PictureInPictureAppTests.swift; sourceTree = "<group>"; };
 		208DC253481C07A7F4E487B8 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		21770514D4CDB9B9A06BAF96 /* LibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryView.swift; sourceTree = "<group>"; };
 		224114EB014047E3E9DF3C3B /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
@@ -189,6 +194,7 @@
 		771392D0B7A834239EEE71B2 /* ProfileLocks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileLocks.swift; sourceTree = "<group>"; };
 		78A1DE7E5968B6A48C7CCEE2 /* PlayerScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerScreen.swift; sourceTree = "<group>"; };
 		7AFB7FB1BED8180AEBEFD99D /* MPL-2.0.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "MPL-2.0.txt"; sourceTree = "<group>"; };
+		81298277BD56E4141639BCA9 /* PictureInPictureHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PictureInPictureHost.swift; sourceTree = "<group>"; };
 		81EBF4E3F4237D733B2DFBD5 /* OfflineAppTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfflineAppTests.swift; sourceTree = "<group>"; };
 		85BFCB25BD1407FDFF65CF38 /* OfflineFiles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfflineFiles.swift; sourceTree = "<group>"; };
 		88F7FE50A883C1081639AA99 /* Pictureshow-tvOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = "Pictureshow-tvOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -327,6 +333,7 @@
 			isa = PBXGroup;
 			children = (
 				4243A2C974329BCE6C9FB79C /* NowPlayingBridge.swift */,
+				81298277BD56E4141639BCA9 /* PictureInPictureHost.swift */,
 				C0A55C032D640A96B78FF9B1 /* PlaybackController.swift */,
 				78A1DE7E5968B6A48C7CCEE2 /* PlayerScreen.swift */,
 				588F00E3A8C0CF7F9A5E526B /* SubtitleDownloadView.swift */,
@@ -389,6 +396,7 @@
 				5936508D935E89E91DCD94AB /* DownloadRedirectTests.swift */,
 				485CC266A8A08214ADA5B9CA /* LiveTVAppTests.swift */,
 				81EBF4E3F4237D733B2DFBD5 /* OfflineAppTests.swift */,
+				20457044766A5D62E09FF0C7 /* PictureInPictureAppTests.swift */,
 				FF33B0B8407CD212DEE99E2E /* PlayerExtrasAppTests.swift */,
 				D124BB4CFB2F44085DBFC595 /* ProfilePinAppTests.swift */,
 				D9A5B6C33DF619C8C187BB21 /* RemoteAppTests.swift */,
@@ -586,6 +594,7 @@
 				A2CEA0EC81154E1466859EF0 /* DownloadRedirectTests.swift in Sources */,
 				CE4AC0A270D658CA8EF76261 /* LiveTVAppTests.swift in Sources */,
 				06519DF114D2428C05B55CEA /* OfflineAppTests.swift in Sources */,
+				6A39D438B44AA1076A6E5C1C /* PictureInPictureAppTests.swift in Sources */,
 				AE16A3B7EB86E22A91138A3D /* PlayerExtrasAppTests.swift in Sources */,
 				B84CB51D157601ACFB857102 /* ProfilePinAppTests.swift in Sources */,
 				AF39E52FCF78F9BCF78B1A70 /* RemoteAppTests.swift in Sources */,
@@ -625,6 +634,7 @@
 				CD52FF9A5F5C4145A2B4A327 /* OfflineAPI.swift in Sources */,
 				A89E21AFE9774C03A8774434 /* OfflineFiles.swift in Sources */,
 				CAEFB9C397ABD8BB2A8A71A9 /* PhotoViewer.swift in Sources */,
+				637CD8DB5AE4B8F49DEAD040 /* PictureInPictureHost.swift in Sources */,
 				E730A0CB4CA77A5F9B6806F4 /* PictureshowApp.swift in Sources */,
 				EACC66F116D9C5AFB78CD2AB /* PlaybackController.swift in Sources */,
 				688E2276F883D67112CAAE3F /* PlayerScreen.swift in Sources */,
@@ -681,6 +691,7 @@
 				494560E076358FA906164693 /* OfflineAPI.swift in Sources */,
 				6823A4F1B1D927786EA9988A /* OfflineFiles.swift in Sources */,
 				79CAD6793667A07C82CA0C96 /* PhotoViewer.swift in Sources */,
+				944A3FCB23D071C7F1F6276E /* PictureInPictureHost.swift in Sources */,
 				98481734BB9413BFDC2210F4 /* PictureshowApp.swift in Sources */,
 				4ABA8DA848D8AF9BD02F7E13 /* PlaybackController.swift in Sources */,
 				76F4A15E3BDE612CBD2B9D03 /* PlayerScreen.swift in Sources */,
@@ -717,6 +728,7 @@
 				5B4211B0A9B8649FB7625B38 /* DownloadRedirectTests.swift in Sources */,
 				1180B05D0C88046110B56F62 /* LiveTVAppTests.swift in Sources */,
 				45823F8FA5A16B487D51C6A9 /* OfflineAppTests.swift in Sources */,
+				396878130735C237629240D1 /* PictureInPictureAppTests.swift in Sources */,
 				B9CDEF27C82775277D9BB8D1 /* PlayerExtrasAppTests.swift in Sources */,
 				C5A9E21D5F4592FA87FB3980 /* ProfilePinAppTests.swift in Sources */,
 				65BE9E44567717B4C20096A0 /* RemoteAppTests.swift in Sources */,

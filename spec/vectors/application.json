@@ -9915,6 +9915,56 @@
       "expected": true
     },
     {
+      "id": "profile-pin-away-visible",
+      "operation": "profile-pin-away",
+      "input": {
+        "sceneVisible": true,
+        "pictureInPicture": false,
+        "playing": false
+      },
+      "expected": false
+    },
+    {
+      "id": "profile-pin-away-background",
+      "operation": "profile-pin-away",
+      "input": {
+        "sceneVisible": false,
+        "pictureInPicture": false,
+        "playing": false
+      },
+      "expected": true
+    },
+    {
+      "id": "profile-pin-away-pip-playing",
+      "operation": "profile-pin-away",
+      "input": {
+        "sceneVisible": false,
+        "pictureInPicture": true,
+        "playing": true
+      },
+      "expected": false
+    },
+    {
+      "id": "profile-pin-away-pip-paused",
+      "operation": "profile-pin-away",
+      "input": {
+        "sceneVisible": false,
+        "pictureInPicture": true,
+        "playing": false
+      },
+      "expected": true
+    },
+    {
+      "id": "profile-pin-away-visible-pip-paused",
+      "operation": "profile-pin-away",
+      "input": {
+        "sceneVisible": true,
+        "pictureInPicture": true,
+        "playing": false
+      },
+      "expected": false
+    },
+    {
       "id": "access-refusal-sign-in",
       "operation": "access-refusal",
       "input": {

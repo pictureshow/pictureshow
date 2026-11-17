@@ -145,6 +145,9 @@ import XCTest
         XCTAssertTrue(pins.gateNeeded("a"), "asked like a fresh start")
         XCTAssertTrue(pins.changeNeedsPin("a"), "the password proof went with it")
         XCTAssertFalse(pins.foregrounded(now: 9_000_000), "coming back without having left doesn't lock")
+        pins.backgrounded(now: 10_000_000)
+        pins.backgrounded(now: 10_240_000)
+        XCTAssertEqual(pins.backgroundedAt, 10_000_000, "already away keeps the earlier start")
     }
 
     func testRelockFollowsAskOnStartAndARestartLocks() async throws {
@@ -197,8 +200,17 @@ import XCTest
 
         pins.provenByPassword("a")
         _ = pins.gateNeeded("b")
+        _ = pins.gateNeeded("a")
+        XCTAssertFalse(pins.changeNeedsPin("a"), "a viewer seen before the sign-in lands doesn't end it")
+        pins.dropChangeGrant()
+        XCTAssertFalse(pins.changeNeedsPin("a"), "a cancelled new-PIN screen keeps it")
+        _ = pins.gateNeeded("b")
         pins.markUnlocked("a"); _ = pins.gateNeeded("a")
-        XCTAssertTrue(pins.changeNeedsPin("a"), "another viewer becoming current ends the proof")
+        XCTAssertTrue(pins.changeNeedsPin("a"), "another viewer becoming current after the landing ends the proof")
+
+        pins.provenByPassword("a"); _ = pins.gateNeeded("a")
+        pins.leftPinSettings()
+        XCTAssertTrue(pins.changeNeedsPin("a"), "leaving the PIN settings ends the proof")
 
         pins.provenByPassword("a")
         pins.backgrounded(now: 0)
