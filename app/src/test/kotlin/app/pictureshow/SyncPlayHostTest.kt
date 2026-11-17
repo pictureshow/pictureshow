@@ -2080,8 +2080,10 @@ class SyncPlayHostTest {
             assertEquals(expected, rig.operations().filter { it in membershipOps }, id)
             if (item != null && "SetNewQueue" in expected) {
                 val body = assertNotNull(rig.sent.single { it.second.operation == "SetNewQueue" }.second.body, id)
-                assertEquals(JsonArray(listOf(JsonPrimitive(item.getValue("itemId").jsonPrimitive.content))), body["PlayingQueue"], id)
-                assertEquals(item.getValue("startTicks").jsonPrimitive.content.toLong(), body.getValue("StartPositionTicks").jsonPrimitive.long, id)
+                val itemId = item.getValue("itemId").jsonPrimitive.content
+                val startTicks = item.getValue("startTicks").jsonPrimitive.content.toLong()
+                assertEquals(JsonArray(listOf(JsonPrimitive(itemId))), body["PlayingQueue"], id)
+                assertEquals(startTicks, body.getValue("StartPositionTicks").jsonPrimitive.long, id)
             }
             rig.host.leave()
             runCurrent()
