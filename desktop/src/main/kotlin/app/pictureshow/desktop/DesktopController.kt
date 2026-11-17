@@ -22,26 +22,28 @@ import kotlinx.coroutines.sync.withLock
 class DesktopController(
     private val directory: File = desktopDataDirectory(),
     private val http: HttpClient = HttpClient(OkHttp) { expectSuccess = false; followRedirects = false; jellyfinApiTransport() },
-    private val store: AccountStore = AccountStore(DesktopTextPersistence(File(directory, "accounts.json"))),
+    internal val store: AccountStore = AccountStore(DesktopTextPersistence(File(directory, "accounts.json"))),
     private val discovery: ServerDiscovery = JvmServerDiscovery(),
     private val dispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val playbackFactory: (File) -> DesktopPlaybackEngine = { NativeDesktopPlayback(it) },
     /** PLAY-17's countdown after a genuine end before the next episode opens. */
     private val endCountdownSeconds: Int = 10
 ) : AutoCloseable {
-    private val scope = CoroutineScope(SupervisorJob() + dispatcher)
-    private val mutable = MutableStateFlow(DesktopState())
+    internal val scope = CoroutineScope(SupervisorJob() + dispatcher)
+    internal val mutable = MutableStateFlow(DesktopState())
     val state: StateFlow<DesktopState> = mutable.asStateFlow()
     private val settingsStore = DesktopSettingsStore(File(directory, "settings.properties"))
     private val identity = ClientIdentity("Pictureshow Desktop", installationId())
-    private val client = JellyfinClient(http, identity)
+    internal val client = JellyfinClient(http, identity)
+    /** Stream C1 (catalog): Home preferences, queues, filters and the landing view (DesktopCatalogStream.kt). */
+    internal val catalogSession by lazy { DesktopCatalogSession(HomePreferencesStore(client, store)) }
     private val playbackClient = PlaybackClient(http, identity)
     val liveTv = DesktopLiveTv(LiveTvClient(http, identity, DesktopLivePendingWrites(File(directory, "live-pending"))), scope, { mutable.value.account })
     private val extras = PlaybackExtrasClient(http, identity)
-    private val generation = AtomicLong()
+    internal val generation = AtomicLong()
     private var pageJob: Job? = null
     private var discoveryJob: Job? = null
-    private val history = mutableListOf<DesktopState>()
+    internal val history = mutableListOf<DesktopState>()
     private var pendingQuick: PendingQuickConnect? = null
     private var quickOwner: Server? = null
     @Volatile private var window: Window? = null
@@ -50,8 +52,9 @@ class DesktopController(
     @Volatile private var viewing: Viewing? = null
     @Volatile private var closing = false
     @Volatile private var nextPageIndex = 0
+    internal fun setNextPage(index: Int) { nextPageIndex = index }
     private val viewingMutex = kotlinx.coroutines.sync.Mutex()
-    private val events = DesktopEventLog(File(directory, "app.log"))
+    internal val events = DesktopEventLog(File(directory, "app.log"))
     private val inputDiagnostics = DesktopInputDiagnostics(events::log)
     private val inputListener = java.awt.event.AWTEventListener { event ->
         val source = event.source as? java.awt.Component
@@ -96,13 +99,13 @@ class DesktopController(
     }
     private fun identityClient() = JellyfinClient(http, identity.copy(deviceId = UUID.randomUUID().toString()))
     /** Record every committed transition, including quick intermediate routes that StateFlow can conflate. */
-    @Synchronized private fun updateState(change: (DesktopState) -> DesktopState) {
+    @Synchronized internal fun updateState(change: (DesktopState) -> DesktopState) {
         val next = change(mutable.value)
         mutable.value = next
         inputDiagnostics.route(next.route)
     }
     private fun snapshotAccounts() { val s = store.snapshots.value; updateState { it.copy(accounts = s.accounts, rememberedServers = s.rememberedServers) } }
-    @Synchronized private fun page(route: DesktopRoute, remember: Boolean = false, block: suspend (Long) -> Unit) {
+    @Synchronized internal fun page(route: DesktopRoute, remember: Boolean = false, block: suspend (Long) -> Unit) {
         val before = mutable.value
         if (remember && before.route !in setOf(DesktopRoute.Loading, DesktopRoute.Player)) synchronized(history) { history.add(before) }
         val g = generation.incrementAndGet()
@@ -122,7 +125,7 @@ class DesktopController(
             finally { publish(g) { it.copy(busy = false) } }
         }
     }
-    @Synchronized private fun publish(g: Long, change: (DesktopState) -> DesktopState) { if (generation.get() == g && !closing) updateState(change) }
+    @Synchronized internal fun publish(g: Long, change: (DesktopState) -> DesktopState) { if (generation.get() == g && !closing) updateState(change) }
     private suspend fun <T> result(account: Account? = null, call: suspend () -> ClientResult<T>): T {
         val response = call()
         currentCoroutineContext().ensureActive()
@@ -145,7 +148,7 @@ class DesktopController(
         }
     }
     private class DesktopFailure(override val message: String, val kind: ErrorKind) : Exception(message)
-    private suspend fun <T> attempt(g: Long, account: Account? = null, call: suspend () -> ClientResult<T>): T? = try { result(account, call) }
+    internal suspend fun <T> attempt(g: Long, account: Account? = null, call: suspend () -> ClientResult<T>): T? = try { result(account, call) }
     catch (e: DesktopFailure) { publish(g) { it.copy(error = e.message, errorKind = e.kind) }; null }
 
     fun clearError() { updateState { it.copy(error = null, errorKind = null) } }
@@ -201,7 +204,7 @@ class DesktopController(
         snapshotAccounts()
         synchronized(history) { history.clear() }
         pendingQuick = null; quickOwner = null
-        publish(g) { it.copy(search = DesktopSearchState(), account = account, server = account.server, quickCode = null, signInUsername = null, detail = null, playback = null, homeRows = emptyList()) }
+        publish(g) { it.copy(search = DesktopSearchState(), account = account, server = account.server, quickCode = null, signInUsername = null, detail = null, playback = null, homeRows = emptyList(), catalog = DesktopCatalogState()) }
         loadHome(g)
     }
     fun quickConnect() {
@@ -248,7 +251,7 @@ class DesktopController(
         }
         liveTv.clear()
         store.select(key); snapshotAccounts(); synchronized(history) { history.clear() }
-        publish(g) { it.copy(search = DesktopSearchState(), account = account, server = account.server, signInUsername = null, detail = null, playback = null, homeRows = emptyList()) }; loadHome(g)
+        publish(g) { it.copy(search = DesktopSearchState(), account = account, server = account.server, signInUsername = null, detail = null, playback = null, homeRows = emptyList(), catalog = DesktopCatalogState()) }; loadHome(g)
     }
     fun signOut() {
         val account = mutable.value.account ?: return
@@ -311,7 +314,7 @@ class DesktopController(
             if (searchSessionEnded(g, a, ancestors.values)) return@page
             val labels = ancestors.mapValues { (_, response) ->
                 (response as? ClientResult.Success)?.value?.let { parents ->
-                    searchLibraryName(parents, mutable.value.homeRows.filter { row -> row.library }.flatMap { row -> row.items })
+                    searchLibraryName(parents, mutable.value.sidebarLibraries())
                 } ?: if (response is ClientResult.Failure) "Library unavailable" else "Library not provided"
             }
             publish(g) { it.copy(search = it.search.copy(rows = rows, loading = false, completed = true,
@@ -360,19 +363,7 @@ class DesktopController(
         }
     }
     fun home() = page(DesktopRoute.Home) { g -> synchronized(history) { history.clear() }; loadHome(g) }
-    private suspend fun loadHome(g: Long) = coroutineScope {
-        val a = mutable.value.account ?: return@coroutineScope
-        publish(g) { it.copy(route = DesktopRoute.Home, root = DESKTOP_ROOT_HOME) }
-        val views = async { attempt(g, a) { client.views(a) }?.items.orEmpty() }
-        val resume = async { attempt(g, a) { client.resume(a) }?.items.orEmpty() }
-        val next = async { attempt(g, a) { client.nextUp(a) }?.items.orEmpty() }
-        val libraries = views.await()
-        val latest = libraries.filter { it.collectionType in listOf("movies", "tvshows") }.map { library ->
-            async { library.id to attempt(g, a) { client.latest(a, library.id) }.orEmpty() }
-        }.awaitAll().toMap()
-        val rows = assembleHome(libraries, resume.await(), next.await(), latest)
-        publish(g) { it.copy(homeRows = rows) }
-    }
+    private suspend fun loadHome(g: Long) = loadCatalogHome(g)
     /** A sidebar library: its top page, lit as its own root (TOUCH-02). Folders opened inside it keep this root. */
     fun browseRoot(library: MediaItem) { browse(library); updateState { it.copy(root = desktopLibraryRoot(library.id)) } }
     /** Live TV (gap C34) has its own leg; until then the view opens an honest interim page, never "empty". */
@@ -385,22 +376,11 @@ class DesktopController(
     fun open(item: MediaItem) {
         if (item.type == "Person") { person(item); return }
         if (isLiveTvView(item)) { openLiveTv(item); return }
+        if (item.type == "Photo") { openPhoto(item); return }
         if (item.type in setOf("CollectionFolder", "Folder", "BoxSet", "Playlist") || item.isFolder && item.type !in setOf("Series", "Season")) browse(item) else detail(item)
     }
-    fun browse(item: MediaItem, sortBy: String = "SortName", descending: Boolean = false) {
-        if (isLiveTvView(item)) { openLiveTv(item); return }
-        require(sortBy in listOf("SortName", "DateCreated", "PremiereDate"))
-        page(DesktopRoute.Library, remember = mutable.value.library?.id != item.id) { g ->
-            val a = mutable.value.account ?: return@page
-            nextPageIndex = 0
-            publish(g) { it.copy(library = item, sortBy = sortBy, descending = descending, items = emptyList(), total = 0) }
-            // D-5 interim: the Live TV view has no browsable children here; LibraryPage explains instead of "empty".
-            if (isLiveTvView(item)) return@page
-            val p = attempt(g, a) { client.items(a, BrowseQuery(item.id, sortBy = sortBy, descending = descending)) } ?: return@page
-            if (generation.get() == g) nextPageIndex = p.startIndex + p.items.size
-            publish(g) { it.copy(items = p.items.distinctBy(MediaItem::id), total = p.totalRecordCount) }
-        }
-    }
+    /** BROWSE-01..06, HOME-06: [sortBy]/[descending] null use this viewer's remembered display for the library. */
+    fun browse(item: MediaItem, sortBy: String? = null, descending: Boolean? = null) = browseLibrary(item, sortBy, descending)
     fun loadMore() {
         val before = mutable.value
         if (before.route != DesktopRoute.Library || before.busy || nextPageIndex >= before.total || before.library?.let(::isLiveTvView) == true) return
@@ -408,7 +388,7 @@ class DesktopController(
         val g = generation.get(); val startIndex = nextPageIndex; updateState { it.copy(busy = true) }
         pageJob = scope.launch {
             try {
-                val p = attempt(g, a) { client.items(a, BrowseQuery(library.id, sortBy = before.sortBy, descending = before.descending, startIndex = startIndex)) }
+                val p = attempt(g, a) { client.items(a, libraryQuery(library, before.sortBy, before.descending, before.catalog.filters, startIndex = startIndex)) }
                 if (p != null && generation.get() == g) {
                     nextPageIndex = if (p.items.isEmpty()) p.totalRecordCount else startIndex + p.items.size
                     publish(g) { it.copy(items = (it.items + p.items).distinctBy(MediaItem::id), total = p.totalRecordCount) }
@@ -417,13 +397,14 @@ class DesktopController(
         }
     }
     fun detail(item: MediaItem) = page(DesktopRoute.Detail, remember = true) { g -> loadDetail(g, item) }
-    private suspend fun loadDetail(g: Long, item: MediaItem, selected: MediaItem? = null) {
+    internal suspend fun loadDetail(g: Long, item: MediaItem, selected: MediaItem? = null) {
         val a = mutable.value.account ?: return
         publish(g) { it.copy(detail = item, detailLibrary = null, seasons = emptyList(), episodes = emptyList(), selectedSeason = null) }
         val fresh = attempt(g, a) { client.item(a, item.id) } ?: return
         publish(g) { it.copy(detail = fresh) }
+        loadDetailDiscovery(g, a, fresh)
         val parents = (client.searchAncestors(a, fresh.id) as? ClientResult.Success)?.value.orEmpty()
-        val libraryName = searchLibraryName(parents, mutable.value.homeRows.filter { it.library }.flatMap { it.items })
+        val libraryName = searchLibraryName(parents, mutable.value.sidebarLibraries())
         publish(g) { it.copy(detailLibrary = libraryName) }
         if (fresh.type == "Series") {
             val seasons = attempt(g, a) { client.seasons(a, fresh.id) }?.items.orEmpty()
@@ -463,7 +444,8 @@ class DesktopController(
         generation.incrementAndGet(); pageJob?.cancel()
         if (previous != null) {
             updateState { previous.copy(busy = false, error = null, errorKind = null, settings = s.settings,
-                search = previous.search.copy(recent = store.snapshots.value.recentSearches[previous.account?.key].orEmpty(), storageError = s.search.storageError)) }
+                search = previous.search.copy(recent = store.snapshots.value.recentSearches[previous.account?.key].orEmpty(), storageError = s.search.storageError),
+                catalog = previous.catalog.copy(preferences = s.catalog.preferences ?: previous.catalog.preferences, saving = s.catalog.saving, queueBusy = false)) }
             refreshReturnedPage(previous)
         } else when (s.route) {
             DesktopRoute.SignIn -> addServer()
@@ -480,7 +462,7 @@ class DesktopController(
                 val a = mutable.value.account ?: return@page
                 val count = maxOf(60, previous.items.size)
                 val result = if (previous.route == DesktopRoute.Library) previous.library?.let {
-                    attempt(g, a) { client.items(a, BrowseQuery(it.id, sortBy = previous.sortBy, descending = previous.descending, limit = count)) }
+                    attempt(g, a) { client.items(a, libraryQuery(it, previous.sortBy, previous.descending, previous.catalog.filters, limit = count.coerceAtMost(200))) }
                 } else previous.person?.let { attempt(g, a) { client.personItems(a, it.id, limit = count) } }
                 if (result != null) {
                     nextPageIndex = result.startIndex + result.items.size
@@ -540,8 +522,10 @@ class DesktopController(
         inputAttached = false; window = null
     }
 
-    fun play(item: MediaItem, fromStart: Boolean = false) {
+    /** [queue] (BROWSE-06) advances like episodes; [returnToOpener] makes Stop return to the page that started it. */
+    fun play(item: MediaItem, fromStart: Boolean = false, queue: List<MediaItem> = emptyList(), returnToOpener: Boolean = false) {
         if (mutable.value.busy) return
+        catalogSession.queue = queue; catalogSession.returnToOpener = returnToOpener
         page(DesktopRoute.Player, remember = true) { g ->
             finishViewing()
             val a = mutable.value.account ?: return@page
@@ -556,8 +540,8 @@ class DesktopController(
                     if (episodes.any { !it.isWatched }) break
                 }
                 detailPlayItem(fresh, next, episodes)
-            } else detailPlayItem(fresh, emptyList(), emptyList())
-            if (playable == null || playable.isFolder || playable.type !in setOf("Movie", "Episode", "Video", "MusicVideo", "Recording")) {
+            } else if (fresh.type == "Trailer") fresh else detailPlayItem(fresh, emptyList(), emptyList())
+            if (playable == null || playable.isFolder || playable.type !in setOf("Movie", "Episode", "Video", "MusicVideo", "Recording", "Trailer")) {
                 publish(g) { it.copy(error = "There is no playable video in this item.") }; return@page
             }
             prepareViewing(g, a, playable, if (fromStart) 0.0 else playable.userData.playbackPositionTicks.coerceAtLeast(0) / 10_000_000.0)
@@ -782,7 +766,9 @@ class DesktopController(
                 }
             }
         }
-        if (item.type == "Episode" && item.seriesId != null) {
+        if (catalogSession.queue.any { it.id == item.id }) {
+            publish(g) { it.copy(playback = it.playback?.copy(nextEpisode = desktopQueueNext(catalogSession.queue, item))) }
+        } else if (item.type == "Episode" && item.seriesId != null) {
             val next = attempt(g, a) { extras.nextEpisode(a, item) }
             publish(g) { it.copy(playback = it.playback?.copy(nextEpisode = next)) }
         }
@@ -927,6 +913,7 @@ class DesktopController(
         val finished = desktopFinished(playback)
         val old = playback?.item ?: mutable.value.detail
         if (old != null && playback != null) patchPlaybackData(old, playback.positionSeconds, playback.end != null)
+        if (returnToOpener()) return
         // Stop replaces the playback opener, including after an autoplay chain; Back must reach its parent.
         synchronized(history) { if (history.lastOrNull()?.route == DesktopRoute.Detail) history.removeAt(history.lastIndex) }
         page(DesktopRoute.Detail) { g ->

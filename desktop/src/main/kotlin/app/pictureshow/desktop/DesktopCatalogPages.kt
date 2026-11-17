@@ -54,16 +54,16 @@ internal fun HomePage(state: DesktopState, c: DesktopController) {
     Box(Modifier.fillMaxSize()) {
     CatalogTabScope(Modifier.fillMaxSize()) {
     LazyColumn(Modifier.fillMaxSize().padding(end = 20.dp).catalogPage().probe("home"), state = listState, contentPadding = PaddingValues(24.dp), verticalArrangement = Arrangement.spacedBy(24.dp)) {
-        item { CatalogHeading("Home", Modifier.catalogHeadingTarget(heading).probe("home-heading")) }
+        item { HomeHeadingRow(state, c, Modifier.catalogHeadingTarget(heading).probe("home-heading")) }
         if (!state.busy && state.homeRows.isEmpty()) item { Text("Nothing to show yet. Add media in Jellyfin, then refresh."); InlineTextAction("Refresh", "home-refresh", c::home) }
-        val rows = state.homeRows.sortedBy { if (it.library) 1 else 0 }
+        val rows = state.homeRows
         items(rows, key = { it.key }) { row ->
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                CatalogHeading(row.title, section = true)
+                HomeRowHeading(row, state, c)
                 CatalogLane(row.key, row.items.firstOrNull()?.id, up = heading.takeIf { row.key == rows.first().key }, modifier = Modifier.testTag("row:${row.key}")) {
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     items(row.items, key = { it.id }) { item ->
-                        CatalogCard(item, account, row.wide || row.library, { c.open(item) }, Modifier.width(if(row.wide || row.library) 232.dp else 156.dp).catalogLaneItem(item.id).focusOutline().probe("card:${row.key}:${item.id}"), announcement = catalogAnnouncement(item), tag = "card:${row.key}:${item.id}")
+                        CatalogCard(item, account, row.wide || row.library, { c.open(item) }, Modifier.width(if(row.wide || row.library) 232.dp else 156.dp).catalogLaneItem(item.id).focusOutline().probe("card:${row.key}:${item.id}"), announcement = catalogAnnouncement(item), tag = "card:${row.key}:${item.id}", subtitle = homeSubtitle(row, item))
                     }
                 }
                 }
@@ -189,26 +189,36 @@ internal fun Modifier.catalogLaneItem(key: String): Modifier {
 internal fun LibraryPage(state: DesktopState, c: DesktopController) {
     val account = state.account ?: return
     val grid = rememberLazyGridState()
-    LaunchedEffect(state.library?.id, state.sortBy, state.descending) { grid.scrollToItem(0) }
+    val rows = rememberLazyListState()
+    LaunchedEffect(state.library?.id, state.sortBy, state.descending, state.catalog.filters) { grid.scrollToItem(0); rows.scrollToItem(0) }
     LaunchedEffect(grid, state.items.size) { snapshotFlow { grid.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0 }.collect { if(it >= state.items.size-12 && !state.busy && state.items.size < state.total) c.loadMore() } }
+    LaunchedEffect(rows, state.items.size) { snapshotFlow { rows.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0 }.collect { if(state.catalog.listView && it >= state.items.size-12 && !state.busy && state.items.size < state.total) c.loadMore() } }
+    LibraryJumpEffect(state, c) { index -> if (state.catalog.listView) rows.scrollToItem(index) else grid.scrollToItem(index) }
     if (state.library?.let(c::isLiveTvView) == true) { DesktopLiveTvPage(c); return }
     Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             CatalogHeading(state.library?.name ?: "Library", Modifier.weight(1f))
-            Box(Modifier.height(40.dp), contentAlignment = Alignment.Center) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Choice("Sort", listOf("SortName" to "Title", "DateCreated" to "Date added", "PremiereDate" to "Release date"), state.sortBy, "sort") { c.browse(state.library!!, it, state.descending) }
-                    OutlinedButton(onClick = { c.browse(state.library!!,state.sortBy,!state.descending) }, modifier = Modifier.controlFocus().probe("sort-direction")) { Text(if(state.descending) "Descending ↓" else "Ascending ↑") }
-                }
-            }
         }
-        Text("${state.total} items", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        if (state.items.isEmpty() && !state.busy) Text("This library is empty.")
+        LibraryToolbar(state, c)
+        LibraryFilterBar(state, c)
+        state.catalog.queueMessage?.let { Text(it, Modifier.semantics { liveRegion = LiveRegionMode.Polite }.probe("queue-message")) }
+        Text(titleCountLabel(state.total), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (state.items.isEmpty() && !state.busy) Text(libraryEmptyLine(state), Modifier.probe("library-empty"))
+        Row(Modifier.weight(1f)) {
         Box(Modifier.weight(1f)) {
+        if (state.catalog.listView) {
+            LazyColumn(Modifier.fillMaxSize().padding(end = 20.dp), state = rows, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(state.items, key = { it.id }) { item -> LibraryListRow(item, account, c) }
+            }
+            VerticalScrollbar(rememberScrollbarAdapter(rows), Modifier.align(Alignment.CenterEnd).fillMaxHeight())
+        } else {
         LazyVerticalGrid(GridCells.FixedSize(156.dp), state = grid, modifier = Modifier.fillMaxSize().padding(end = 20.dp), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             items(state.items, key = { it.id }) { item -> CatalogCard(item,account,false,{c.open(item)},Modifier.focusOutline().probe("grid:${item.id}"), announcement = catalogAnnouncement(item), tag = "grid:${item.id}") }
         }
         VerticalScrollbar(rememberScrollbarAdapter(grid), Modifier.align(Alignment.CenterEnd).fillMaxHeight())
+        }
+        }
+        LetterRail(state, c)
         }
     }
 }
@@ -280,6 +290,7 @@ internal fun DetailPage(state: DesktopState, c: DesktopController) {
                 }
             }
         }
+        item(key = "discovery") { DetailDiscoveryRows(state, c) }
     }
     }
     VerticalScrollbar(rememberScrollbarAdapter(detailState), Modifier.align(Alignment.CenterEnd).fillMaxHeight())

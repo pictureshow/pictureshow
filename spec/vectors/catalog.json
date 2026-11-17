@@ -1748,6 +1748,89 @@
           "kind": "success"
         }
       }
+    },
+    {
+      "id": "catalog-sort-names-letter-rail",
+      "operation": "http",
+      "input": {
+        "action": "catalog.sortNames",
+        "parentId": "library",
+        "includeItemTypes": "Movie",
+        "recursive": true,
+        "sortBy": "SortName",
+        "descending": false,
+        "filters": {
+          "genre": "Drama",
+          "unwatched": true
+        },
+        "responses": [
+          {
+            "status": 200,
+            "body": {
+              "Items": [
+                {
+                  "Id": "a",
+                  "Name": "Alpha",
+                  "Type": "Movie",
+                  "SortName": "alpha"
+                }
+              ],
+              "TotalRecordCount": 1
+            }
+          }
+        ]
+      },
+      "expected": {
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/jellyfin/Items",
+            "query": {
+              "userId": [
+                "viewer"
+              ],
+              "parentId": [
+                "library"
+              ],
+              "recursive": [
+                "true"
+              ],
+              "includeItemTypes": [
+                "Movie"
+              ],
+              "sortBy": [
+                "SortName"
+              ],
+              "sortOrder": [
+                "Ascending"
+              ],
+              "fields": [
+                "SortName"
+              ],
+              "enableImages": [
+                "false"
+              ],
+              "enableUserData": [
+                "false"
+              ],
+              "limit": [
+                "10000"
+              ],
+              "genres": [
+                "Drama"
+              ],
+              "isPlayed": [
+                "false"
+              ]
+            },
+            "authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\"",
+            "body": null
+          }
+        ],
+        "result": {
+          "kind": "success"
+        }
+      }
     }
   ]
 }

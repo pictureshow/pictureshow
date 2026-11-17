@@ -55,6 +55,7 @@ import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.double
@@ -423,6 +424,22 @@ class ReferenceParityVectorsTest {
                         startIndex = input.optionalInt("startIndex") ?: 0,
                         limit = input.optionalInt("limit") ?: 60,
                         ids = input["ids"]?.jsonArray?.map { it.jsonPrimitive.content }.orEmpty()
+                    )
+                )
+                "catalog.sortNames" -> catalog.sortNames(
+                    account,
+                    BrowseQuery(
+                        parentId = input.text("parentId"),
+                        includeItemTypes = input.optionalText("includeItemTypes"),
+                        recursive = input.bool("recursive", false),
+                        sortBy = input.text("sortBy"),
+                        descending = input.bool("descending", false),
+                        filters = input["filters"]?.jsonObject?.let { f ->
+                            LibraryFilters(
+                                genre = f["genre"]?.jsonPrimitive?.contentOrNull,
+                                unwatched = f["unwatched"]?.jsonPrimitive?.booleanOrNull ?: false
+                            )
+                        } ?: LibraryFilters()
                     )
                 )
                 "catalog.played" -> catalog.played(account, input.text("itemId"), input.bool("value"))
