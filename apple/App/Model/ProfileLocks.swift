@@ -48,11 +48,28 @@ final class ProfileLockKeychain: ProfileLockPersistence {
 }
 
 extension AppModel {
-    /// AUTH-18: no Pictureshow screen visible (`background`) starts the time away; any visible phase ends it. Five
-    /// minutes or more away (or a restart in between) locks again like a fresh start, and a viewing on screen closes
-    /// so nothing plays behind the lock. Returns whether it locked.
+    /// AUTH-18: no Pictureshow screen visible (`background`) starts the time away; any visible phase ends it. A
+    /// picture-in-picture window counts as in use only while it plays. Five minutes or more away (or a restart in
+    /// between) locks again like a fresh start, and a viewing still open closes so nothing plays behind the lock.
+    /// Returns whether it locked.
     @discardableResult func sceneMoved(to phase: ScenePhase, now: Int64 = ProfilePin.monotonicNow()) -> Bool {
-        if phase == .background {
+        sceneInBackground = phase == .background
+        return awayChanged(now: now)
+    }
+
+    /// The picture-in-picture window opened, closed, paused or played. Pausing or finishing in the background starts
+    /// the time away, and closing the window keeps that earlier start; playing again or returning to full screen (the
+    /// scene becoming visible) ends it, locking first if it reached five minutes.
+    @discardableResult func pictureInPictureMoved(active: Bool, playing: Bool, now: Int64 = ProfilePin.monotonicNow()) -> Bool {
+        guard active != pictureInPictureActive || playing != pictureInPicturePlaying else { return false }
+        pictureInPictureActive = active
+        pictureInPicturePlaying = playing
+        return awayChanged(now: now)
+    }
+
+    private func awayChanged(now: Int64) -> Bool {
+        if ProfilePin.awayRuns(sceneVisible: !sceneInBackground, pictureInPicture: pictureInPictureActive, playing: pictureInPicturePlaying) {
+            // Already away keeps the earlier start: a paused window that then closes counts from the pause.
             pins.backgrounded(now: now)
             return false
         }
@@ -63,6 +80,8 @@ extension AppModel {
             // Nothing plays behind the lock: the viewing closes and a watch-together group is left (not paused), since
             // following a group would start the next entry behind the lock.
             if syncPlay.participating { syncPlay.leave() }
+            // A viewing still open (a picture-in-picture window included) ends through its normal stop.
+            activeController?.close()
             player = nil
         }
         return true

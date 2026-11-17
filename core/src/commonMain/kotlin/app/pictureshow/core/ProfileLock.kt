@@ -148,6 +148,14 @@ fun profilePinProofKept(event: ProfilePinProofEvent): Boolean = when (event) {
     ProfilePinProofEvent.SIGN_IN_LANDED, ProfilePinProofEvent.SETUP_CANCELLED -> true
 }
 
+/**
+ * AUTH-18: whether the time away runs. It runs while no Pictureshow screen is visible, except while a picture-in-picture
+ * window plays: a paused or ended window counts as away from that moment. The shared vectors pin the rule each
+ * platform's relock wiring follows.
+ */
+fun profilePinAwayRuns(sceneVisible: Boolean, pictureInPicture: Boolean, playing: Boolean): Boolean =
+    !sceneVisible && !(pictureInPicture && playing)
+
 /** LOCKED_OUT: the hard limit was reached and only the server password opens this viewer now. */
 enum class ProfilePinResult { UNLOCKED, WRONG, WAIT, LOCKED_OUT }
 

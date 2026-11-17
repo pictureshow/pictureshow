@@ -25,6 +25,22 @@ public struct ProfileLock: Codable, Equatable, Sendable {
 
 public enum ProfileUnlockReason: String, Sendable { case START, SWITCH }
 
+/// What can happen to a password proof (AUTH-19).
+public enum ProfilePinProofEvent: String, Sendable {
+    /// A PIN was set, changed, turned off, or its opening question changed.
+    case CHANGE_MADE
+    /// Another viewer became current after the proven one had been.
+    case VIEWER_CHANGED
+    /// Five minutes away (AUTH-18).
+    case RELOCKED
+    /// The PIN settings were left, so the next visit is a new one.
+    case SETTINGS_LEFT
+    /// The proven viewer became current: the sign-in landing.
+    case SIGN_IN_LANDED
+    /// The new-PIN screen was cancelled without a change.
+    case SETUP_CANCELLED
+}
+
 /// LOCKED_OUT: the hard limit was reached and only the server password opens this viewer now.
 /// UNAVAILABLE: the saved PIN couldn't be read or checked on this device, so it stays locked (fail closed).
 public enum ProfilePinResult: Equatable, Sendable { case unlocked, wrong, wait, lockedOut, unavailable }
@@ -94,6 +110,23 @@ public enum ProfilePin {
 
     /// Whether Settings may change, turn off or stop asking for a viewer's PIN (AUTH-19). The first PIN is free; after
     /// that the current PIN has to be typed, or the viewer signed in with its password in this run.
+    /// Whether a password proof survives `event`. It is one-time like a typed current PIN: the change it was for uses
+    /// it up, and so do leaving the PIN settings, leaving that viewer and locking again, so a parent's sign-in can't
+    /// leave a viewer whose PIN anyone may then turn off.
+    /// AUTH-18: whether the time away runs. It runs while no Pictureshow screen is visible, except while a
+    /// picture-in-picture window plays: picture-in-picture counts as in use only while it plays, so a paused or
+    /// finished window left open is time away like any other.
+    public static func awayRuns(sceneVisible: Bool, pictureInPicture: Bool, playing: Bool) -> Bool {
+        !sceneVisible && !(pictureInPicture && playing)
+    }
+
+    public static func proofKept(_ event: ProfilePinProofEvent) -> Bool {
+        switch event {
+        case .CHANGE_MADE, .VIEWER_CHANGED, .RELOCKED, .SETTINGS_LEFT: return false
+        case .SIGN_IN_LANDED, .SETUP_CANCELLED: return true
+        }
+    }
+
     public static func changeAllowed(hasPin: Bool, pinConfirmed: Bool, passwordProven: Bool) -> Bool {
         !hasPin || pinConfirmed || passwordProven
     }
@@ -206,6 +239,8 @@ public protocol ProfileLockPersistence {
     @ObservationIgnored private var changeGrant: String?
     /// The viewer that signed in with its password in this run, which may change its PIN without the old one.
     @ObservationIgnored private var passwordKey: String?
+    /// Whether the proven viewer has become current yet (the sign-in lands a moment after the proof).
+    @ObservationIgnored private var passwordLanded = false
     /// Monotonic time Pictureshow left the screen, while it is away (AUTH-18).
     @ObservationIgnored public private(set) var backgroundedAt: Int64?
 
@@ -266,7 +301,12 @@ public protocol ProfileLockPersistence {
     }
 
     /// Pictureshow left the screen. `now` is the monotonic clock.
-    public func backgrounded(now: Int64) { backgroundedAt = now }
+    /// Away from `now`, unless already away: a paused picture-in-picture window that then closes keeps its earlier start.
+    public func backgrounded(now: Int64) { if backgroundedAt == nil { backgroundedAt = now } }
+
+    /// Pictureshow is in use again without coming to the front (a picture-in-picture window playing): the time away
+    /// stops counting until it is left again.
+    public func inUse() { backgroundedAt = nil }
 
     /// Pictureshow is back on screen. After five minutes away it counts as opening it again: every unlock, change
     /// permission and password proof is dropped, and the viewer on screen is asked like at a fresh start. Returns
@@ -275,20 +315,32 @@ public protocol ProfileLockPersistence {
         let relock = ProfilePin.relock(backgroundedAt: backgroundedAt, now: now)
         backgroundedAt = nil
         if relock {
-            admitted = nil; changeGrant = nil; passwordKey = nil
+            admitted = nil; changeGrant = nil; proofEvent(.RELOCKED)
             openedSeen = false; opened = nil
             unlocked = nil
         }
         return relock
     }
 
-    /// Ends a one-change permission unused: the new-PIN screen was cancelled or left (AUTH-19).
+    /// Ends a one-change permission unused: the new-PIN screen was cancelled or left (AUTH-19). A password proof
+    /// survives a cancelled new-PIN screen.
     public func dropChangeGrant() { changeGrant = nil }
+
+    /// Leaving the PIN settings ends both permissions: a typed PIN and a password proof (AUTH-19).
+    public func leftPinSettings() {
+        changeGrant = nil
+        proofEvent(.SETTINGS_LEFT)
+    }
+
+    private func proofEvent(_ event: ProfilePinProofEvent) {
+        if !ProfilePin.proofKept(event) { passwordKey = nil; passwordLanded = false }
+    }
 
     /// A password or Quick Connect sign-in: the viewer is open and may make one PIN change without the old PIN, until
     /// that change, another viewer becoming current, or a relock.
     public func provenByPassword(_ key: String) {
         passwordKey = key
+        passwordLanded = false
         unlocked = key
     }
 
@@ -304,7 +356,9 @@ public protocol ProfileLockPersistence {
         if !openedSeen { opened = key; openedSeen = true }
         // A change permission belongs to the viewer it was typed for; becoming anyone else ends it.
         if changeGrant != nil && changeGrant != key { changeGrant = nil }
-        if passwordKey != nil && passwordKey != key { passwordKey = nil }
+        if let proven = passwordKey {
+            if key == proven { passwordLanded = true } else if passwordLanded { proofEvent(.VIEWER_CHANGED) }
+        }
         if key == nil || unlocked == key { admitted = key; return false }
         // Unlocking another viewer happens just before it becomes current, so the open one stays open through that
         // moment instead of flashing its own lock screen.
@@ -407,6 +461,6 @@ public protocol ProfileLockPersistence {
     /// password proved once doesn't leave the PIN open to whoever picks the device up next (AUTH-19).
     private func useChangePermission(_ key: String) {
         if changeGrant == key { changeGrant = nil }
-        if passwordKey == key { passwordKey = nil }
+        if passwordKey == key { proofEvent(.CHANGE_MADE) }
     }
 }

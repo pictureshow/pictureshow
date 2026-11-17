@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "suite": "sync-create-queue",
+  "description": "SYN-01/SYN-03: Create with an item (a title page's 'Create group and watch this', or Create from an open player) queues that item to the new group once, as soon as the server confirms the membership with GroupJoined. Jellyfin sends a freshly created Idle group only GroupJoined and a Stop command, with no PlayQueue (OBSERVED on Jellyfin 12, 2026-11-17), so the queue request must not wait for a PlayQueue snapshot. Events: joined-idle/joined-waiting = GroupJoined in that state; stop = Stop command; queue-empty = an empty PlayQueue; viewer-leave = the viewer's Leave. 'posted' lists only membership and queue requests (New, Join, Leave, SetNewQueue) after the Create, in order.",
+  "cases": [
+    {
+      "id": "create-item-fresh-idle-group-queues-on-joined",
+      "prior": "none",
+      "item": { "itemId": "title-x", "startTicks": "550000000" },
+      "events": ["joined-idle", "stop"],
+      "posted": ["New", "SetNewQueue"]
+    },
+    {
+      "id": "create-item-after-leaving-a-group-queues-on-joined",
+      "prior": "joined-then-left",
+      "item": { "itemId": "title-x", "startTicks": "550000000" },
+      "events": ["joined-idle", "stop"],
+      "posted": ["New", "SetNewQueue"]
+    },
+    {
+      "id": "create-item-waiting-group-queues-once",
+      "prior": "none",
+      "item": { "itemId": "title-x", "startTicks": "0" },
+      "events": ["joined-waiting", "queue-empty"],
+      "posted": ["New", "SetNewQueue"]
+    },
+    {
+      "id": "create-item-waits-for-joined",
+      "prior": "none",
+      "item": { "itemId": "title-x", "startTicks": "550000000" },
+      "events": [],
+      "posted": ["New"]
+    },
+    {
+      "id": "create-item-leave-before-joined-drops-item",
+      "prior": "joined-then-left",
+      "item": { "itemId": "title-x", "startTicks": "550000000" },
+      "events": ["viewer-leave", "joined-idle", "stop"],
+      "posted": ["New", "Leave"]
+    },
+    {
+      "id": "create-without-item-queues-nothing",
+      "prior": "joined-then-left",
+      "item": null,
+      "events": ["joined-idle", "stop"],
+      "posted": ["New"]
+    }
+  ]
+}

@@ -2501,6 +2501,12 @@ enum SpecCaseManifest {
         confirmed-server-left-clears-membership|sync-membership-registration/case
         definite-denial-clears-unsent-cancellation|sync-membership-registration/case
         uncertain-post-retains-server-cleanup|sync-membership-registration/case
+        create-item-fresh-idle-group-queues-on-joined|sync-create-queue/case
+        create-item-after-leaving-a-group-queues-on-joined|sync-create-queue/case
+        create-item-waiting-group-queues-once|sync-create-queue/case
+        create-item-waits-for-joined|sync-create-queue/case
+        create-item-leave-before-joined-drops-item|sync-create-queue/case
+        create-without-item-queues-nothing|sync-create-queue/case
         sync-application.deferred-server-7000|sync-application/deferred-seek
         sync-application.deferred-server-0|sync-application/deferred-seek
         sync-application.deferred-viewer-7000|sync-application/deferred-seek
@@ -2965,6 +2971,25 @@ enum SpecCaseManifest {
         touch-back-sheet-first|application/touch-player-back
         touch-back-menu-next|application/touch-player-back
         touch-back-controls-showing-exits|application/touch-player-back
+        touch-pip-playing-video|application/touch-pip-allowed
+        touch-pip-never-on-tv|application/touch-pip-allowed
+        touch-pip-device-without-feature|application/touch-pip-allowed
+        touch-pip-no-video-yet|application/touch-pip-allowed
+        touch-pip-error-card|application/touch-pip-allowed
+        touch-pip-loading-next|application/touch-pip-allowed
+        touch-pip-leaving|application/touch-pip-allowed
+        touch-pip-finished|application/touch-pip-allowed
+        touch-pip-handed-off|application/touch-pip-allowed
+        touch-pip-actions-playing|application/touch-pip-actions
+        touch-pip-actions-paused|application/touch-pip-actions
+        touch-pip-actions-live-no-timeshift|application/touch-pip-actions
+        touch-pip-actions-live-at-edge|application/touch-pip-actions
+        touch-pip-aspect-1080p|application/touch-pip-aspect
+        touch-pip-aspect-unknown|application/touch-pip-aspect
+        touch-pip-aspect-scope-clamped|application/touch-pip-aspect
+        touch-pip-aspect-tall-clamped|application/touch-pip-aspect
+        touch-pip-aspect-anamorphic-dvd|application/touch-pip-aspect
+        touch-pip-aspect-4x3|application/touch-pip-aspect
         access-refusal-sign-in|application/access-refusal
         access-refusal-in-session|application/access-refusal
         profile-pin-valid-four-digits|application/profile-pin-valid
@@ -3003,8 +3028,19 @@ enum SpecCaseManifest {
         profile-pin-relock-restart-while-away-locks|application/profile-pin-relock
         profile-pin-change-first-pin-is-free|application/profile-pin-change
         profile-pin-change-open-viewer-is-not-enough|application/profile-pin-change
+        profile-pin-away-visible|application/profile-pin-away
+        profile-pin-away-background|application/profile-pin-away
+        profile-pin-away-pip-playing|application/profile-pin-away
+        profile-pin-away-pip-paused|application/profile-pin-away
+        profile-pin-away-visible-pip-paused|application/profile-pin-away
         profile-pin-change-current-pin-typed|application/profile-pin-change
         profile-pin-change-password-sign-in|application/profile-pin-change
+        profile-pin-proof-change-made|application/profile-pin-proof
+        profile-pin-proof-viewer-changed|application/profile-pin-proof
+        profile-pin-proof-relocked|application/profile-pin-proof
+        profile-pin-proof-settings-left|application/profile-pin-proof
+        profile-pin-proof-sign-in-landed|application/profile-pin-proof
+        profile-pin-proof-setup-cancelled|application/profile-pin-proof
         quick-connect-code-pasted-with-spaces|application/quick-connect-code
         quick-connect-code-too-short|application/quick-connect-code
         quick-connect-code-too-long|application/quick-connect-code

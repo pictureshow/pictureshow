@@ -30,7 +30,7 @@ final class SyncVectorTests: XCTestCase {
         }
         print("SyncPlay vectors: \(executed) cases passed, \(assertions) assertions, \(failures.count) failures across \(SyncVectorRunner.suites.count) suites")
         XCTAssertTrue(failures.isEmpty, failures.joined(separator: "\n"))
-        XCTAssertEqual(executed, 431)
+        XCTAssertEqual(executed, 437)
     }
 
     func testRunnerRejectsUnknownOperationsFieldsAndAssertions() throws {

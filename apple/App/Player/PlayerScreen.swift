@@ -325,6 +325,7 @@ struct PlayerContent: View {
     @State private var scrubbing: Double?
     @State private var showingGroup = false
     @State private var findingSubtitles = false
+    @StateObject private var pip = PictureInPictureHost()
     /// Read so a rotation re-evaluates `topClearance`.
     @Environment(\.verticalSizeClass) private var verticalSizeClass
 
@@ -338,10 +339,22 @@ struct PlayerContent: View {
 
     var body: some View {
         ZStack {
-            VideoSurface(player: controller.player)
+            VideoSurface(player: controller.player) { pip.attach($0) }
                 .ignoresSafeArea()
-                .onTapGesture { toggleControls() }
+                .onTapGesture { if !pip.active { toggleControls() } }
                 .accessibilityHidden(true)
+            if pip.active {
+                // TOUCH-15: the picture is in the system window; this screen says so until it comes back.
+                VStack(spacing: 10) {
+                    Image(systemName: "pip").font(.system(size: 44)).foregroundStyle(.secondary)
+                    Text("Playing in picture in picture").font(.headline)
+                    Text("Tap the window and choose expand to come back here.")
+                        .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                }
+                .padding(32)
+                .allowsHitTesting(false)
+                .accessibilityElement(children: .combine)
+            }
             if let route = controller.externalRoute {
                 // The picture is on the receiver; say where, instead of leaving a black screen (CAST-07).
                 VStack(spacing: 10) {
@@ -354,8 +367,11 @@ struct PlayerContent: View {
                 .allowsHitTesting(false)
                 .accessibilityElement(children: .combine)
             }
-            PlayerOverlays(controller: controller, controlsVisible: controlsVisible)
-            if controlsVisible { controls.transition(.opacity) }
+            if !pip.active {
+                PlayerOverlays(controller: controller, controlsVisible: controlsVisible)
+            }
+            if controlsVisible && !pip.active { controls.transition(.opacity) }
+            if !pip.active {
             VStack(alignment: .trailing, spacing: 12) {
                 Spacer()
                 if let segment = controller.skippable {
@@ -371,6 +387,7 @@ struct PlayerContent: View {
             .padding(.trailing, 24)
             .padding(.bottom, controlsVisible ? 110 : 40)
             .frame(maxWidth: .infinity, alignment: .trailing)
+            }
         }
         .background(Color.black)
         .animation(.easeInOut(duration: 0.2), value: controlsVisible)
@@ -392,9 +409,56 @@ struct PlayerContent: View {
         .sheet(isPresented: $showingGroup) {
             WatchTogetherSheet(sync: controller.app.syncPlay, item: nil).environmentObject(controller.app)
         }
-        .onAppear { scheduleHide() }
+        .onAppear {
+            pip.controller = controller
+            // AUTH-18: the window keeps Pictureshow in use only while it plays.
+            let app = controller.app
+            pip.onUse = { active, playing in app.pictureInPictureMoved(active: active, playing: playing) }
+            scheduleHide()
+        }
         .onChange(of: controller.isPlaying) { scheduleHide() }
         .onChange(of: showingGroup) { scheduleHide() }
+        // TOUCH-15: the window follows the gate: no error or loading card, no finished title, nothing on AirPlay.
+        .onChange(of: PictureInPictureHost.settings(for: controller), initial: true) { _, settings in pip.update(settings) }
+        .onChange(of: pip.active) { _, active in
+            if active {
+                // Sheets and menus close on entering the window; the controls come back with the full player.
+                findingSubtitles = false
+                showingGroup = false
+                scrubbing = nil
+                hideTask?.cancel()
+                controlsVisible = false
+            } else if !controller.finished {
+                controlsVisible = true
+                scheduleHide()
+            }
+        }
+    }
+
+    /// TOUCH-15: More offers Picture in picture while the gate and AVKit allow it.
+    private var pictureInPictureOffered: Bool {
+        #if DEBUG
+        // The iOS Simulator reports no picture-in-picture (OBSERVED on iOS 18 and 27 runtimes), so captures of the menu
+        // can ask to see it with the gate alone: PICTURESHOW_PIP_PREVIEW=1. Choosing it then only plays the in-app part.
+        if PictureInPictureHost.preview { return PictureInPicture.allowed(controller.pictureInPictureState(tvInterface: false, deviceSupports: true)) }
+        #endif
+        return PictureInPictureHost.settings(for: controller).allowed && pip.possible
+    }
+
+    private var moreMenu: some View {
+        Menu {
+            Button {
+                #if DEBUG
+                if PictureInPictureHost.preview { pip.willStart(); return }
+                #endif
+                pip.start()
+            } label: { Label("Picture in picture", systemImage: "pip.enter") }
+                .accessibilityIdentifier("player-pip")
+        } label: {
+            Image(systemName: "ellipsis.circle").font(.title3).frame(width: 44, height: 44)
+        }
+        .accessibilityLabel("More")
+        .simultaneousGesture(TapGesture().onEnded { hideTask?.cancel() })
     }
 
     private var controls: some View {
@@ -442,6 +506,7 @@ struct PlayerContent: View {
                 SyncGroupChip(sync: controller.app.syncPlay) { showingGroup = true }
             }
             trackMenu
+            if pictureInPictureOffered { moreMenu }
             // SYN-10: AirPlay can't follow a group's timeline; the viewer is asked to leave the group first.
             if controller.sync != nil && controller.app.syncPlay.participating {
                 SyncAirPlayButton(sync: controller.app.syncPlay) { [weak controller] in controller?.airPlayAfterLeaving() }
@@ -557,11 +622,14 @@ struct PlayerContent: View {
 /// AVPlayerLayer-backed view.
 struct VideoSurface: UIViewRepresentable {
     let player: AVPlayer
+    /// Hands the layer to picture-in-picture (TOUCH-15), which shrinks this same layer into the system window.
+    var attached: (AVPlayerLayer) -> Void = { _ in }
     func makeUIView(context: Context) -> PlayerLayerView {
         let view = PlayerLayerView()
         view.playerLayer.player = player
         view.playerLayer.videoGravity = .resizeAspect
         view.backgroundColor = .black
+        attached(view.playerLayer)
         return view
     }
     func updateUIView(_ view: PlayerLayerView, context: Context) {}

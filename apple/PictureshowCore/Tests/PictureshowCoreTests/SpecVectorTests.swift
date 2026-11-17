@@ -56,7 +56,7 @@ final class SpecVectorTests:XCTestCase {
         try await runVectors(operations: ["detail-completion-may-apply", "detail-pending-feedback", "detail-pending-plain-label", "catalog-arrival-animation"])
     }
     func testPlayerExtrasVectors() async throws {
-        try await runVectors(operations: ["track-menu-empty", "controls-restore-last-action", "touch-player-back", "quick-connect-code", "quick-connect-approval-result", "access", "failure", "initial-language", "language-choices", "order", "details", "title", "adopt"])
+        try await runVectors(operations: ["track-menu-empty", "controls-restore-last-action", "touch-player-back", "touch-pip-allowed", "touch-pip-actions", "touch-pip-aspect", "quick-connect-code", "quick-connect-approval-result", "access", "failure", "initial-language", "language-choices", "order", "details", "title", "adopt"])
     }
     func testPlaybackInformationVectors() async throws {
         try await runVectors(operations: ["reason", "method", "subtitle", "bitrate", "speed"])
@@ -412,6 +412,9 @@ final class SpecVectorTests:XCTestCase {
         case "prepare-preserve-video":return try await prepareRecovery(i,context:context,account:account,identity:identity)
         case "track-menu-empty":return TrackMenuNotice.empty(type:try required(String.self,i,"type"),tracks:try required(Int.self,i,"tracks")) as Any? ?? NSNull()
         case "controls-restore-last-action":return ControlsLastAction.restores(hiddenAtMs:try required(Int64?.self,i,"hiddenAtMs"),nowMs:try required(Int64.self,i,"nowMs"))
+        case "touch-pip-allowed":return PictureInPicture.allowed(PictureInPictureState(tvInterface:try required(Bool.self,i,"tvInterface"),deviceSupports:try required(Bool.self,i,"deviceSupports"),hasVideo:try required(Bool.self,i,"hasVideo"),error:try required(Bool.self,i,"error"),switching:try required(Bool.self,i,"switching"),exiting:try required(Bool.self,i,"exiting"),atEnd:try required(Bool.self,i,"atEnd"),handedOff:try required(Bool.self,i,"handedOff")))
+        case "touch-pip-actions":return PictureInPicture.actions(primary:try required(String?.self,i,"primary"),canSeekBack:try required(Bool.self,i,"canSeekBack"),canSeekForward:try required(Bool.self,i,"canSeekForward")).map { ["action":$0.action,"enabled":$0.enabled] }
+        case "touch-pip-aspect":let a=PictureInPicture.aspect(width:try required(Int.self,i,"width"),height:try required(Int.self,i,"height"),pixelRatio:try required(Double.self,i,"pixelRatio"));return [a.width,a.height]
         case "touch-player-back":return TouchPlayerBack.action(sheetOpen:try required(Bool.self,i,"sheetOpen"),menuOpen:try required(Bool.self,i,"menuOpen"))
         case "quick-connect-code":let input=try required(String.self,i,"input");return ["normalized":QuickConnectApproval.normalize(input),"valid":QuickConnectApproval.valid(input)]
         // AUTH-17: a 403 is an access refusal, never a wrong password.
@@ -425,6 +428,10 @@ final class SpecVectorTests:XCTestCase {
             let lockedOut=ProfilePin.lockedOut(next)
             return ["failures":next.failures,"failedAt":next.failedAt,"cooldownMs":lockedOut ? NSNull() as Any : ProfilePin.cooldown(next,now:now) as Any,"lockedOut":lockedOut]
         case "profile-pin-relock":return ProfilePin.relock(backgroundedAt:try required(Int64?.self,i,"backgroundedAt"),now:try required(Int64.self,i,"now"))
+        case "profile-pin-away": return ProfilePin.awayRuns(sceneVisible: try required(Bool.self,i,"sceneVisible"), pictureInPicture: try required(Bool.self,i,"pictureInPicture"), playing: try required(Bool.self,i,"playing"))
+        case "profile-pin-proof":
+            guard let event = ProfilePinProofEvent(rawValue: try required(String.self,i,"event")) else { throw NSError(domain:"Unknown proof event",code:1) }
+            return ProfilePin.proofKept(event)
         case "profile-pin-change":return ProfilePin.changeAllowed(hasPin:try required(Bool.self,i,"hasPin"),pinConfirmed:try required(Bool.self,i,"pinConfirmed"),passwordProven:try required(Bool.self,i,"passwordProven"))
         case "quick-connect-approval-result":return QuickConnectApproval.result(status:try required(Int.self,i,"status"),approved:try required(Bool?.self,i,"approved")).rawValue
         default:throw NSError(domain:"Unknown vector operation \(operation)",code:1)

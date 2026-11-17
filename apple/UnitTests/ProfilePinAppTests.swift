@@ -200,6 +200,98 @@ import PictureshowCore
         XCTAssertFalse(app.sceneMoved(to: .active, now: 2_300_001), "the same return isn't counted twice")
     }
 
+    private func unlockedModel() async throws -> AppModel {
+        let pins = FakeKeychain()
+        pins.items[ProfileLockKeychain.service(viewer.key)] = try savedLock("1234")
+        let app = try model(pins: pins)
+        _ = await app.pins.verify(viewer.key, pin: "1234", now: 10)
+        app.player = PlayerRequest(account: viewer, item: MediaItem(id: "m1", type: "Movie"), fromStart: false)
+        return app
+    }
+
+    /// TOUCH-15 with AUTH-18: a playing picture-in-picture window is Pictureshow in use, whichever comes first (the
+    /// window or the scene going to the background); the time starts when it closes in the background.
+    func testPlayingPictureInPictureIsNotTimeAwayAndClosingItStartsTheTimer() async throws {
+        let app = try await unlockedModel()
+        app.pictureInPictureMoved(active: true, playing: true, now: 1_000_000)
+        app.sceneMoved(to: .background, now: 1_000_001)
+        XCTAssertFalse(app.sceneMoved(to: .active, now: 1_000_001 + 3_600_000), "an hour of the window playing is not away")
+        XCTAssertFalse(app.pinGateNeeded(viewer))
+
+        app.pictureInPictureMoved(active: false, playing: false, now: 5_000_000)
+        app.sceneMoved(to: .background, now: 5_000_001)
+        app.pictureInPictureMoved(active: true, playing: true, now: 5_000_002)
+        XCTAssertFalse(app.sceneMoved(to: .active, now: 5_000_002 + 3_600_000), "the window opening just after the scene left stops the time away")
+
+        app.sceneMoved(to: .background, now: 9_000_000)
+        app.pictureInPictureMoved(active: false, playing: false, now: 9_600_000)
+        XCTAssertFalse(app.sceneMoved(to: .active, now: 9_600_000 + 299_999), "the time away starts when the window closes")
+        app.sceneMoved(to: .background, now: 9_900_000)
+        XCTAssertTrue(app.sceneMoved(to: .active, now: 9_900_000 + 300_000), "and five minutes from then locks")
+        XCTAssertTrue(app.pinGateNeeded(viewer))
+        XCTAssertNil(app.player, "the viewing closed at the relock")
+        XCTAssertNil(app.shownPlayer, "no player or window past the gate")
+    }
+
+    /// A paused (or finished) window left open is time away: five minutes from the pause lock, and resuming after that
+    /// locks and closes the window instead of playing behind the lock.
+    func testPausedPictureInPictureDoesNotHoldOffTheRelock() async throws {
+        let app = try await unlockedModel()
+        app.sceneMoved(to: .background, now: 1_000_000)
+        app.pictureInPictureMoved(active: true, playing: true, now: 1_000_001)
+        app.pictureInPictureMoved(active: true, playing: false, now: 2_000_000)
+        XCTAssertFalse(app.pictureInPictureMoved(active: true, playing: true, now: 2_000_000 + 299_999), "playing again within five minutes restarts nothing")
+        XCTAssertFalse(app.pinGateNeeded(viewer))
+        app.pictureInPictureMoved(active: true, playing: false, now: 3_000_000)
+        XCTAssertTrue(app.pictureInPictureMoved(active: true, playing: true, now: 3_000_000 + 300_000), "resuming after five minutes paused locks")
+        XCTAssertTrue(app.pinGateNeeded(viewer))
+        XCTAssertNil(app.shownPlayer, "the window's viewing closed at the relock")
+
+        let left = try await unlockedModel()
+        left.sceneMoved(to: .background, now: 1_000_000)
+        left.pictureInPictureMoved(active: true, playing: true, now: 1_000_001)
+        left.pictureInPictureMoved(active: true, playing: false, now: 2_000_000)
+        XCTAssertTrue(left.sceneMoved(to: .active, now: 2_000_000 + 3_600_000), "an hour with the window paused is away")
+    }
+
+    /// Closing a paused window in the background keeps the pause as the start of the time away, and returning to full
+    /// screen ends it like playing again.
+    func testClosingAPausedWindowKeepsTheEarlierStart() async throws {
+        let closed = try await unlockedModel()
+        closed.sceneMoved(to: .background, now: 1_000_000)
+        closed.pictureInPictureMoved(active: true, playing: true, now: 1_000_001)
+        closed.pictureInPictureMoved(active: true, playing: false, now: 2_000_000)
+        closed.pictureInPictureMoved(active: false, playing: false, now: 2_000_000 + 240_000)
+        XCTAssertEqual(closed.pins.backgroundedAt, 2_000_000, "the close doesn't restart the time away")
+        XCTAssertTrue(closed.sceneMoved(to: .active, now: 2_000_000 + 300_000), "five minutes from the pause locks, one from the close")
+        XCTAssertTrue(closed.pinGateNeeded(viewer))
+
+        let restored = try await unlockedModel()
+        restored.sceneMoved(to: .background, now: 1_000_000)
+        restored.pictureInPictureMoved(active: true, playing: true, now: 1_000_001)
+        restored.pictureInPictureMoved(active: true, playing: false, now: 2_000_000)
+        XCTAssertFalse(restored.sceneMoved(to: .active, now: 2_000_000 + 299_999), "back to full screen within five minutes stays open")
+        XCTAssertNil(restored.pins.backgroundedAt, "and ends the time away")
+        XCTAssertFalse(restored.pinGateNeeded(viewer))
+    }
+
+    /// A torn-down viewing takes the window's in-use state with it, whatever ends it, so the time away runs.
+    func testTearingDownThePlayerClearsPictureInPicture() async throws {
+        for teardown in ["close", "signOut", "leaveLockedViewer"] {
+            let app = try await unlockedModel()
+            app.sceneMoved(to: .background, now: 1_000_000)
+            app.pictureInPictureMoved(active: true, playing: true, now: 1_000_001)
+            switch teardown {
+            case "close": app.player = nil
+            case "signOut": app.signOut(viewer)
+            default: app.leaveLockedViewer()
+            }
+            XCTAssertFalse(app.pictureInPictureActive, teardown)
+            XCTAssertFalse(app.pictureInPicturePlaying, teardown)
+            XCTAssertEqual(app.pins.backgroundedAt != nil, true, "\(teardown): the time away runs again")
+        }
+    }
+
     func testARestartWhileAwayLocks() async throws {
         let pins = FakeKeychain()
         pins.items[ProfileLockKeychain.service(viewer.key)] = try savedLock("1234")

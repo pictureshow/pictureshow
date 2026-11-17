@@ -103,13 +103,14 @@ final class SyncFakeWorld: SyncEngineTransport, SyncEngineClock, SyncEngineSched
 }
 
 extension SyncVectorRunner {
-    static let hostSuites: Set<String> = ["sync-socket-readiness", "sync-membership-registration", "sync-application"]
+    static let hostSuites: Set<String> = ["sync-socket-readiness", "sync-membership-registration", "sync-application", "sync-create-queue"]
 
     static func host(suite: String, _ c: SyncJSON, _ id: String) throws -> Int {
         switch suite {
         case "sync-socket-readiness": return try socketReadiness(c, id)
         case "sync-membership-registration": return try membershipRegistration(c, id)
         case "sync-application": return try application(c, id)
+        case "sync-create-queue": return try createQueue(c, id)
         default: throw fail("unknown host suite \(suite)")
         }
     }
@@ -180,6 +181,64 @@ extension SyncVectorRunner {
         try check(world.operations == expected, "\(id): posted \(world.operations)")
         try check(engine.membership.phase == (try text(c, "phase")), "\(id): phase \(engine.membership.phase)")
         return 4
+    }
+
+    /// Create with an item queues it to the new group once GroupJoined confirms membership, without waiting for a
+    /// PlayQueue the server never sends to a new Idle group; an earlier group joined and left changes nothing.
+    static func createQueue(_ c: SyncJSON, _ id: String) throws -> Int {
+        try fields(c, ["id", "prior", "item", "events", "posted"])
+        let world = SyncFakeWorld()
+        world.serverOffsetMillis = 0
+        let engine = world.engine()
+        engine.socketOpened(connection: 1)
+        engine.socketKeepAlive(connection: 1, valid: true)
+        switch try text(c, "prior") {
+        case "none": break
+        case "joined-then-left":
+            engine.join(groupId: "g")
+            engine.receive(SyncFakeWorld.joined())
+            engine.receive(SyncFakeWorld.queue())
+            try check(engine.server == .confirmed, "\(id): prior membership confirmed")
+            engine.leave()
+            try check(!engine.participating, "\(id): left")
+        default: throw fail("\(id): unknown prior")
+        }
+        let item = try value(c, "item")
+        var staged: (itemId: String, startTicks: Int64)?
+        if !item.isNull {
+            try fields(item, ["itemId", "startTicks"])
+            staged = (try text(item, "itemId"), try long(item, "startTicks"))
+        }
+        world.posted.removeAll()
+        // As SyncPlaySession.create: Create, then stage the title.
+        engine.create(name: "Evening")
+        if let staged { engine.stageQueue(itemId: staged.itemId, startTicks: staged.startTicks) }
+        for event in try strings(c, "events") {
+            switch event {
+            case "joined-idle": engine.receive(SyncFakeWorld.joined(group: "g2", state: "Idle"))
+            case "joined-waiting": engine.receive(SyncFakeWorld.joined(group: "g2", state: "Waiting"))
+            case "stop": engine.receive(SyncFakeWorld.command("Stop", group: "g2", entry: "none", whenMillis: world.wallMillis, positionTicks: nil))
+            case "queue-empty": engine.receive(SyncFakeWorld.queue(group: "g2", entries: [], index: -1))
+            case "viewer-leave": engine.leave()
+            default: throw fail("\(id): unknown event \(event)")
+            }
+        }
+        let membershipOps: Set<String> = ["New", "Join", "Leave", "SetNewQueue"]
+        let expected = try strings(c, "posted")
+        try check(world.operations.filter(membershipOps.contains) == expected, "\(id): posted \(world.operations)")
+        var assertions = 1
+        if expected.contains("SetNewQueue"), let staged {
+            let body = try XCTUnwrapLike(world.posted.first { $0.operation == "SetNewQueue" }?.body, "\(id): queue body")
+            try check(body["PlayingQueue"]?.items?.compactMap(\.content) == [staged.itemId], "\(id): queued item")
+            try check(body["StartPositionTicks"]?.int64 == staged.startTicks, "\(id): start ticks")
+            assertions += 2
+        }
+        return assertions
+    }
+
+    private static func XCTUnwrapLike<T>(_ value: T?, _ message: String) throws -> T {
+        guard let value else { throw fail(message) }
+        return value
     }
 
     static func application(_ c: SyncJSON, _ id: String) throws -> Int {

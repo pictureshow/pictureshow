@@ -61,6 +61,8 @@ const spec =
 // Frozen by the Android reference and owed by this runner: visible as todos, never as passes.
 const pendingPortSuites = new Set([
     "cast-queue",
+    // SYN-01 create-with-item queues on GroupJoined (Apple/Android); web SyncPlay create owed.
+    "sync-create-queue",
     // AUTH-10 retained-card sign-out: desktop/core implementation; web runtime port owed.
     "account-sign-out",
     // SEERR: Seerr requests are on Android first; web port owed.
@@ -287,6 +289,11 @@ const pendingApplicationCases = new Map([
     ["profile-pin-change-open-viewer-is-not-enough", "profile-pin-change"],
     ["profile-pin-change-current-pin-typed", "profile-pin-change"],
     ["profile-pin-change-password-sign-in", "profile-pin-change"],
+    ["profile-pin-away-visible", "profile-pin-away"],
+    ["profile-pin-away-background", "profile-pin-away"],
+    ["profile-pin-away-pip-playing", "profile-pin-away"],
+    ["profile-pin-away-pip-paused", "profile-pin-away"],
+    ["profile-pin-away-visible-pip-paused", "profile-pin-away"],
     ["profile-pin-proof-change-made", "profile-pin-proof"],
     ["profile-pin-proof-viewer-changed", "profile-pin-proof"],
     ["profile-pin-proof-relocked", "profile-pin-proof"],
