@@ -3,8 +3,8 @@ import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
 plugins {
     kotlin("jvm")
     alias(libs.plugins.kotlin.compose)
-    id("org.jetbrains.compose") version "1.12.2"
     alias(libs.plugins.kotlin.serialization)
+    id("org.jetbrains.compose") version "1.12.2"
     id("com.mikepenz.aboutlibraries.plugin") version "15.3.0"
 }
 

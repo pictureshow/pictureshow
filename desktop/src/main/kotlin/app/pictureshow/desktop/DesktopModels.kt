@@ -7,6 +7,8 @@ import app.pictureshow.core.*
 import app.pictureshow.core.playback.*
 
 enum class DesktopRoute { Loading, Servers, Accounts, SignIn, QuickConnect, Home, Search, Person, Library, Detail, Player, Settings, LiveTv, HomeEditor, Photo,
+    /** Stream B: MUS-01..03. */
+    MusicLibrary, MusicItem, MusicNow,
     /** Stream C2: SEERR-03..06 and INFO-01..08. */
     Requests, SeerrTitle, About, Licenses, License, Supporter, ThisComputer }
 
@@ -15,7 +17,9 @@ data class DesktopSettings(
     val conversionNotice: Boolean = true,
     val autoplayNext: Boolean = true,
     val volume: Int = 80,
-    val largeInterface: Boolean = false
+    val largeInterface: Boolean = false,
+    /** MUS-06: "auto", "original", "256" or "128" (core MUSIC_QUALITIES). */
+    val musicQuality: String = "auto"
 ) {
     fun preferences() = PlaybackPreferences.decode(bitrateMbps = bitrateMbps, conversionNotice = conversionNotice)
 }
@@ -104,7 +108,9 @@ data class DesktopState(
     val search: DesktopSearchState = DesktopSearchState(),
     val person: MediaItem? = null,
     /** Stream C1: home layout, library filters and rail, title discovery rows, photos (DesktopCatalogStream.kt). */
-    val catalog: DesktopCatalogState = DesktopCatalogState()
+    val catalog: DesktopCatalogState = DesktopCatalogState(),
+    /** MusicItem: the credit an artist page reads (core ArtistRole name); null on every other page. */
+    val musicRole: String? = null
 )
 
 internal const val DESKTOP_ROOT_HOME = "home"

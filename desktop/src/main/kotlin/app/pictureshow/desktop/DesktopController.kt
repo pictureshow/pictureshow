@@ -64,6 +64,10 @@ class DesktopController(
     internal fun setNextPage(index: Int) { nextPageIndex = index }
     private val viewingMutex = kotlinx.coroutines.sync.Mutex()
     internal val events = DesktopEventLog(File(directory, "app.log"))
+    /** Music (leg 172 stream B): its own audio-only engine and queue, apart from the video player. */
+    val music = DesktopMusic(scope, store, DesktopMusicStore(File(directory, "music")), ClientDesktopMusicGateway(playbackClient, client),
+        { volume -> MpvMusicOutput(File(directory, "music-output"), volume) }, { mutable.value.settings.musicQuality }, events::log)
+    val musicBrowse = DesktopMusicBrowse(client, store, scope)
     private val inputDiagnostics = DesktopInputDiagnostics(events::log)
     private val inputListener = java.awt.event.AWTEventListener { event ->
         val source = event.source as? java.awt.Component
@@ -415,7 +419,7 @@ class DesktopController(
     fun home() = page(DesktopRoute.Home) { g -> synchronized(history) { history.clear() }; loadHome(g) }
     private suspend fun loadHome(g: Long) = loadCatalogHome(g)
     /** A sidebar library: its top page, lit as its own root (TOUCH-02). Folders opened inside it keep this root. */
-    fun browseRoot(library: MediaItem) { browse(library); updateState { it.copy(root = desktopLibraryRoot(library.id)) } }
+    fun browseRoot(library: MediaItem) { if (library.isDesktopMusic()) { musicLibrary(library); return }; browse(library); updateState { it.copy(root = desktopLibraryRoot(library.id)) } }
     /** Live TV (gap C34) has its own leg; until then the view opens an honest interim page, never "empty". */
     internal fun isLiveTvView(item: MediaItem) = item.collectionType.equals("livetv", ignoreCase = true)
     fun openLiveTv(item: MediaItem? = null) = page(DesktopRoute.LiveTv, remember = mutable.value.route != DesktopRoute.LiveTv) { g ->
@@ -426,6 +430,7 @@ class DesktopController(
     fun open(item: MediaItem) {
         if (item.type == "Person") { person(item); return }
         if (isLiveTvView(item)) { openLiveTv(item); return }
+        if (item.isDesktopMusic()) { if (item.collectionType == "music") musicLibrary(item) else musicItem(item); return }
         if (item.type == "Photo") { openPhoto(item); return }
         if (item.type in setOf("CollectionFolder", "Folder", "BoxSet", "Playlist") || item.isFolder && item.type !in setOf("Series", "Season")) browse(item) else detail(item)
     }
@@ -447,6 +452,17 @@ class DesktopController(
         }
     }
     fun detail(item: MediaItem) = page(DesktopRoute.Detail, remember = true) { g -> loadDetail(g, item) }
+    /** MUS-01: a music library opens its own tabbed page, lit as its sidebar root. */
+    fun musicLibrary(library: MediaItem) = page(DesktopRoute.MusicLibrary, remember = mutable.value.library?.id != library.id || mutable.value.route != DesktopRoute.MusicLibrary) { g ->
+        publish(g) { it.copy(library = library, root = desktopLibraryRoot(library.id)) }
+    }
+    /** MUS-02: an album, artist, genre, playlist or song. [role] is the credit an artist page reads. */
+    fun musicItem(item: MediaItem, role: app.pictureshow.core.music.ArtistRole? = null, library: String? = null) = page(DesktopRoute.MusicItem, remember = true) { g ->
+        mutable.value.account?.let { musicBrowse.forget(it, item) }
+        publish(g) { it.copy(detail = item, detailLibrary = library ?: it.library?.takeIf { l -> l.collectionType == "music" }?.id, musicRole = role?.name) }
+    }
+    /** MUS-03: Now playing and the queue. */
+    fun nowPlaying() { if (mutable.value.route != DesktopRoute.MusicNow) page(DesktopRoute.MusicNow, remember = true) { _ -> } }
     internal suspend fun loadDetail(g: Long, item: MediaItem, selected: MediaItem? = null) {
         val a = mutable.value.account ?: return
         publish(g) { it.copy(detail = item, detailLibrary = null, seasons = emptyList(), episodes = emptyList(), selectedSeason = null) }
@@ -551,6 +567,8 @@ class DesktopController(
                 publish(g) { it.copy(items = p.items, total = p.totalRecordCount) }
             } }
             DesktopRoute.LiveTv -> liveTv.refresh()
+            DesktopRoute.MusicLibrary -> s.account?.let { a -> s.library?.let { musicBrowse.library(a, it).retry() } }
+            DesktopRoute.MusicItem -> s.account?.let { a -> s.detail?.let { musicBrowse.detail(a, it, desktopMusicRole(s.musicRole), s.detailLibrary).reload() } }
             DesktopRoute.Library -> s.library?.let { browse(it, s.sortBy, s.descending) }
             DesktopRoute.Detail -> s.detail?.let { page(DesktopRoute.Detail) { g -> loadDetail(g, it) } }
             DesktopRoute.QuickConnect -> quickConnect()
@@ -612,6 +630,7 @@ class DesktopController(
         }
     }
     private suspend fun prepareViewing(g: Long, a: Account, item: MediaItem, start: Double, audio: Int? = null, subtitle: Int? = null, sourceId: String? = null, audioChosen: Boolean = audio != null, subtitleChosen: Boolean = subtitle != null, subtitleCodec: String? = null, liveChannel: LiveChannel? = null) {
+        music.beforeVideo() // MUS-04: a video start stops music, which resumes only by the viewer's Play.
         publish(g) { it.copy(detail = item, playback = null) }
         val player = try { playbackFactory(File(directory, "playback")) }
         catch (e: LinkageError) { recordDesktopPlayerFailure("factory", e); publish(g) { it.copy(error = "The desktop player is not installed correctly. Check libmpv and its native adapter.") }; return }
@@ -1095,7 +1114,7 @@ class DesktopController(
             }
         }
     }
-    suspend fun shutdown() { detachWindow(); inputDiagnostics.heartbeat(); closing = true; generation.incrementAndGet(); pageJob?.cancelAndJoin(); withContext(NonCancellable) { finishViewing() }; scope.cancel(); http.close() }
+    suspend fun shutdown() { music.closeNow(); detachWindow(); inputDiagnostics.heartbeat(); closing = true; generation.incrementAndGet(); pageJob?.cancelAndJoin(); withContext(NonCancellable) { finishViewing() }; scope.cancel(); http.close() }
     override fun close() { runBlocking { shutdown() } }
 }
 
