@@ -11,17 +11,26 @@ final class SyncVectorTests: XCTestCase {
             let doc = try SyncVectorRunner.document(suite)
             let cases = try XCTUnwrap(doc["cases"]?.items)
             let manifestIDs = Set(SpecCaseManifest.contracts.filter { $0.value.hasPrefix(suite + "/") }.map(\.key))
-            XCTAssertEqual(Set(cases.compactMap { $0["id"]?.content }), manifestIDs, suite)
-            XCTAssertNil(PendingSpecCaseManifest.suites[suite], suite)
+            let allIDs = Set(cases.compactMap { $0["id"]?.content })
+            if SyncVectorRunner.partialSuites.contains(suite) {
+                // Some cases execute here; the rest are pending with a written reason, never silently dropped.
+                XCTAssertTrue(manifestIDs.isSubset(of: allIDs) && !manifestIDs.isEmpty, suite)
+                XCTAssertEqual(PendingSpecCaseManifest.suites[suite]?.count, allIDs.count - manifestIDs.count, suite)
+                XCTAssertNotNil(PendingSpecCaseManifest.reasons[suite], suite)
+            } else {
+                XCTAssertEqual(allIDs, manifestIDs, suite)
+                XCTAssertNil(PendingSpecCaseManifest.suites[suite], suite)
+            }
             for row in cases {
                 let id = row["id"]?.content ?? "?"
+                guard manifestIDs.contains(id) else { continue }
                 do { assertions += try SyncVectorRunner.run(suite: suite, row: row); executed += 1 }
                 catch { failures.append("\(suite) \(id): \(error)") }
             }
         }
         print("SyncPlay vectors: \(executed) cases passed, \(assertions) assertions, \(failures.count) failures across \(SyncVectorRunner.suites.count) suites")
         XCTAssertTrue(failures.isEmpty, failures.joined(separator: "\n"))
-        XCTAssertEqual(executed, 406)
+        XCTAssertEqual(executed, 431)
     }
 
     func testRunnerRejectsUnknownOperationsFieldsAndAssertions() throws {

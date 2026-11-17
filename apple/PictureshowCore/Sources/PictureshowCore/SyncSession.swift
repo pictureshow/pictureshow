@@ -216,9 +216,21 @@ public final class SyncSessionEngine {
     private var resnapshotRequested = false
     private var stagedQueue: (itemId: String, startTicks: Int64)?
     private var terminated = false
+    /// A Leave request is on the wire and hasn't been answered.
+    private var leaveInFlight = false
 
-    public init(transport: SyncEngineTransport, clock: SyncEngineClock, scheduler: SyncEngineScheduler) {
-        self.transport = transport; self.clock = clock; self.scheduler = scheduler
+    /// The account/token epoch this engine serves. The app builds a new engine, with a new scope, for a different
+    /// viewer, a rotated token or a sign-out; consent from an older scope can never act on this one (SYN-10).
+    public let scope: Int64
+    /// The viewer's pending "leave the group to use AirPlay" consent, if one is open (SYN-10).
+    public private(set) var externalRouteConsent: SyncRouteConsent?
+    private var externalRoute: (() -> Void)?
+    private var consentCounter: Int64 = 0
+    /// Bumped by each new consent, cancellation and termination, so an answered Leave starts only its own route.
+    private var routeEpoch: Int64 = 0
+
+    public init(transport: SyncEngineTransport, clock: SyncEngineClock, scheduler: SyncEngineScheduler, scope: Int64 = 0) {
+        self.transport = transport; self.clock = clock; self.scheduler = scheduler; self.scope = scope
     }
 
     // MARK: Facts for the UI
@@ -226,6 +238,15 @@ public final class SyncSessionEngine {
     /// In a group, or possibly in one on the server.
     public var participating: Bool { intent != nil || membership.active }
     public var groupName: String? { membership.group?.name }
+    public var pendingExternalRoute: SyncRouteConsent? { externalRouteConsent }
+    /// The authoritative queue bounds for Previous/Next, only from a current server snapshot.
+    public var navigation: SyncNavigationAuthority? {
+        guard membership.hasSnapshot, let queue = membership.queue else { return nil }
+        return SyncNavigationAuthority(repeatMode: queue.repeatMode, entryIds: queue.entries.map(\.playlistItemId), currentEntryId: queue.current?.playlistItemId)
+    }
+    public var queueEntries: Int { membership.queue?.entries.count ?? 0 }
+    /// Group transport can be requested: a confirmed membership whose queue the server has described.
+    public var transportUsable: Bool { participating && intent == nil && membership.hasSnapshot }
     public var rendererBound: Bool { renderer != nil }
     public func isBound(_ candidate: SyncRenderer?) -> Bool { candidate != nil && renderer === candidate }
     public var clockUsable: Bool { anchor != nil }
@@ -327,10 +348,49 @@ public final class SyncSessionEngine {
     /// Explicit Leave. Cancelling an unsent intent sends nothing unless the server may still hold an earlier group.
     public func leave() { depart(.MANUAL_LEAVE) }
 
-    /// Before an external route takes playback (SYN-10).
-    public func leaveForExternalRoute() { depart(.EXTERNAL_ROUTE) }
+    /// Before an external route takes playback (SYN-10): acts on the open consent if there is one, otherwise leaves.
+    public func leaveForExternalRoute() {
+        if let consent = externalRouteConsent { leaveForExternalRoute(scope: consent.scope, id: consent.id) } else { depart(.EXTERNAL_ROUTE) }
+    }
 
-    private func depart(_ cause: SyncDepartureCause?) {
+    /// SYN-10: while grouped, an external route first asks the viewer. Returns false when no consent is needed (not in
+    /// a group), so the caller routes at once. A newer request replaces an older open one.
+    @discardableResult
+    public func confirmExternalRoute(_ route: @escaping () -> Void) -> Bool {
+        guard participating, !terminated else { return false }
+        consentCounter += 1
+        routeEpoch += 1
+        externalRouteConsent = SyncRouteConsent(scope: scope, id: consentCounter)
+        externalRoute = route
+        host?.syncChanged()
+        return true
+    }
+
+    /// The consent dialog's Cancel, for the consent it rendered. An older dialog can't cancel a newer consent.
+    public func cancelExternalRoute(scope: Int64, id: Int64) {
+        guard externalRouteConsent == SyncRouteConsent(scope: scope, id: id) else { return }
+        externalRouteConsent = nil; externalRoute = nil; routeEpoch += 1
+        host?.syncChanged()
+    }
+
+    /// The consent dialog's Leave, for the consent it rendered: consumed at once (a repeat press does nothing), then the
+    /// ordinary Leave; the route starts only after the server accepted the Leave and this device is out of the group.
+    public func leaveForExternalRoute(scope: Int64, id: Int64) {
+        guard !terminated, let consent = externalRouteConsent, consent == SyncRouteConsent(scope: scope, id: id), let route = externalRoute else { return }
+        externalRouteConsent = nil; externalRoute = nil
+        routeEpoch += 1
+        let epoch = routeEpoch
+        let needsLeave = server != .none
+        depart(.EXTERNAL_ROUTE) { [weak self] accepted in
+            guard let self, accepted, !self.terminated, epoch == self.routeEpoch, !self.participating else { return }
+            route()
+        }
+        // The viewing stays on screen, paused and no longer the group's renderer.
+        renderer = nil
+        if !needsLeave, !participating, !terminated, epoch == routeEpoch { route() }
+    }
+
+    private func depart(_ cause: SyncDepartureCause?, left: ((Bool) -> Void)? = nil) {
         let wasIn = participating
         registrationTimer?.cancel(); registrationTimer = nil
         intent = nil
@@ -338,18 +398,23 @@ public final class SyncSessionEngine {
         holdOutput()
         cancelTimeline()
         following = false; openedEntryId = nil; resnapshotRequested = false
-        if server != .none { sendLeave() }
+        let leave = server != .none
         if wasIn { departure = cause }
         membership = membership.leaving()
         clockEpoch += 1; calibrating = false
+        // After the local state is out of the group, so an answer that arrives at once sees this device as left.
+        if leave { sendLeave(left) }
         host?.syncChanged()
     }
 
-    private func sendLeave() {
+    private func sendLeave(_ left: ((Bool) -> Void)? = nil) {
         leavePending = true
+        leaveInFlight = true
         let epoch = clockEpoch
         transport.post(SyncRequest.leave()) { [weak self] outcome in
             guard let self else { return }
+            self.leaveInFlight = false
+            defer { left?(outcome == .ok) }
             if outcome == .ok || outcome.definitelyRefused {
                 self.leavePending = false
                 if self.membership.groupId == nil, self.intent == nil { self.server = .none }
@@ -362,7 +427,9 @@ public final class SyncSessionEngine {
     /// Sign-out or account change: Leave once, keep nothing.
     public func terminate() {
         guard !terminated else { return }
-        if server != .none { transport.post(SyncRequest.leave()) { _ in } }
+        // A Leave already on the wire covers this one; a failed one is retried here.
+        if server != .none, !leaveInFlight { transport.post(SyncRequest.leave()) { _ in } }
+        externalRouteConsent = nil; externalRoute = nil; routeEpoch += 1
         registrationTimer?.cancel(); timer?.cancel()
         holdOutput()
         terminated = true
@@ -662,11 +729,13 @@ public final class SyncSessionEngine {
     public func requestUnpause() { send(try? SyncRequest.transport("Unpause")) }
     public func requestSeek(ticks: Int64) { send(try? SyncRequest.transport("Seek", positionTicks: max(0, ticks))) }
     public func requestNext() {
-        guard let entry = membership.queue?.current?.playlistItemId else { return }
+        guard let entry = membership.queue?.current?.playlistItemId,
+              SyncPresentation.directionAvailable(usable: transportUsable, queueEntries: queueEntries, previous: false, navigation: navigation) else { return }
         send(try? SyncRequest.transport("NextItem", playlistItemId: entry))
     }
     public func requestPrevious() {
-        guard let entry = membership.queue?.current?.playlistItemId else { return }
+        guard let entry = membership.queue?.current?.playlistItemId,
+              SyncPresentation.directionAvailable(usable: transportUsable, queueEntries: queueEntries, previous: true, navigation: navigation) else { return }
         send(try? SyncRequest.transport("PreviousItem", playlistItemId: entry))
     }
     /// A title chosen while in a group becomes the group's queue.

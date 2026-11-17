@@ -17,6 +17,8 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
     @Published private(set) var decision: PlayDecision?
     @Published private(set) var isPlaying = false
     @Published private(set) var isBuffering = true
+    /// SYN-10: the viewer left the group to use AirPlay; the route picker opens once.
+    @Published var routePickerPending = false
     @Published private(set) var position: Double = 0
     @Published private(set) var duration: Double = 0
     @Published private(set) var error: String?
@@ -230,7 +232,7 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
 
     /// Ends the viewing: reports where the viewer stopped, tells the server to stop converting, refreshes the catalog.
     /// In a group the device stays a member (SYN-08) unless `reason` leaves.
-    func close(reason: SyncCloseReason = .CLOSE) {
+    func close(reason: SyncCloseReason = .CLOSE, reportPlayed: Bool = false) {
         guard !finished else { return }
         if let box = syncRenderer {
             if replacedBySync { app.syncPlay.engine.unbind(box) } else { app.syncPlay.engine.closeViewing(box, reason: reason) }
@@ -261,6 +263,8 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
             if let decision {
                 let ms = PlaybackEndPosition.completed(Int64(seconds * 1000), durationMs: durationMs)
                 try? await client.reportStopped(account: account, decision: decision, positionTicks: ms * 10_000)
+                // A grouped natural end reports Played once, after Stopped (sync-completion-reporting).
+                if reportPlayed { _ = try? await client.played(account: account, itemID: itemID, value: true) }
                 try? await client.stopEncoding(account: account, decision: decision)
                 // LIVE-04: the stopped report carried LiveStreamId; then the stream this client opened is closed.
                 if let owned = decision.ownedLiveStreamId { try? await client.closeLiveStream(account: account, liveStreamID: owned) }
@@ -276,6 +280,13 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
     var currentSeconds: Double {
         let t = player.currentTime().seconds
         return t.isFinite ? t : position
+    }
+
+    /// SYN-10: the server accepted the Leave the viewer chose for AirPlay; external playback is allowed again.
+    func airPlayAfterLeaving() {
+        guard !finished else { return }
+        player.allowsExternalPlayback = true
+        routePickerPending = true
     }
 
     /// The group's newer entry replaces this viewing; that isn't the viewer closing playback.
@@ -519,8 +530,13 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
             Task { @MainActor in if seconds.isFinite, seconds > 0 { self?.duration = seconds; self?.viewingChanged() } }
         })
         if let endObserver { NotificationCenter.default.removeObserver(endObserver) }
-        endObserver = NotificationCenter.default.addObserver(forName: AVPlayerItem.didPlayToEndTimeNotification, object: playerItem, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.reachedEnd() }
+        let viewing = generation
+        endObserver = NotificationCenter.default.addObserver(forName: AVPlayerItem.didPlayToEndTimeNotification, object: playerItem, queue: .main) { [weak self, weak playerItem] _ in
+            // The ended item and viewing are captured: a retired item's late end can't finish a replacement (SYN-09).
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.reachedEnd(current: !self.finished && viewing == self.generation && playerItem != nil && self.player.currentItem === playerItem)
+            }
         }
         if let jumpObserver { NotificationCenter.default.removeObserver(jumpObserver) }
         jumpObserver = NotificationCenter.default.addObserver(forName: AVPlayerItem.timeJumpedNotification, object: playerItem, queue: .main) { [weak self] _ in
@@ -640,13 +656,15 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
         }
     }
 
-    private func reachedEnd() {
+    private func reachedEnd(current: Bool) {
         if let box = syncRenderer, grouped {
-            // SYN-09: the server owns continuation. The last entry ends the viewing and the device stays in the group.
-            let current = box.syncFacts.entryId == app.syncPlay.engine.membership.queue?.current?.playlistItemId
-            if app.syncPlay.engine.naturalCompletion(box, current: current, unpaused: true) == .FINISH { close(reason: .NATURAL_END) }
+            // SYN-09: the server owns continuation. The last entry ends the viewing and the device stays in the group;
+            // an obsolete decision does nothing. AVPlayer posts played-to-end only for playback that ran into the end.
+            let plan = SyncVideoCompletion.plan(app.syncPlay.engine, ended: box, decisionCurrent: current, unpaused: true)
+            if plan.exits { close(reason: .NATURAL_END, reportPlayed: plan.reports.contains(.played)) }
             return
         }
+        guard current else { return }
         if let local {
             app.downloads.recordCompleted(local.accountKey, itemID: local.entry.itemId)
             // Read again at the end, so an episode that finished downloading during this one follows it.

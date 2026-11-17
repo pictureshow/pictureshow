@@ -222,3 +222,82 @@ public enum SyncStay {
     /// A stayed device never opens a new group entry by itself; Watch on the reminder starts following again.
     public static func opensGroupEntry(following: Bool) -> Bool { following }
 }
+
+/// One "leave the group to use AirPlay" consent (SYN-10): the account/token scope it was asked in and its own identity.
+public struct SyncRouteConsent: Equatable, Sendable {
+    public let scope: Int64, id: Int64
+    public init(scope: Int64, id: Int64) { self.scope = scope; self.id = id }
+}
+
+/// Which viewer and token a SyncPlay engine serves.
+public enum SyncAccountScope {
+    /// A different viewer, a rotated token or a sign-out ends the old engine, with any consent it held; binding the
+    /// same viewer and token again keeps it.
+    public static func rebinds(currentKey: String?, currentToken: String?, nextKey: String?, nextToken: String?) -> Bool {
+        nextKey != currentKey || nextToken != currentToken
+    }
+}
+
+extension SyncPresentation {
+    /// The group's social count, from the server's participant list (no names are inferred).
+    public static func watchingCount(_ count: Int) -> String { count == 1 ? "1 person watching" : "\(max(0, count)) people watching" }
+
+    /// The TV chooser's title says what the choice is for: controlling a TV, or where a title will play.
+    public static func remotePickerTitle(mediaRequestPresent: Bool) -> String { mediaRequestPresent ? "Play on" : "Choose a TV" }
+}
+
+/// What a grouped video's natural end does once the app knows whether the ended playback decision is still current
+/// (SYN-09, sync-completion-reporting). Only a current decision may request a continuation, report completion or close.
+public struct SyncVideoCompletionPlan: Equatable, Sendable {
+    public enum Report: String, Sendable { case stopped, played }
+    public let action: SyncCompletionAction
+    /// Completion reports in order: Stopped before Played.
+    public let reports: [Report]
+    /// Close the player with `SyncCloseReason.NATURAL_END` (the device stays in the group).
+    public let exits: Bool
+}
+
+public enum SyncVideoCompletion {
+    /// `unpaused`: the renderer was advancing into its end (AVPlayer's played-to-end), not a paused seek to the end.
+    public static func plan(_ engine: SyncSessionEngine, ended: SyncRenderer, decisionCurrent: Bool, unpaused: Bool) -> SyncVideoCompletionPlan {
+        guard decisionCurrent else { return SyncVideoCompletionPlan(action: .HOLD, reports: [], exits: false) }
+        let current = ended.syncFacts.entryId == engine.membership.queue?.current?.playlistItemId
+        let action = engine.naturalCompletion(ended, current: current, unpaused: unpaused)
+        let finish = action == .FINISH
+        return SyncVideoCompletionPlan(action: action, reports: finish ? [.stopped, .played] : [], exits: finish)
+    }
+}
+
+/// The Watch together sheet's group transport (Previous, Play or Pause, Next), from the engine's authoritative queue.
+/// An empty queue shows none; a confirmed Repeat Off boundary disables only that direction. Presses stay requests.
+public struct SyncGroupTransport: Equatable, Sendable {
+    public let visible: Bool
+    public let previousEnabled: Bool
+    public let playEnabled: Bool
+    public let nextEnabled: Bool
+    /// "play" or "pause" for the middle button, from the group's phase; nil hides it.
+    public let primary: String?
+
+    public init(_ engine: SyncSessionEngine) {
+        let usable = engine.transportUsable, entries = engine.queueEntries, navigation = engine.navigation
+        visible = SyncPresentation.transportAvailable(usable: usable, queueEntries: entries)
+        previousEnabled = SyncPresentation.directionAvailable(usable: usable, queueEntries: entries, previous: true, navigation: navigation)
+        nextEnabled = SyncPresentation.directionAvailable(usable: usable, queueEntries: entries, previous: false, navigation: navigation)
+        playEnabled = visible
+        primary = SyncPresentation.playerPrimaryAction(participating: engine.participating, usable: usable, queueEntries: entries,
+                                                       phase: engine.membership.phase, localShowPlayButton: true)
+    }
+}
+
+/// The phone's TV chooser: its title names the role (control a TV, or where a title plays). The title is the sheet's
+/// navigation heading, and the chooser lists only TVs and other controllable apps, never this phone.
+public struct RemotePickerPresentation: Equatable, Sendable {
+    public let mediaRequestPresent: Bool
+    public let title: String
+    public let titleIsHeading = true
+    public let offersThisDevice = false
+    public init(mediaRequestPresent: Bool) {
+        self.mediaRequestPresent = mediaRequestPresent
+        title = SyncPresentation.remotePickerTitle(mediaRequestPresent: mediaRequestPresent)
+    }
+}
