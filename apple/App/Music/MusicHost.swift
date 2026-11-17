@@ -55,7 +55,7 @@ struct MusicPrompt: Identifiable {
     var route: () -> String = { MusicAudioSession.route() }
     /// For artwork on the lock screen.
     var client: ((Account) -> JellyfinClient)?
-    let nowPlaying = MusicNowPlaying()
+    let nowPlaying: MusicNowPlaying
 
     // The queue.
     private var queueStore: [String: Any] = [:]
@@ -79,10 +79,12 @@ struct MusicPrompt: Identifiable {
     private var viewings: [String: (decision: PlayDecision, media: String)] = [:]
     private var reportTail: Task<Void, Never>?
 
-    init(gateway: MusicGateway, store: MusicQueueStore, makeEngine: @escaping @MainActor () -> MusicEngine = { @MainActor in QueuePlayerEngine() }) {
+    init(gateway: MusicGateway, store: MusicQueueStore, makeEngine: @escaping @MainActor () -> MusicEngine = { @MainActor in QueuePlayerEngine() },
+         nowPlayingSystem: NowPlayingSystem? = nil) {
         self.gateway = gateway
         self.store = store
         self.makeEngine = makeEngine
+        nowPlaying = MusicNowPlaying(system: nowPlayingSystem ?? SystemNowPlaying())
         nowPlaying.host = self
         MusicAudioSession.host = self
     }

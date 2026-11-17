@@ -94,11 +94,34 @@ import PictureshowCore
 
 /// The music host's wiring: every edit is saved before the output changes, the output holds the shared window, one track
 /// is one viewing, and the AUTH-18, MUS-08 and MUS-11 rules hold in the app, not only in the reducers.
+/// The lock screen as the host sees it, owned by one test, so nothing else in the process can change it.
+@MainActor private final class FakeNowPlaying: NowPlayingSystem {
+    var info: [String: Any]?
+    /// `.some(nil)` once told nothing plays.
+    var playing: Bool??
+    var enabled: Set<NowPlayingCommand> = []
+    var handlers: [UUID: (command: NowPlayingCommand, run: @MainActor (TimeInterval?) -> Bool)] = [:]
+    func setPlaying(_ playing: Bool?) { self.playing = .some(playing) }
+    func setEnabled(_ command: NowPlayingCommand, _ enabled: Bool) {
+        if enabled { self.enabled.insert(command) } else { self.enabled.remove(command) }
+    }
+    func addTarget(_ command: NowPlayingCommand, _ handler: @escaping @MainActor (TimeInterval?) -> Bool) -> () -> Void {
+        let id = UUID()
+        handlers[id] = (command, handler)
+        return { [weak self] in self?.handlers[id] = nil }
+    }
+    /// A press on the lock screen: true when a handler acted.
+    func press(_ command: NowPlayingCommand, position: TimeInterval? = nil) -> Bool {
+        handlers.values.filter { $0.command == command }.map { $0.run(position) }.contains(true)
+    }
+}
+
 @MainActor
 final class MusicAppTests: XCTestCase {
     private let viewer = Account(server: Server(url: URL(string: "https://media.example.test")!, id: "srv"), userId: "viewer-a", username: "A", accessToken: "t", deviceID: "dev")
     private let other = Account(server: Server(url: URL(string: "https://media.example.test")!, id: "srv"), userId: "viewer-b", username: "B", accessToken: "t2", deviceID: "dev")
     private var journal: Journal!
+    private var lockScreen: FakeNowPlaying!
     private var engines: [FakeEngine] = []
     private var gateway: FakeGateway!
     private var store: FakeStore!
@@ -106,12 +129,13 @@ final class MusicAppTests: XCTestCase {
     override func setUp() async throws {
         journal = Journal(); engines = []
         gateway = FakeGateway(journal); store = FakeStore(journal)
+        lockScreen = FakeNowPlaying()
     }
 
     private func host(admitted: Bool = true) -> MusicHost {
         let host = MusicHost(gateway: gateway, store: store, makeEngine: { [unowned self] in
             let e = FakeEngine(self.journal); self.engines.append(e); return e
-        })
+        }, nowPlayingSystem: lockScreen)
         host.admitted = { _ in admitted }
         host.route = { "device" }
         host.quality = { "original" }
@@ -330,18 +354,23 @@ final class MusicAppTests: XCTestCase {
         let host = host()
         host.bind(viewer, known: [viewer.key])
         await playAlbum(host)
-        let info = MPNowPlayingInfoCenter.default().nowPlayingInfo
+        let info = lockScreen.info
         XCTAssertEqual(info?[MPMediaItemPropertyTitle] as? String, "Song 1")
         XCTAssertEqual(info?[MPMediaItemPropertyArtist] as? String, "Artist")
         XCTAssertEqual(info?[MPMediaItemPropertyPlaybackDuration] as? Double, 180)
-        let center = MPRemoteCommandCenter.shared()
-        XCTAssertTrue(center.nextTrackCommand.isEnabled)
-        XCTAssertTrue(center.togglePlayPauseCommand.isEnabled)
-        XCTAssertFalse(center.skipForwardCommand.isEnabled, "music moves by track on the lock screen")
+        XCTAssertTrue(lockScreen.enabled.contains(.nextTrack))
+        XCTAssertTrue(lockScreen.enabled.contains(.togglePlayPause))
+        XCTAssertFalse(lockScreen.enabled.contains(.skipForward), "music moves by track on the lock screen")
+        // A lock-screen Next takes the same road as the on-screen button.
+        XCTAssertTrue(lockScreen.press(.nextTrack))
+        await host.settle()
+        XCTAssertEqual(lockScreen.info?[MPMediaItemPropertyTitle] as? String, "Song 2")
         host.stop()
         await host.settle()
-        XCTAssertNil(MPNowPlayingInfoCenter.default().nowPlayingInfo)
-        XCTAssertFalse(center.nextTrackCommand.isEnabled)
+        XCTAssertNil(lockScreen.info)
+        XCTAssertEqual(lockScreen.playing, .some(nil), "stopped, not left paused")
+        XCTAssertFalse(lockScreen.enabled.contains(.nextTrack))
+        XCTAssertTrue(lockScreen.handlers.isEmpty, "every command target is removed")
         XCTAssertTrue(host.hasQueue)
     }
 

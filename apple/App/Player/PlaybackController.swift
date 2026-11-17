@@ -70,6 +70,8 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
     private var generation = 0
     private var triedTranscodeFallback = false
     private var nextCardDismissed = false
+    /// The viewing played into its end and stays there on the next card (countdown Off or "still watching?").
+    private var heldAtEnd = false
     private var countdownTask: Task<Void, Never>?
 
     // Watch together (SYN-03..10).
@@ -329,6 +331,7 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
 
     fileprivate func nativeSeek(_ target: Double, then: (() -> Void)? = nil) {
         position = target
+        heldAtEnd = false
         ownSeeks += 1
         lastOwnSeek = Date()
         player.seek(to: CMTime(seconds: target, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
@@ -423,7 +426,7 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
         }
         self.decision = nil
         item = next
-        nextEpisode = nil; nextCountdown = nil; nextCardDismissed = false; askingStillWatching = false
+        nextEpisode = nil; nextCountdown = nil; nextCardDismissed = false; askingStillWatching = false; heldAtEnd = false
         segments = []; autoSkipped = []; skippable = nil; cues = []; cue = nil
         position = 0; duration = 0; triedTranscodeFallback = false
         started = false
@@ -447,7 +450,11 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
     /// PLAY-30: the viewer answered "Keep watching".
     func keepWatching() { ViewerInput.shared.record(); playNext() }
 
-    func dismissNextCard() { nextCardDismissed = true; nextCountdown = nil; countdownTask?.cancel() }
+    func dismissNextCard() {
+        nextCardDismissed = true; nextCountdown = nil; countdownTask?.cancel()
+        // PLAY-17: Hide after the card was left waiting at the very end exits, as the end would have.
+        if heldAtEnd { close() }
+    }
 
     // MARK: Observation
 
@@ -671,15 +678,23 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
             if app.preferences.autoplayNextEpisode, !nextCardDismissed, app.downloads.next(after: local) != nil { playNextLocal() } else { close() }
             return
         }
-        if nextEpisode != nil, app.preferences.autoplayNextEpisode, ViewingSettings.shared.countdownSeconds > 0, !nextCardDismissed {
-            // PLAY-30: an unanswered "still watching?" waits at the end; nothing starts by itself.
-            if askingStillWatching || ViewerInput.shared.stillWatchingDue(policy: ViewingSettings.shared.stillWatching) {
-                askingStillWatching = true; nextCountdown = -1; countdownTask?.cancel()
-                return
-            }
+        let action = NaturalEndAction.decide(
+            hasNext: nextEpisode != nil, cardDismissed: nextCardDismissed,
+            automatic: app.preferences.autoplayNextEpisode && ViewingSettings.shared.countdownSeconds > 0,
+            stillWatchingDue: askingStillWatching || ViewerInput.shared.stillWatchingDue(policy: ViewingSettings.shared.stillWatching))
+        switch action {
+        case .playNext:
             ViewerInput.shared.startedByItself()
             playNext()
-        } else { close() }
+        case .askStillWatching:
+            // PLAY-30: an unanswered "still watching?" waits at the end; nothing starts by itself.
+            askingStillWatching = true; nextCountdown = -1; countdownTask?.cancel(); heldAtEnd = true
+        case .waitForPlayNow:
+            // PLAY-30: with the countdown Off the card stays at the end and waits for Play now.
+            nextCountdown = -1; countdownTask?.cancel(); heldAtEnd = true
+        case .close:
+            close()
+        }
     }
 
     private func reportProgress(force: Bool) {
@@ -1027,5 +1042,19 @@ extension PlaybackController {
         let canSeek = !isLive || (live.canTimeShift && !live.expired)
         let primary: String? = isLive && !live.canTimeShift ? nil : (isUnpaused || isPlaying ? "pause" : "play")
         return PictureInPicture.actions(primary: primary, canSeekBack: canSeek, canSeekForward: canSeek && !(isLive && live.atEdge))
+    }
+}
+
+/// What a viewing does when it plays into its physical end (PLAY-17, PLAY-30).
+enum NaturalEndAction: Equatable {
+    case playNext, askStillWatching, waitForPlayNow, close
+
+    /// - Parameters:
+    ///   - automatic: the countdown is on (Settings' "Next episode countdown" isn't Off).
+    ///   - cardDismissed: the viewer chose Hide; the end then exits.
+    static func decide(hasNext: Bool, cardDismissed: Bool, automatic: Bool, stillWatchingDue: Bool) -> NaturalEndAction {
+        guard hasNext, !cardDismissed else { return .close }
+        guard automatic else { return .waitForPlayNow }
+        return stillWatchingDue ? .askStillWatching : .playNext
     }
 }

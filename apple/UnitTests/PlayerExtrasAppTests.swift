@@ -9,6 +9,18 @@ import PictureshowCore
 #endif
 
 final class PlayerExtrasAppTests: XCTestCase {
+    /// PLAY-17/PLAY-30: what a viewing does at its physical end. With the countdown Off the card waits for Play now
+    /// (it used to close the player); Hide and a last episode close; a due "still watching?" asks.
+    func testNaturalEndWaitsOnTheCardWhenTheCountdownIsOff() {
+        XCTAssertEqual(NaturalEndAction.decide(hasNext: true, cardDismissed: false, automatic: false, stillWatchingDue: false), .waitForPlayNow)
+        XCTAssertEqual(NaturalEndAction.decide(hasNext: true, cardDismissed: false, automatic: false, stillWatchingDue: true), .waitForPlayNow)
+        XCTAssertEqual(NaturalEndAction.decide(hasNext: true, cardDismissed: false, automatic: true, stillWatchingDue: false), .playNext)
+        XCTAssertEqual(NaturalEndAction.decide(hasNext: true, cardDismissed: false, automatic: true, stillWatchingDue: true), .askStillWatching)
+        XCTAssertEqual(NaturalEndAction.decide(hasNext: true, cardDismissed: true, automatic: true, stillWatchingDue: false), .close)
+        XCTAssertEqual(NaturalEndAction.decide(hasNext: true, cardDismissed: true, automatic: false, stillWatchingDue: false), .close)
+        XCTAssertEqual(NaturalEndAction.decide(hasNext: false, cardDismissed: false, automatic: true, stillWatchingDue: false), .close)
+    }
+
     /// SUB-DL-01: a title page offers Find subtitles only for a playable video on the server.
     func testFindSubtitlesIsOfferedForVideosWithAFileOnly() {
         for type in ["Movie", "Episode", "Video", "MusicVideo"] {
