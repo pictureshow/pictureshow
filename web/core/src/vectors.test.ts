@@ -61,6 +61,8 @@ const spec =
 // Frozen by the Android reference and owed by this runner: visible as todos, never as passes.
 const pendingPortSuites = new Set([
     "cast-queue",
+    // SYN-01 create-with-item queues on GroupJoined (Apple/Android); web SyncPlay create owed.
+    "sync-create-queue",
     // AUTH-10 retained-card sign-out: desktop/core implementation; web runtime port owed.
     "account-sign-out",
     // SEERR: Seerr requests are on Android first; web port owed.
