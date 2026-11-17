@@ -621,20 +621,32 @@ internal fun TouchCatalogDetail(
                                                 !state.busy && !state.loading,
                                                 startDownload
                                             )
-                                        } else if (onDownload != null && offlineOffersDownload(item)) {
-                                            OutlinedButton(
-                                                onClick = startDownload,
-                                                enabled = !state.busy && !state.loading,
-                                                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("touch:detail:download")
-                                            ) { Text("Download") }
                                         }
-                                        if (onSubtitleDownload != null && subtitleDownloadOffered(item.type) && !item.isMissing) {
-                                            OutlinedButton(
-                                                onClick = { onSubtitleDownload(item) },
-                                                enabled = !state.loading,
-                                                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("touch:detail:subtitles")
-                                            ) { Text(androidx.compose.ui.res.stringResource(R.string.subtitle_find_action)) }
-                                        }
+                                        val downloadButton: (@Composable (Modifier) -> Unit)? =
+                                            if (download?.offline == null && onDownload != null && offlineOffersDownload(item)) {
+                                                { modifier ->
+                                                    OutlinedButton(
+                                                        onClick = startDownload,
+                                                        enabled = !state.busy && !state.loading,
+                                                        modifier = modifier.heightIn(min = 48.dp).testTag("touch:detail:download")
+                                                    ) { Text("Download") }
+                                                }
+                                            } else {
+                                                null
+                                            }
+                                        val subtitlesButton: (@Composable (Modifier) -> Unit)? =
+                                            if (onSubtitleDownload != null && subtitleDownloadOffered(item.type) && !item.isMissing) {
+                                                { modifier ->
+                                                    OutlinedButton(
+                                                        onClick = { onSubtitleDownload(item) },
+                                                        enabled = !state.loading,
+                                                        modifier = modifier.heightIn(min = 48.dp).testTag("touch:detail:subtitles")
+                                                    ) { Text(androidx.compose.ui.res.stringResource(R.string.subtitle_find_action)) }
+                                                }
+                                            } else {
+                                                null
+                                            }
+                                        TouchDetailMoreActions(downloadButton, subtitlesButton)
                                     }
                                     item.overview?.takeIf(String::isNotBlank)?.let { Text(it, Modifier.widthIn(max = 640.dp)) }
                                     if (item.genres.isNotEmpty()) {
@@ -878,20 +890,58 @@ private fun TouchDetailActionGrid(actions: List<TouchDetailAction>) {
                 TouchDetailTvActions(tv, cell.weight(1f))
             }
         } else {
+            val threeAcross = maxWidth >= TOUCH_DETAIL_THREE_ACROSS
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     TouchDetailActionButton(primary, cell.weight(1f))
                     fromStart?.let { TouchDetailActionButton(it, cell.weight(1f)) }
                 }
-                Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TouchDetailActionButton(played, cell.weight(1f))
-                    TouchDetailActionButton(favorite, cell.weight(1f))
+                // A tablet's column holds the three secondary cells on one line, so the overview stays in the first screen.
+                if (threeAcross) {
+                    Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TouchDetailActionButton(played, cell.weight(1f))
+                        TouchDetailActionButton(favorite, cell.weight(1f))
+                        TouchDetailTvActions(tv, cell.weight(1f))
+                    }
+                } else {
+                    Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TouchDetailActionButton(played, cell.weight(1f))
+                        TouchDetailActionButton(favorite, cell.weight(1f))
+                    }
+                    TouchDetailTvActions(tv, Modifier.fillMaxWidth(), centerOnButton = true)
                 }
-                TouchDetailTvActions(tv, Modifier.fillMaxWidth(), centerOnButton = true)
             }
         }
     }
 }
+
+/** Download and Find subtitles share a line where the column has the room; on a phone each keeps its own. */
+@Composable
+private fun TouchDetailMoreActions(download: (@Composable (Modifier) -> Unit)?, subtitles: (@Composable (Modifier) -> Unit)?) {
+    if (download == null && subtitles == null) return
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        if (download != null && subtitles != null && maxWidth >= TOUCH_DETAIL_TWO_ACROSS) {
+            Row(
+                Modifier.fillMaxWidth().height(IntrinsicSize.Min).testTag("touch:detail:more-actions"),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                download(Modifier.weight(1f).fillMaxHeight())
+                subtitles(Modifier.weight(1f).fillMaxHeight())
+            }
+        } else {
+            Column(Modifier.testTag("touch:detail:more-actions"), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                download?.invoke(Modifier.fillMaxWidth())
+                subtitles?.invoke(Modifier.fillMaxWidth())
+            }
+        }
+    }
+}
+
+/** Room for Mark unwatched, Favorite and Play on TV side by side, each with its icon or chevron. */
+internal val TOUCH_DETAIL_THREE_ACROSS = 560.dp
+
+/** Room for Download and Find subtitles side by side. */
+internal val TOUCH_DETAIL_TWO_ACROSS = 440.dp
 
 private val TOUCH_TV_ACTIONS = setOf("on-tv", "play-next", "add-to-queue", "on-tv-start")
 
@@ -1083,29 +1133,59 @@ internal fun TouchCatalogShelf(
                 Icon(touchActionIcon("chevron-right"), contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
-        LazyRow(
-            state = rememberLazyListState(),
-            contentPadding = PaddingValues(horizontal = 20.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            items(items, key = MediaItem::id) { item ->
-                val width = if (shortWindow) {
-                    if (wide) 200.dp else 116.dp
-                } else {
-                    if (wide) 244.dp else 136.dp
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val minimum = if (shortWindow) {
+                if (wide) 200.dp else 116.dp
+            } else {
+                if (wide) 244.dp else 136.dp
+            }
+            val width = touchShelfCardWidth(maxWidth, minimum, items.size)
+            LazyRow(
+                state = rememberLazyListState(),
+                contentPadding = PaddingValues(horizontal = TOUCH_SHELF_EDGE),
+                horizontalArrangement = Arrangement.spacedBy(TOUCH_SHELF_GAP)
+            ) {
+                items(items, key = MediaItem::id) { item ->
+                    TouchCatalogCard(
+                        item,
+                        account,
+                        wide,
+                        { onOpen(item) },
+                        Modifier.width(width),
+                        reserveLines = reserveLines,
+                        subtitle = subtitle(item),
+                        announceSubtitle = announceSubtitle
+                    )
                 }
-                TouchCatalogCard(
-                    item,
-                    account,
-                    wide,
-                    { onOpen(item) },
-                    Modifier.width(width),
-                    reserveLines = reserveLines,
-                    subtitle = subtitle(item),
-                    announceSubtitle = announceSubtitle
-                )
             }
         }
+    }
+}
+
+private val TOUCH_SHELF_EDGE = 20.dp
+private val TOUCH_SHELF_GAP = 12.dp
+
+/** A tablet-wide row, where a phone's fixed card would leave the row's end empty. */
+internal val TOUCH_SHELF_ADAPTIVE = 600.dp
+
+/**
+ * A row's card width. A phone keeps [minimum]. A wider row fits as many cards as [minimum] allows: a row with more
+ * cards than that shows a quarter of the next one, so it reads as scrollable; a shorter row stretches its cards to fill
+ * the width, up to half again their size, so three cards don't sit in the first half of a tablet.
+ */
+internal fun touchShelfCardWidth(rowWidth: Dp, minimum: Dp, count: Int): Dp {
+    if (rowWidth < TOUCH_SHELF_ADAPTIVE || count <= 0) return minimum
+    val usable = rowWidth - TOUCH_SHELF_EDGE * 2
+    val fit = ((usable + TOUCH_SHELF_GAP) / (minimum + TOUCH_SHELF_GAP)).toInt().coerceAtLeast(1)
+    if (count <= fit) {
+        val filled = (usable - TOUCH_SHELF_GAP * (count - 1)) / count
+        return filled.coerceIn(minimum, minimum * 1.5f)
+    }
+    var shown = fit
+    while (true) {
+        val peeking = (usable - TOUCH_SHELF_GAP * shown) / (shown + 0.25f)
+        if (peeking >= minimum || shown == 1) return peeking.coerceAtLeast(minimum.coerceAtMost(usable))
+        shown--
     }
 }
 
