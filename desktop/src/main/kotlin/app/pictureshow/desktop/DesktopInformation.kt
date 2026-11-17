@@ -61,8 +61,9 @@ data class DesktopInformationState(
 /** The mpv probe for the report: the loaded libmpv's own answers. Behind a seam so tests needn't load native code. */
 fun interface DesktopMpvProbe { fun read(keys: List<String>): Map<String, String?> }
 
-internal val nativeMpvProbe = DesktopMpvProbe { keys ->
-    val mpv = Mpv(File(System.getProperty("java.io.tmpdir"), "pictureshow-probe"), probe = true)
+/** [directory] is the app's own data directory, never a shared temp path another user could pre-create. */
+internal fun nativeMpvProbe(directory: File) = DesktopMpvProbe { keys ->
+    val mpv = Mpv(directory, probe = true)
     try {
         mpv.option("vo", "null"); mpv.option("ao", "null"); mpv.option("terminal", "no")
         mpv.initialize()
@@ -122,7 +123,7 @@ internal fun desktopComputerVerdict(report: DesktopComputerReport): String = whe
 class DesktopInformation(
     private val scope: CoroutineScope,
     private val settings: () -> DesktopSettings,
-    private val probe: DesktopMpvProbe = nativeMpvProbe,
+    private val probe: DesktopMpvProbe,
     private val catalog: () -> List<DesktopLicense>? = { desktopLicenseCatalog() }
 ) {
     private val mutable = MutableStateFlow(DesktopInformationState())

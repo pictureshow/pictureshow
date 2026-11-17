@@ -45,7 +45,7 @@ class DesktopController(
     /** SEERR-01..07 (DesktopSeerr.kt). Its own HTTP client: the Jellyfin token never goes to Seerr. */
     val seerr = DesktopSeerr(DesktopSeerrStore(directory), scope, { mutable.value.account }, log = { events.log(it) })
     /** INFO-01..08 (DesktopInformation.kt). */
-    val information = DesktopInformation(scope, { mutable.value.settings })
+    val information = DesktopInformation(scope, { mutable.value.settings }, nativeMpvProbe(File(directory, "probe")))
     internal val appVersion: String get() = identity.version
     private val generation = AtomicLong()
     private var pageJob: Job? = null
