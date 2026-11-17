@@ -15,7 +15,7 @@ struct SearchView: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: Theme.shelfSpacing) {
                 if query.nilIfBlank == nil {
-                    MessageView(symbol: "magnifyingglass", title: "Search your library", message: "Find movies, shows, episodes, collections and people.")
+                    MessageView(symbol: "magnifyingglass", title: "Search your library", message: "Find movies, shows, episodes, collections, people and music.")
                         .padding(.top, 60)
                 } else if let failed {
                     MessageView(symbol: "wifi.exclamationmark", title: "Search didn't work", message: failed)
@@ -29,7 +29,8 @@ struct SearchView: View {
                             if kind == .people {
                                 CastShelf(people: items.map { PersonCredit(id: $0.id, name: $0.name) }).environmentObject(app)
                             } else {
-                                Shelf(title: kind.title, items: items, wide: kind == .episodes)
+                                // MUS-01: music groups use square covers and open the music screens.
+                                Shelf(title: kind.title, items: items, wide: kind == .episodes, square: kind.isMusic)
                             }
                         }
                     }
@@ -38,10 +39,12 @@ struct SearchView: View {
                 }
             }
             .padding(.vertical, 20)
+            // The last row's captions sit below its focused cards; keep them clear of the mini player on TV.
+            .padding(.bottom, platformValue(tv: 80, touch: 0))
         }
         .pageBackground()
         .navigationTitle("Search")
-        .searchable(text: $query, prompt: "Movies, shows, people")
+        .searchable(text: $query, prompt: "Movies, shows, people, music")
         .task(id: query) { await search() }
     }
 

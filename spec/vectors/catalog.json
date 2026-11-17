@@ -899,6 +899,215 @@
       }
     },
     {
+      "id": "search-albums",
+      "operation": "http",
+      "input": {
+        "action": "search",
+        "kind": "ALBUMS",
+        "query": "  Paper moon  ",
+        "responses": [
+          {
+            "status": 200,
+            "body": {
+              "Items": []
+            }
+          }
+        ]
+      },
+      "expected": {
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/jellyfin/Items",
+            "query": {
+              "userId": [
+                "viewer"
+              ],
+              "searchTerm": [
+                "Paper moon"
+              ],
+              "limit": [
+                "24"
+              ],
+              "recursive": [
+                "true"
+              ],
+              "includeItemTypes": [
+                "MusicAlbum"
+              ],
+              "enableTotalRecordCount": [
+                "true"
+              ],
+              "fields": [
+                "PrimaryImageAspectRatio,ProductionYear,Overview,Genres,ChildCount,RecursiveItemCount"
+              ]
+            },
+            "authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\"",
+            "body": null
+          }
+        ],
+        "result": {
+          "kind": "success"
+        }
+      }
+    },
+    {
+      "id": "search-artists",
+      "operation": "http",
+      "input": {
+        "action": "search",
+        "kind": "ARTISTS",
+        "query": "  Paper moon  ",
+        "responses": [
+          {
+            "status": 200,
+            "body": {
+              "Items": []
+            }
+          }
+        ]
+      },
+      "expected": {
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/jellyfin/Artists",
+            "query": {
+              "userId": [
+                "viewer"
+              ],
+              "searchTerm": [
+                "Paper moon"
+              ],
+              "limit": [
+                "24"
+              ],
+              "enableTotalRecordCount": [
+                "true"
+              ],
+              "fields": [
+                "PrimaryImageAspectRatio,ProductionYear,Overview,Genres,ChildCount,RecursiveItemCount"
+              ]
+            },
+            "authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\"",
+            "body": null
+          }
+        ],
+        "result": {
+          "kind": "success"
+        }
+      }
+    },
+    {
+      "id": "search-songs",
+      "operation": "http",
+      "input": {
+        "action": "search",
+        "kind": "SONGS",
+        "query": "  Paper moon  ",
+        "responses": [
+          {
+            "status": 200,
+            "body": {
+              "Items": []
+            }
+          }
+        ]
+      },
+      "expected": {
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/jellyfin/Items",
+            "query": {
+              "userId": [
+                "viewer"
+              ],
+              "searchTerm": [
+                "Paper moon"
+              ],
+              "limit": [
+                "24"
+              ],
+              "recursive": [
+                "true"
+              ],
+              "includeItemTypes": [
+                "Audio"
+              ],
+              "enableTotalRecordCount": [
+                "true"
+              ],
+              "fields": [
+                "PrimaryImageAspectRatio,ProductionYear,Overview,Genres,ChildCount,RecursiveItemCount,SortName,ParentId"
+              ]
+            },
+            "authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\"",
+            "body": null
+          }
+        ],
+        "result": {
+          "kind": "success"
+        }
+      }
+    },
+    {
+      "id": "search-playlists",
+      "operation": "http",
+      "input": {
+        "action": "search",
+        "kind": "PLAYLISTS",
+        "query": "  Paper moon  ",
+        "responses": [
+          {
+            "status": 200,
+            "body": {
+              "Items": []
+            }
+          }
+        ]
+      },
+      "expected": {
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/jellyfin/Items",
+            "query": {
+              "userId": [
+                "viewer"
+              ],
+              "searchTerm": [
+                "Paper moon"
+              ],
+              "limit": [
+                "24"
+              ],
+              "recursive": [
+                "true"
+              ],
+              "includeItemTypes": [
+                "Playlist"
+              ],
+              "enableTotalRecordCount": [
+                "true"
+              ],
+              "fields": [
+                "PrimaryImageAspectRatio,ProductionYear,Overview,Genres,ChildCount,RecursiveItemCount"
+              ],
+              "mediaTypes": [
+                "Audio"
+              ]
+            },
+            "authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\"",
+            "body": null
+          }
+        ],
+        "result": {
+          "kind": "success"
+        }
+      }
+    },
+    {
       "id": "search-short-no-request",
       "operation": "http",
       "input": {

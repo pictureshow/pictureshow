@@ -165,6 +165,11 @@ const pendingReferenceHttpCases = new Map([
     ["catalog-screensaver-items", "catalog.screensaverItems"],
     ["catalog-parental-ratings", "catalog.parentalRatings"],
     ["catalog-photos", "catalog.photos"],
+    // MUS-01 music search groups (Android and Apple): web search port owed.
+    ["search-albums", "search"],
+    ["search-artists", "search"],
+    ["search-songs", "search"],
+    ["search-playlists", "search"],
 ]);
 const pendingApplicationCases = new Map([
     ["detail-primary-next", "detail-play-item"],

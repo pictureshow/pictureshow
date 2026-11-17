@@ -57,6 +57,11 @@ extension MediaItem {
         case "Series", "Season", "Episode": return "tv"
         case "BoxSet": return "square.stack"
         case "Person": return "person"
+        case "MusicAlbum": return "square.stack"
+        case "MusicArtist": return "music.mic"
+        case "MusicGenre": return "guitars"
+        case "Audio": return "music.note"
+        case "Playlist": return mediaType == "Audio" ? "music.note.list" : "film"
         case "CollectionFolder", "UserView": return collectionType == "tvshows" ? "tv" : collectionType == "music" ? "music.note" : "film"
         default: return "film"
         }
@@ -74,7 +79,8 @@ struct WatchBadge: View {
                 .foregroundStyle(Theme.onAccent)
                 .background(Capsule().fill(Theme.accent))
                 .accessibilityLabel("\(unplayed) unwatched")
-        } else if item.isWatched {
+        } else if item.isWatched, item.musicRoute == nil {
+            // A played song or album isn't "watched"; music cards carry no watched mark.
             Image(systemName: "checkmark")
                 .font(.caption.weight(.bold))
                 .foregroundStyle(Theme.onAccent)
@@ -93,6 +99,8 @@ struct PosterCard: View {
     var showsText = true
     var homeSubtitle: String?
     var isHome = false
+    /// Height over width: 1.5 for posters, 1 for music's square covers.
+    var aspect: CGFloat = 1.5
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -110,7 +118,7 @@ struct PosterCard: View {
 
     @ViewBuilder private var artwork: some View {
         let image = ArtworkImage(url: url, placeholderSymbol: item.symbol)
-            .frame(width: width, height: width * 1.5)
+            .frame(width: width, height: width * aspect)
             .overlay(alignment: .topTrailing) { WatchBadge(item: item).padding(8) }
             .overlay(alignment: .bottom) {
                 if item.progress > 0, item.isResumable { ProgressStrip(value: item.progress).padding(8) }
@@ -220,18 +228,20 @@ struct ItemCard: View {
     var homeSubtitle: String?
     var isHome = false
     var route: Route?
+    /// Square covers for music results.
+    var square = false
 
     var body: some View {
         #if os(tvOS)
         CardLink(route: route ?? item.route) {
-            if wide { WideArtworkOnly(item: item, width: width ?? Theme.wideWidth) } else { PosterArtworkOnly(item: item, width: width ?? Theme.posterWidth) }
+            if wide { WideArtworkOnly(item: item, width: width ?? Theme.wideWidth) } else { PosterArtworkOnly(item: item, width: width ?? Theme.posterWidth, aspect: square ? 1 : 1.5) }
         } below: {
             CardCaption(item: item, wide: wide, width: width ?? (wide ? Theme.wideWidth : Theme.posterWidth), compactTitle: compactTitle, homeSubtitle: homeSubtitle, isHome: isHome)
         }
         .contextMenu { ItemActions(item: item) }
         #else
         NavigationLink(value: route ?? item.route) {
-            if wide { WideCard(item: item, width: width ?? Theme.wideWidth, compactTitle: compactTitle, homeSubtitle: homeSubtitle, isHome: isHome) } else { PosterCard(item: item, width: width ?? Theme.posterWidth, homeSubtitle: homeSubtitle, isHome: isHome) }
+            if wide { WideCard(item: item, width: width ?? Theme.wideWidth, compactTitle: compactTitle, homeSubtitle: homeSubtitle, isHome: isHome) } else { PosterCard(item: item, width: width ?? Theme.posterWidth, homeSubtitle: homeSubtitle, isHome: isHome, aspect: square ? 1 : 1.5) }
         }
         .buttonStyle(.plain)
         .contextMenu { ItemActions(item: item) }
@@ -244,9 +254,10 @@ struct PosterArtworkOnly: View {
     @EnvironmentObject private var app: AppModel
     let item: MediaItem
     let width: CGFloat
+    var aspect: CGFloat = 1.5
     var body: some View {
         ArtworkImage(url: app.account.flatMap { a in app.client?.artworkURL(account: a, item: item, kind: .poster, width: Int(width * 2)) }, placeholderSymbol: item.symbol)
-            .frame(width: width, height: width * 1.5)
+            .frame(width: width, height: width * aspect)
             .overlay(alignment: .topTrailing) { WatchBadge(item: item).padding(10) }
             .overlay(alignment: .bottom) { if item.progress > 0, item.isResumable { ProgressStrip(value: item.progress).padding(12) } }
     }
@@ -294,6 +305,16 @@ struct ItemActions: View {
     @EnvironmentObject private var app: AppModel
     let item: MediaItem
     var body: some View {
+        // Music opens its own screens and plays through the music queue, never the video player; it keeps Favorite.
+        if item.musicRoute != nil {
+            favoriteButton
+        } else {
+            videoActions
+            favoriteButton
+        }
+    }
+
+    @ViewBuilder private var videoActions: some View {
         if CatalogPresentation.offersPlayback(item) {
             Button { app.play(item) } label: { Label(item.userData.playbackPositionTicks > 0 ? "Resume" : "Play", systemImage: "play.fill") }
             if CatalogPresentation.offersRestart(item) {
@@ -303,6 +324,9 @@ struct ItemActions: View {
         Button { Task { await toggleWatched() } } label: {
             Label(item.isWatched ? "Mark as unwatched" : "Mark as watched", systemImage: item.isWatched ? "eye.slash" : "checkmark.circle")
         }
+    }
+
+    private var favoriteButton: some View {
         Button { Task { await toggleFavorite() } } label: {
             Label(item.userData.isFavorite ? "Remove from favorites" : "Add to favorites", systemImage: item.userData.isFavorite ? "heart.slash" : "heart")
         }
@@ -330,6 +354,7 @@ struct Shelf: View {
     var captions: [String: String] = [:]
     var libraryNames: [String: String] = [:]
     var isHome = false
+    var square = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -338,7 +363,7 @@ struct Shelf: View {
                 // Plain HStack: inside a lazy vertical stack, a LazyHStack measured 0 tall before it had
                 // realised any card, so on Apple TV whole rows (Next up, Libraries) never appeared.
                 HStack(alignment: .top, spacing: Theme.cardSpacing) {
-                    ForEach(items) { item in ItemCard(item: item, wide: wide, compactTitle: compactTitle, homeSubtitle: Catalog.homeCardSubtitle(item: item, caption: captions[item.id], library: libraryNames[item.id]), isHome: isHome) }
+                    ForEach(items) { item in ItemCard(item: item, wide: wide, compactTitle: compactTitle, homeSubtitle: Catalog.homeCardSubtitle(item: item, caption: captions[item.id], library: libraryNames[item.id]), isHome: isHome, square: square) }
                 }
                 .padding(.horizontal, Theme.gutter)
                 #if os(tvOS)

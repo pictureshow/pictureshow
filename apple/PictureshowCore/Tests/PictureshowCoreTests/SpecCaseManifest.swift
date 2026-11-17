@@ -698,6 +698,10 @@ enum SpecCaseManifest {
         search-episodes|reference/http
         search-collections|reference/http
         search-people|reference/http
+        search-albums|reference/http
+        search-artists|reference/http
+        search-songs|reference/http
+        search-playlists|reference/http
         search-short-no-request|reference/http
         person-pagination-bounds|reference/http
         catalog-error-401|reference/http

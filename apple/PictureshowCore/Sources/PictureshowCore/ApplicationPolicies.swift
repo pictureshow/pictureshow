@@ -119,7 +119,13 @@ public enum PlaybackExtras {
 }
 public struct PersonCredit: Codable, Equatable, Sendable, Identifiable { public var id: String; public var name: String; public var type: String?; public var role: String?; public init(id: String, name: String, type: String? = nil, role: String? = nil) { self.id = id; self.name = name; self.type = type; self.role = role }; enum CodingKeys: String, CodingKey { case id = "Id", name = "Name", type = "Type", role = "Role" } }
 public struct PublicUser: Codable, Sendable, Identifiable { public var id: String; public var name: String; enum CodingKeys: String, CodingKey { case id = "Id", name = "Name" } }
-public enum SearchKind: String, CaseIterable, Sendable { case movies = "Movie", shows = "Series", episodes = "Episode", collections = "BoxSet", people = "Person"; public var title: String { switch self { case .movies:return "Movies";case .shows:return "Shows";case .episodes:return "Episodes";case .collections:return "Collections";case .people:return "People" } } }
+/// Search groups in the order they show. Music groups (MUS-01) come after every video group, so a video library's results keep their order.
+public enum SearchKind: String, CaseIterable, Sendable {
+    case movies = "Movie", shows = "Series", episodes = "Episode", collections = "BoxSet", people = "Person"
+    case albums = "MusicAlbum", artists = "MusicArtist", songs = "Audio", playlists = "Playlist"
+    public var title: String { switch self { case .movies:return "Movies";case .shows:return "Shows";case .episodes:return "Episodes";case .collections:return "Collections";case .people:return "People";case .albums:return "Albums";case .artists:return "Artists";case .songs:return "Songs";case .playlists:return "Playlists" } }
+    public var isMusic: Bool { [.albums, .artists, .songs, .playlists].contains(self) }
+}
 public struct TrickplayInfo: Codable, Equatable, Sendable {
     public var width: Int; public var height: Int; public var tileWidth: Int; public var tileHeight: Int; public var thumbnailCount: Int; public var interval: Int
     enum CodingKeys: String, CodingKey { case width = "Width", height = "Height", tileWidth = "TileWidth", tileHeight = "TileHeight", thumbnailCount = "ThumbnailCount", interval = "Interval" }
