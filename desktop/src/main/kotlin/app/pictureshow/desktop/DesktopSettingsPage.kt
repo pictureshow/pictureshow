@@ -59,6 +59,7 @@ internal fun SettingsPage(state:DesktopState,c:DesktopController,onSignOut:()->U
                 OutlinedButton(onClick = onSignOut, modifier = Modifier.controlFocus().heightIn(min = 40.dp).probe("sign-out")) { Text("Sign out") }
             }
         }
+        AccountsSettingsSections(state, c)
         SettingsSection("Playback") {
             SettingRow("Video quality", VIDEO_QUALITY_CAPTION) {
                 Choice("Video quality",listOf(0 to VIDEO_QUALITY_ORIGINAL,4 to "4 Mbps",10 to "10 Mbps",20 to "20 Mbps",40 to "40 Mbps",80 to "80 Mbps"),s.bitrateMbps?:0,"quality",buttonValue = if ((s.bitrateMbps ?: 0) == 0) "Original" else "${s.bitrateMbps} Mbps", buttonWidth = 180.dp, trailingIcon = DesktopGlyph.ChevronDown, fixedWidth = true, menuMinWidth = 340.dp) { c.saveSettings(s.copy(bitrateMbps=it.takeIf{it>0})) }
@@ -77,9 +78,7 @@ internal fun SettingsPage(state:DesktopState,c:DesktopController,onSignOut:()->U
         SettingsSection("Interface") {
             SettingSwitch("Living-room size","Larger text and controls for watching from a distance.",s.largeInterface,"large-interface") { c.saveSettings(s.copy(largeInterface=it)) }
         }
-        SettingsSection("About") {
-            Text("Pictureshow · Free, open source Jellyfin client\nMPL-2.0 · Legitimate LLC\nVideo: dynamically loaded LGPL libmpv",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-        }
+        InformationSettingsSection(c)
     }
 }
 @Composable

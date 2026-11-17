@@ -38,6 +38,15 @@ class DesktopController(
     private val playbackClient = PlaybackClient(http, identity)
     val liveTv = DesktopLiveTv(LiveTvClient(http, identity, DesktopLivePendingWrites(File(directory, "live-pending"))), scope, { mutable.value.account })
     private val extras = PlaybackExtrasClient(http, identity)
+    /** AUTH-16/18/19 (DesktopProfileLock.kt): PINs, the lock and the time away. */
+    val pins = DesktopProfileLock(directory, scope, log = { events.log(it) })
+    /** AUTH-15 (DesktopQuickConnectApproval.kt). */
+    val approval = DesktopQuickConnectApproval(QuickConnectApprovalClient(http, identity), scope, { mutable.value.account }, log = { events.log(it) })
+    /** SEERR-01..07 (DesktopSeerr.kt). Its own HTTP client: the Jellyfin token never goes to Seerr. */
+    val seerr = DesktopSeerr(DesktopSeerrStore(directory), scope, { mutable.value.account }, log = { events.log(it) })
+    /** INFO-01..08 (DesktopInformation.kt). */
+    val information = DesktopInformation(scope, { mutable.value.settings })
+    internal val appVersion: String get() = identity.version
     private val generation = AtomicLong()
     private var pageJob: Job? = null
     private var discoveryJob: Job? = null
@@ -66,6 +75,8 @@ class DesktopController(
     }
     private var inputAttached = false
     init {
+        // AUTH-18: a relock closes the open player; the lock screen then asks like a fresh start.
+        pins.onRelock = { if (mutable.value.route == DesktopRoute.Player) stopPlayback() }
         inputDiagnostics.route(mutable.value.route)
         scope.launch { while (isActive) { delay(10_000); inputDiagnostics.heartbeat() } }
     }
@@ -97,11 +108,16 @@ class DesktopController(
     private fun identityClient() = JellyfinClient(http, identity.copy(deviceId = UUID.randomUUID().toString()))
     /** Record every committed transition, including quick intermediate routes that StateFlow can conflate. */
     @Synchronized private fun updateState(change: (DesktopState) -> DesktopState) {
-        val next = change(mutable.value)
+        val previous = mutable.value
+        val next = change(previous)
         mutable.value = next
         inputDiagnostics.route(next.route)
+        desktopAccountsObserve(previous, next, pins, seerr)
     }
-    private fun snapshotAccounts() { val s = store.snapshots.value; updateState { it.copy(accounts = s.accounts, rememberedServers = s.rememberedServers) } }
+    private fun snapshotAccounts() {
+        val s = store.snapshots.value; updateState { it.copy(accounts = s.accounts, rememberedServers = s.rememberedServers) }
+        pins.retain(s.accounts.map { it.key }.toSet()); seerr.retain(s.accounts.filter { !it.signedOut }.map { it.key }.toSet())
+    }
     @Synchronized private fun page(route: DesktopRoute, remember: Boolean = false, block: suspend (Long) -> Unit) {
         val before = mutable.value
         if (remember && before.route !in setOf(DesktopRoute.Loading, DesktopRoute.Player)) synchronized(history) { history.add(before) }
@@ -154,6 +170,7 @@ class DesktopController(
 
     fun start() = page(DesktopRoute.Loading) { g ->
         val s = store.load()
+        pins.load()
         val settings = settingsStore.read()
         snapshotAccounts()
         publish(g) { it.copy(settings = settings, server = s.lastServer) }
@@ -197,6 +214,7 @@ class DesktopController(
     private suspend fun acceptAccount(g: Long, account: Account) {
         currentCoroutineContext().ensureActive()
         liveTv.clear()
+        pins.provenByPassword(account.key)
         store.remember(account)
         snapshotAccounts()
         synchronized(history) { history.clear() }
@@ -232,7 +250,39 @@ class DesktopController(
             publish(g) { it.copy(publicUsers = users) }
         }
     }
-    fun selectAccount(key: String) = page(DesktopRoute.Accounts) { g ->
+    /** AUTH-16: the chooser asks for a viewer's PIN before switching to it. */
+    fun selectAccount(key: String) {
+        val account = store.snapshots.value.accounts.firstOrNull { it.key == key }
+        if (account != null && account.signedIn && pins.neededOnSwitch(key, mutable.value.account?.key)) pins.askBeforeSwitch(account) { selectAccountNow(key) }
+        else selectAccountNow(key)
+    }
+    /** Forgot PIN: the viewer's own sign-in page, with its name filled; the password sign-in unlocks it. */
+    fun signInAgain(key: String) {
+        val account = store.snapshots.value.accounts.firstOrNull { it.key == key } ?: return
+        page(DesktopRoute.SignIn, remember = mutable.value.account != null) { g ->
+            publish(g) { it.copy(server = account.server, signInUsername = account.user.name, publicUsers = emptyList(), quickCode = null) }
+        }
+    }
+    /** The lock screen's ways out: neither opens anything of the locked viewer. */
+    fun lockedSwitchUser() = leaveLocked { page(DesktopRoute.Accounts) { _ -> snapshotAccounts() } }
+    fun lockedUsePassword() {
+        val account = mutable.value.account ?: return
+        leaveLocked { page(DesktopRoute.SignIn) { g -> publish(g) { it.copy(server = account.server, signInUsername = account.user.name, publicUsers = emptyList(), quickCode = null) } } }
+    }
+    private fun leaveLocked(then: () -> Unit) {
+        if (!pins.gated()) return
+        synchronized(history) { history.clear() }
+        scope.launch {
+            finishViewing()
+            runCatching { store.select(null) }; snapshotAccounts()
+            updateState { it.copy(account = null, homeRows = emptyList(), items = emptyList(), detail = null, playback = null, search = DesktopSearchState()) }
+            liveTv.clear()
+            then()
+        }
+    }
+    /** A page of another stream's feature, remembered for Back like Settings. */
+    internal fun openPage(route: DesktopRoute, block: suspend () -> Unit = {}) = page(route, remember = mutable.value.route != route) { _ -> block() }
+    private fun selectAccountNow(key: String) = page(DesktopRoute.Accounts) { g ->
         val account = store.snapshots.value.accounts.firstOrNull { it.key == key } ?: return@page
         if (account.expired || account.accessToken.isBlank()) {
             publish(g) { it.copy(server = account.server, route = DesktopRoute.SignIn, signInUsername = account.user.name,
@@ -268,7 +318,7 @@ class DesktopController(
         publish(g) { if (it.account?.key == key) it.copy(account = null, homeRows = emptyList(), items = emptyList(), detail = null) else it }
     }
     @Synchronized fun search() {
-        if (mutable.value.account == null) return
+        if (mutable.value.account == null || pins.gated()) return
         if (mutable.value.route == DesktopRoute.Search) {
             updateState { it.copy(returnFocus = "search-field") }
             return
@@ -453,10 +503,11 @@ class DesktopController(
             if (generation.get() == g) patchItemUserData(d.id) { ud }
         }
     }
-    fun settings() = page(DesktopRoute.Settings, remember = mutable.value.route != DesktopRoute.Settings) { _ -> }
+    fun settings() { if (!pins.gated()) page(DesktopRoute.Settings, remember = mutable.value.route != DesktopRoute.Settings) { _ -> } }
     fun saveSettings(settings: DesktopSettings) = page(DesktopRoute.Settings) { g -> settingsStore.write(settings); publish(g) { it.copy(settings = settings) }; engine?.volume(settings.volume) }
     @Synchronized fun back() {
         val s = mutable.value
+        if (pins.gated()) return
         if (s.route == DesktopRoute.Player) { stopPlayback(); return }
         if (s.route == DesktopRoute.QuickConnect) { page(DesktopRoute.SignIn) { _ -> }; return }
         val previous = synchronized(history) { if (history.isEmpty()) null else history.removeAt(history.lastIndex) }
@@ -527,6 +578,7 @@ class DesktopController(
     }
     fun attachWindow(window: Window) {
         this.window = window
+        attachPinWindow(window, pins)
         if (!inputAttached) {
             java.awt.Toolkit.getDefaultToolkit().addAWTEventListener(inputListener,
                 java.awt.AWTEvent.KEY_EVENT_MASK or java.awt.AWTEvent.MOUSE_EVENT_MASK or
@@ -541,7 +593,7 @@ class DesktopController(
     }
 
     fun play(item: MediaItem, fromStart: Boolean = false) {
-        if (mutable.value.busy) return
+        if (mutable.value.busy || !pins.admits(mutable.value.account?.key) || pins.gated()) return
         page(DesktopRoute.Player, remember = true) { g ->
             finishViewing()
             val a = mutable.value.account ?: return@page
@@ -565,6 +617,7 @@ class DesktopController(
     }
     fun tuneChannel(channel: LiveChannel) {
         val a = mutable.value.account ?: return
+        if (!pins.admits(a.key) || pins.gated()) return
         if (!liveTv.state.value.actionsAvailable(System.currentTimeMillis()) || channel.id !in liveTv.state.value.channels.map { it.id }) return
         page(DesktopRoute.Player, remember = true) { g ->
             finishViewing()

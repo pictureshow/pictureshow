@@ -4,6 +4,8 @@ plugins {
     kotlin("jvm")
     alias(libs.plugins.kotlin.compose)
     id("org.jetbrains.compose") version "1.12.2"
+    alias(libs.plugins.kotlin.serialization)
+    id("com.mikepenz.aboutlibraries.plugin") version "15.3.0"
 }
 
 kotlin { jvmToolchain(21) }
@@ -29,6 +31,18 @@ dependencies {
     implementation("org.jogamp.jogl:jogl-all-main:2.6.0")
     implementation("org.jogamp.gluegen:gluegen-rt-main:2.6.0")
 }
+
+// INFO-04/05: runtime metadata only; licenses.gradle checks the actual runtime artifacts and adds libmpv's row.
+aboutLibraries {
+    collect {
+        includePlatform = false
+        fetchRemoteLicense = false
+        fetchRemoteFunding = false
+    }
+    library { duplicationMode = com.mikepenz.aboutlibraries.plugin.DuplicateMode.KEEP }
+    export { outputFile = layout.buildDirectory.file("licenses/aboutlibraries.json").get().asFile }
+}
+apply(from = "licenses.gradle")
 
 // Reuse the compiled suites: several test helpers and production internals rely on
 // Kotlin's core friend compilation. Recompiling them in another module breaks that contract.

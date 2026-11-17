@@ -140,6 +140,7 @@ internal fun SearchPage(state: DesktopState, c: DesktopController) {
                             }
                         }
                     }
+                    seerrOffersRow(c, search)
                 }
                 VerticalScrollbar(rememberScrollbarAdapter(list), Modifier.align(Alignment.CenterEnd).fillMaxHeight())
             }

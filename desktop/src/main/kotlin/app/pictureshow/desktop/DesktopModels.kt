@@ -6,7 +6,9 @@ package app.pictureshow.desktop
 import app.pictureshow.core.*
 import app.pictureshow.core.playback.*
 
-enum class DesktopRoute { Loading, Servers, Accounts, SignIn, QuickConnect, Home, Search, Person, Library, Detail, Player, Settings, LiveTv }
+enum class DesktopRoute { Loading, Servers, Accounts, SignIn, QuickConnect, Home, Search, Person, Library, Detail, Player, Settings, LiveTv,
+    /** Stream C2: SEERR-03..06 and INFO-01..08. */
+    Requests, SeerrTitle, About, Licenses, License, Supporter, ThisComputer }
 
 data class DesktopSettings(
     val bitrateMbps: Int? = null,
@@ -112,5 +114,6 @@ internal fun desktopRootFor(route: DesktopRoute, previous: String?): String? = w
     DesktopRoute.Home -> DESKTOP_ROOT_HOME
     DesktopRoute.Search -> DESKTOP_ROOT_SEARCH
     DesktopRoute.Settings -> DESKTOP_ROOT_SETTINGS
+    DesktopRoute.Requests -> DESKTOP_ROOT_REQUESTS
     else -> previous
 }

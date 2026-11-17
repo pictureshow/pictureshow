@@ -1,0 +1,112 @@
+/* SPDX-License-Identifier: MPL-2.0
+ * Copyright (c) Legitimate LLC.
+ */
+import groovy.json.JsonOutput
+import groovy.json.JsonSlurper
+import org.gradle.api.artifacts.component.ModuleComponentIdentifier
+import org.gradle.api.artifacts.component.ProjectComponentIdentifier
+import java.util.zip.ZipInputStream
+
+// INFO-04/05 on desktop: every module on the runtime classpath, with its declared license, the full license text
+// and every NOTICE/LICENSE file inside its jar. An unknown license fails the build instead of shipping unlisted.
+// libmpv is not bundled (it is loaded from the computer at run time), so it is a row of its own with the LGPL text.
+def metadata = layout.buildDirectory.file('licenses/aboutlibraries.json')
+def catalogModule = { id ->
+    if (id instanceof ModuleComponentIdentifier) return true
+    if (id instanceof ProjectComponentIdentifier && id.projectPath in [':desktop', ':core', ':ui-shared']) return false
+    throw new GradleException("Unmapped runtime dependency $id: publish module metadata or add an explicit license mapping.")
+}
+def runtimeArtifacts = providers.provider {
+    configurations.runtimeClasspath.incoming.artifactView { componentFilter(catalogModule) }.artifacts
+}
+def lgpl = rootProject.file('third_party/mpv/COPYING.LGPLv2.1')
+def ownLicense = rootProject.file('LICENSE')
+def kotlinNotice = rootProject.file('third_party/kotlin/NOTICE')
+// Upstream license files for modules whose POM names licenses without text and whose jars carry none
+// (third_party/jogamp/README.md, third_party/antlr/README.md).
+def jogl = rootProject.file('third_party/jogamp/jogl.LICENSE.txt')
+def gluegen = rootProject.file('third_party/jogamp/gluegen.LICENSE.txt')
+def antlr = rootProject.file('third_party/antlr/LICENSE.txt')
+def overrides = [
+    'org.jogamp.jogl:jogl-all-main': [file: jogl, license: 'BSD-2-Clause AND BSD-3-Clause AND SGI-B-2.0 AND Apache-2.0 AND Ubuntu-font-1.0 (see text)'],
+    'org.jogamp.jogl:jogl-all': [file: jogl, license: 'BSD-2-Clause AND BSD-3-Clause AND SGI-B-2.0 AND Apache-2.0 AND Ubuntu-font-1.0 (see text)'],
+    'org.jogamp.gluegen:gluegen-rt-main': [file: gluegen, license: 'BSD-2-Clause AND BSD-3-Clause AND BSD-4-Clause (see text)'],
+    'org.jogamp.gluegen:gluegen-rt': [file: gluegen, license: 'BSD-2-Clause AND BSD-3-Clause AND BSD-4-Clause (see text)'],
+    'antlr:antlr': [file: antlr, license: 'ANTLR-PD-fallback (Python generator code: BSD-3-Clause)', version: '2.7.7'],
+]
+
+def embedded
+embedded = { byte[] bytes, String prefix = '' ->
+    def result = []
+    new ZipInputStream(new ByteArrayInputStream(bytes)).withCloseable { zip ->
+        def entry
+        while ((entry = zip.nextEntry) != null) {
+            def path = entry.name
+            def base = path.tokenize('/').last().toUpperCase(Locale.ROOT)
+            if (!entry.directory && ['NOTICE', 'LICENSE', 'COPYING'].any { base.startsWith(it) } && !base.endsWith('.CLASS')) {
+                result.add("$prefix$path\n\n" + new String(zip.readAllBytes(), 'UTF-8').trim())
+            } else if (!entry.directory && path.endsWith('.jar')) {
+                result.addAll(embedded(zip.readAllBytes(), "$prefix$path!/"))
+            }
+        }
+    }
+    result
+}
+
+def generateLicenseCatalog = tasks.register('generateLicenseCatalog') {
+    dependsOn('exportLibraryDefinitions')
+    def output = layout.buildDirectory.dir('generated/licenseResources')
+    outputs.dir(output)
+    inputs.file(file('licenses.gradle'))
+    inputs.file(metadata)
+    inputs.files(runtimeArtifacts.map { it.artifactFiles })
+    inputs.files(lgpl, ownLicense, kotlinNotice, jogl, gluegen, antlr)
+    doLast {
+        def data = new JsonSlurper().parse(metadata.get().asFile)
+        def problems = []
+        def rows = runtimeArtifacts.get().artifacts.collect { artifact ->
+            def module = artifact.id.componentIdentifier
+            def id = "${module.group}:${module.module}".toString()
+            def definition = data.libraries.find { it.uniqueId == id }
+            if (definition == null) throw new GradleException("Missing license metadata for $id:${module.version}")
+            def licenses = (definition.licenses ?: []).collect { hash ->
+                def license = data.licenses[hash]
+                if (!license) throw new GradleException("Missing license $hash for $id")
+                license
+            }
+            def notices = embedded(artifact.file.bytes)
+            if (id == 'org.jetbrains.kotlin:kotlin-stdlib') notices.add(kotlinNotice.getText('UTF-8'))
+            notices = notices.unique().sort()
+            def identifiers = licenses.collect { it.spdxId ?: it.name }
+            def texts = licenses.collect { it.content ?: '' }
+            def override = overrides[id]
+            if (override != null) {
+                if (override.version && override.version != module.version) throw new GradleException("Check the license override for $id:${module.version}")
+                return [id: id, name: definition.name ?: module.module, version: module.version, license: override.license,
+                        text: ([override.file.getText('UTF-8')] + notices).join('\n\n'), notices: notices]
+            }
+            def shortTexts = licenses.findAll { (it.content ?: '').length() <= 500 }.collect { it.spdxId ?: it.name }
+            if (!identifiers || shortTexts) {
+                problems.add("$id:${module.version} declares $identifiers; no full text for $shortTexts; jar notices: ${notices.collect { it.readLines().first() }}")
+            }
+            [id: id, name: definition.name ?: module.module, version: module.version,
+             license: identifiers.join(' / '), text: (texts + notices).join('\n\n'), notices: notices]
+        }.unique { it.id }
+        if (problems) throw new GradleException("Missing full license texts. Add a verified upstream override; do not ship an unknown license:\n" + problems.join('\n'))
+        rows.add([id: 'mpv-system', name: 'mpv (libmpv) and FFmpeg', version: 'loaded from this computer', license: 'LGPL-2.1-or-later (when built without GPL parts)', notices: [],
+            text: '''Pictureshow for computers does not include mpv or FFmpeg. It loads the libmpv on this computer when it plays video: the file named by MPV_LIBRARY, or the system's mpv library.
+mpv and FFmpeg are licensed under the GNU Lesser General Public License 2.1 or later when they are built without their GPL parts, and under the GNU GPL when built with them. Which applies depends on the build on this computer; Settings > This computer shows the version and build options it reports.
+Pictureshow's own test builds use LGPL builds of libmpv 0.42.0.
+Source: https://github.com/mpv-player/mpv and https://ffmpeg.org
+
+''' + lgpl.getText('UTF-8')])
+        def target = output.get().file('licenses/catalog.json').asFile
+        target.parentFile.mkdirs()
+        target.setText(JsonOutput.toJson([libraries: rows.sort { a, b ->
+            a.name.toLowerCase(Locale.ROOT) <=> b.name.toLowerCase(Locale.ROOT) ?: a.id <=> b.id
+        }]), 'UTF-8')
+        output.get().file('licenses/MPL-2.0.txt').asFile.setText(ownLicense.getText('UTF-8'), 'UTF-8')
+        logger.lifecycle("License catalog: ${rows.size()} libraries; no unknown licenses")
+    }
+}
+sourceSets.main.resources.srcDir(files(layout.buildDirectory.dir('generated/licenseResources')).builtBy(generateLicenseCatalog))

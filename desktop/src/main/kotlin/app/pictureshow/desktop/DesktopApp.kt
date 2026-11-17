@@ -240,13 +240,13 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                 }
                 true
             } }
-            CompositionLocalProvider(LocalDesktopMenus provides menus, LocalModalOpen provides (help || remove != null || signOut != null)) {
+            CompositionLocalProvider(LocalDesktopMenus provides menus, LocalModalOpen provides (help || remove != null || signOut != null || desktopAccountsModalOpen(controller))) {
             Column(Modifier.fillMaxSize().background(if (state.route == DesktopRoute.Player) Color.Transparent else MaterialTheme.colorScheme.background)) {
                 chrome {
                 Row(Modifier.fillMaxWidth().height(52.dp).background(MaterialTheme.colorScheme.surface).padding(start = if(macChrome) 80.dp else 28.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("PICTURESHOW", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.width(20.dp))
-                    if (state.route in setOf(DesktopRoute.SignIn, DesktopRoute.QuickConnect, DesktopRoute.Detail, DesktopRoute.Player, DesktopRoute.Library, DesktopRoute.LiveTv, DesktopRoute.Settings, DesktopRoute.Search, DesktopRoute.Person) || (state.route == DesktopRoute.Accounts && state.account != null)) TextButton(onClick = controller::back, modifier = Modifier.controlFocus().probe("back")) { Icon(DesktopGlyph.Back, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Back") }
+                    if (state.route in setOf(DesktopRoute.SignIn, DesktopRoute.QuickConnect, DesktopRoute.Detail, DesktopRoute.Player, DesktopRoute.Library, DesktopRoute.LiveTv, DesktopRoute.Settings, DesktopRoute.Search, DesktopRoute.Person) || state.route in DESKTOP_ACCOUNTS_ROUTES || (state.route == DesktopRoute.Accounts && state.account != null)) TextButton(onClick = controller::back, modifier = Modifier.controlFocus().probe("back")) { Icon(DesktopGlyph.Back, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Back") }
                     Spacer(Modifier.weight(1f))
                     DesktopUtility("Keyboard shortcuts", DesktopGlyph.Keyboard, "shortcuts") { modalReturnFocus = "shortcuts"; help = true }
                     DesktopUtility(if(fullscreen) "Exit fullscreen" else "Fullscreen", DesktopGlyph.Fullscreen, "fullscreen", onFullscreen)
@@ -255,6 +255,9 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                 }
                 // The body is a directional fence: arrows never walk out of it into the title bar's
                 // icons (D-7); Tab and Shift+Tab still reach them.
+                // AUTH-16/18: while the viewer's PIN is asked, nothing of that viewer composes.
+                val pinGate by controller.pins.state.collectAsState()
+                if (pinGate.gate != null && pinGate.gate?.key == state.account?.key) DesktopPinGate(controller, Modifier.weight(1f)) else
                 Row(Modifier.weight(1f).directionalFence()) {
                     if (sidebarAccount != null && state.route !in listOf(DesktopRoute.Player, DesktopRoute.SignIn, DesktopRoute.QuickConnect, DesktopRoute.Accounts, DesktopRoute.Servers)) {
                         DesktopSidebar(
@@ -266,6 +269,7 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                             onLibrary = controller::browseRoot,
                             onSettings = { if (state.route != DesktopRoute.Settings) controller.settings() },
                             onAccounts = controller::accounts,
+                            onRequests = controller::openRequests.takeIf { controller.seerr.state.collectAsState().value.connected },
                             onSignOut = { modalReturnFocus = "nav:account"; signOut = state.account }
                         )
                     }
@@ -296,6 +300,7 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                                 DesktopRoute.Detail -> DetailPage(state, controller)
                                 DesktopRoute.Player -> PlayerPage(state, controller, onFullscreen)
                                 DesktopRoute.Settings -> SettingsPage(state, controller) { modalReturnFocus = "sign-out"; signOut = state.account }
+                                DesktopRoute.Requests, DesktopRoute.SeerrTitle, DesktopRoute.About, DesktopRoute.Licenses, DesktopRoute.License, DesktopRoute.Supporter, DesktopRoute.ThisComputer -> DesktopAccountsPage(state, controller)
                             }
                             }
                             }
@@ -312,6 +317,7 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
             }
             remove?.let { a ->
                 AlertDialog(onDismissRequest = { remove = null }, title = { Text("Remove ${a.user.name}?") }, text = { Text("${a.user.name} will be removed from this computer. You can sign in again any time.") }, dismissButton = { TextButton(onClick = { remove = null }, modifier = Modifier.controlFocus(allowInModal = true).probe("remove-cancel")) { Text("Cancel") } }, confirmButton = { TextButton(onClick = { modalReturnFocus = null; remove = null; controller.removeAccount(a.key) }, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error), modifier = Modifier.controlFocus(allowInModal = true).probe("remove-confirm")) { Text("Remove account") } }) }
+            DesktopPinDialogs(controller)
             }
         }
     }
@@ -364,7 +370,8 @@ internal fun DesktopSidebar(
     onSettings: () -> Unit,
     onAccounts: () -> Unit,
     onSignOut: () -> Unit,
-    onSearch: () -> Unit = {}
+    onSearch: () -> Unit = {},
+    onRequests: (() -> Unit)? = null
 ) {
     Column(Modifier.width(SIDEBAR_WIDTH_DP.dp).fillMaxHeight().background(MaterialTheme.colorScheme.surfaceContainer).padding(vertical = 12.dp).testTag("sidebar")) {
         DesktopAccountMenu(account, onSettings, onAccounts, onSignOut, Modifier.padding(horizontal = 12.dp))
@@ -385,6 +392,7 @@ internal fun DesktopSidebar(
         HorizontalDivider(Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
         // Search and Settings stay reachable independently of the number of libraries.
         Column(Modifier.padding(horizontal = 12.dp).testTag("sidebar-footer"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            onRequests?.let { SidebarItem("Requests", root == DESKTOP_ROOT_REQUESTS, "nav:requests", it) }
             SidebarItem("Search", root == DESKTOP_ROOT_SEARCH, "nav:search", onSearch)
             SidebarItem("Settings", root == DESKTOP_ROOT_SETTINGS, "nav:settings", onSettings)
         }
@@ -504,7 +512,7 @@ internal fun desktopEntryTarget(state: DesktopState): String? = when(state.route
     DesktopRoute.Search -> "search-field"
     DesktopRoute.Player -> "player-surface"
     DesktopRoute.Accounts -> state.accounts.firstOrNull()?.let { "account:${it.key}" }
-    else -> null
+    else -> desktopAccountsEntryTarget(state)
 }
 
 @Composable
