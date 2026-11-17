@@ -188,17 +188,44 @@ class MusicScreensTest {
     @Config(qualifiers = "w840dp-h800dp-land-hdpi")
     fun castNowPlayingTablet() = captureCastEntry("tablet-music-play-on")
 
+    private val skipped = "Skipped Tone B1: it isn't downloaded, and the server can't be reached."
+
     /** MUS-10, found on the TV: a skip with no server said nothing there. The reason now shows once and is cleared. */
     @Test fun tvSaysWhyTheQueueSkippedATrackOnce() {
         var cleared = 0
-        compose.setContent { TvMusicMessage("Skipped Tone B1: it isn't downloaded, and the server can't be reached.") { cleared++ } }
+        compose.mainClock.autoAdvance = false
+        compose.setContent { TvTheme { TvMusicMessage(skipped, { cleared++ }) } }
+        compose.mainClock.advanceTimeByFrame()
         compose.waitForIdle()
-        assertEquals(
-            "Skipped Tone B1: it isn't downloaded, and the server can't be reached.",
-            org.robolectric.shadows.ShadowToast.getTextOfLatestToast()
-        )
-        assertEquals(1, org.robolectric.shadows.ShadowToast.shownToastCount())
+        compose.onNodeWithTag("music:message").assertTextEquals(skipped)
         assertEquals(1, cleared)
+        compose.mainClock.advanceTimeBy(TV_MUSIC_MESSAGE_MS + 100)
+        compose.waitForIdle()
+        compose.onNodeWithTag("music:message").assertDoesNotExist()
+        assertEquals(1, cleared)
+    }
+
+    /** Found on the TV (leg 169 montage): the skip message sat over the music bar. It now sits above it, at TV size. */
+    @Test
+    @Config(qualifiers = "w960dp-h540dp-land-xhdpi")
+    fun tvQueueMessageSitsAboveTheMusicBar() {
+        queueOf("a")
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            TvTheme {
+                TvMusicDockLayout(skipped, {}, docked = true, onHeight = {}) {
+                    TvMusicBar(host) {}
+                }
+            }
+        }
+        compose.mainClock.advanceTimeByFrame()
+        compose.waitForIdle()
+        compose.mainClock.advanceTimeByFrame()
+        compose.waitForIdle()
+        val message = bounds("music:message")
+        val bar = bounds("music:bar")
+        assertTrue(message.bottom <= bar.top, "The message $message clears the bar $bar")
+        assertTrue(bar.bottom > bar.top, "The bar is drawn: $bar")
     }
 
     @Test fun tvQueueRowsMoveAndRemoveWithButtons() {

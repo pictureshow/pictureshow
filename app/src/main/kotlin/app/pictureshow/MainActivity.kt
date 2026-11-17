@@ -39,7 +39,6 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
@@ -53,7 +52,6 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
@@ -1302,14 +1300,13 @@ internal fun Pictureshow(
             }
         }
     }
-    if (musicBarShown || syncStayShown) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
-            Column(Modifier.onSizeChanged { musicBarHeight = it.height }) {
-                TvSyncStayReminder(tvRoute)
-                if (musicBarShown) TvMusicBar(music) { nav.navigate(MUSIC_NOW_ROUTE) { launchSingleTop = true } }
-            }
-        }
-    }
+    TvMusicDock(
+        music,
+        barShown = musicBarShown,
+        stayShown = syncStayShown,
+        onHeight = { musicBarHeight = it },
+        onOpen = { nav.navigate(MUSIC_NOW_ROUTE) { launchSingleTop = true } }
+    ) { TvSyncStayReminder(tvRoute) }
     val tvRemote: RemoteControllerHost = koinInject()
     TvMusicPrompts(music) { play -> tvRemote.playNow(play.tracks.drop(play.start ?: 0).map(MusicTrack::id)) }
     // Not over a player, a photo or Live TV's guide preview: there the picture on screen is the point.
