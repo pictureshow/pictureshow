@@ -206,7 +206,8 @@ class PictureshowApplication : Application() {
                             preferences = playbackPreferences::read,
                             remoteAttached = { controller.state.value.controller?.target?.name },
                             remoteTarget = { get<RemoteTargetHost>() },
-                            admitted = get<app.pictureshow.core.ProfileLockStore>().let { lock -> { account -> lock.admits(account.key) } }
+                            admitted = get<app.pictureshow.core.ProfileLockStore>().let { lock -> { account -> lock.admits(account.key) } },
+                            local = EngineMusicLocal(get())
                         )
                     }
                     single<app.pictureshow.core.UserConfigurationService> {

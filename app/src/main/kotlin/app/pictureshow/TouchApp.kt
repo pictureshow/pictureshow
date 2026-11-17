@@ -557,7 +557,7 @@ internal fun TouchPictureshow(
                         val vm: MusicDetailViewModel = koinViewModel(parameters = { parametersOf(account, item, role, library, catalog) })
                         TouchMusicDetail(vm, music, { next, nextRole ->
                             nav.navigate(musicRoute(next, nextRole, library))
-                        }) { nav.popBackStack() }
+                        }, { nav.popBackStack() }) { nav.navigate(OFFLINE_DOWNLOADS_ROUTE) { launchSingleTop = true } }
                     }
                 }
             }

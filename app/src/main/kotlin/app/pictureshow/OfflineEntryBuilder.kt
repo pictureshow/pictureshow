@@ -137,16 +137,28 @@ internal fun offlineBuildEntry(item: OfflineApiItem, choice: OfflineChoice, sequ
         container = source?.container,
         preset = choice.preset,
         runtimeTicks = item.runtimeTicks ?: source?.runtimeTicks,
-        labels = OfflineLabels(
-            title = item.name,
-            seriesName = item.seriesName,
-            seriesId = item.seriesId,
-            seasonId = item.seasonId,
-            seasonNumber = item.seasonNumber,
-            episodeNumber = item.episodeNumber,
-            year = item.year,
-            overview = item.overview
-        ),
+        labels = if (kind == OfflineMediaKind.audio) {
+            // A track's index numbers are its disc and track, not a season and episode.
+            OfflineLabels(
+                title = item.name,
+                album = item.album,
+                artist = item.artists.filter(String::isNotBlank).joinToString(", ").ifBlank { null } ?: item.albumArtist,
+                trackNumber = item.episodeNumber,
+                discNumber = item.seasonNumber,
+                year = item.year
+            )
+        } else {
+            OfflineLabels(
+                title = item.name,
+                seriesName = item.seriesName,
+                seriesId = item.seriesId,
+                seasonId = item.seasonId,
+                seasonNumber = item.seasonNumber,
+                episodeNumber = item.episodeNumber,
+                year = item.year,
+                overview = item.overview
+            )
+        },
         resources = resources,
         tracks = tracks,
         job = OfflineJob(cellularAllowed = choice.cellular),

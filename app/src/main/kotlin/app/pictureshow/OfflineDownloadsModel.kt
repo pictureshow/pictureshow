@@ -7,6 +7,7 @@ import app.pictureshow.core.Account
 import app.pictureshow.core.offline.OfflineEntry
 import app.pictureshow.core.offline.OfflineJob
 import app.pictureshow.core.offline.OfflineManifest
+import app.pictureshow.core.offline.OfflineMediaKind
 import app.pictureshow.core.offline.OfflinePhase
 import app.pictureshow.core.offline.OfflinePolicy
 import app.pictureshow.core.offline.OfflinePreset
@@ -264,6 +265,9 @@ internal fun offlineStatusIsError(job: OfflineJob): Boolean =
 
 internal fun offlineSubtitle(entry: OfflineEntry): String? {
     val labels = entry.labels
+    if (entry.kind == OfflineMediaKind.audio) {
+        return listOfNotNull(labels.artist, labels.album, offlinePresetLabel(entry.preset)).joinToString(" · ").ifEmpty { null }
+    }
     val place = when {
         labels.seasonNumber != null && labels.episodeNumber != null -> "S${labels.seasonNumber} E${labels.episodeNumber}"
         else -> labels.year?.toString()

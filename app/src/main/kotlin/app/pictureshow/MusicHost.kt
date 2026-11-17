@@ -56,6 +56,7 @@ import app.pictureshow.core.music.musicOutputFacts
 import app.pictureshow.core.music.musicOutputRepeats
 import app.pictureshow.core.music.musicPermutation
 import app.pictureshow.core.music.musicPlayDecision
+import app.pictureshow.core.music.musicUnreachable
 import app.pictureshow.core.music.musicUpcoming
 import app.pictureshow.core.music.musicWindow
 import app.pictureshow.core.music.planWindow
@@ -138,7 +139,20 @@ internal data class MusicUi(
     }
 }
 
-internal data class PreparedTrack(val decision: PlayDecision, val entry: String, val media: String)
+/** local: the track is a downloaded file on this device, and nothing about it goes to the server until the outbox syncs. */
+internal data class PreparedTrack(val decision: PlayDecision, val entry: String, val media: String, val local: Boolean = false)
+
+/** Downloaded tracks (MUS-10): what's on this device, and where its listening goes. Absent where downloads aren't built in. */
+internal interface MusicLocal {
+    /** A ready downloaded file for this track, as a direct-play decision on a file URI; null when it isn't here. */
+    fun decision(account: Account, media: String): PlayDecision?
+
+    /** The tracks with a ready download for this viewer. */
+    fun downloaded(account: Account): Set<String>
+
+    /** A local listen's report ("start", "progress" or "stopped"), into the same outbox video downloads use. */
+    suspend fun report(account: Account, media: String, serial: Long, report: String, ticks: Long, runtimeTicks: Long?)
+}
 
 /** The server side of the host, narrow so tests can answer with a real file on a mock server. */
 internal interface MusicGateway {
@@ -228,7 +242,8 @@ internal class MusicHost(
         (context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager).isActiveNetworkMetered
     },
     /** Whether the viewer is past its profile lock (AUTH-18); a locked one's music doesn't start from any control. */
-    private val admitted: (Account) -> Boolean = { true }
+    private val admitted: (Account) -> Boolean = { true },
+    private val local: MusicLocal? = null
 ) {
     /** The Cast device in use. The touch interface sets this, because a TV must never load the sender. */
     var castAttached: () -> String? = { null }
@@ -460,8 +475,20 @@ internal class MusicHost(
      */
     private suspend fun renewed() {
         preparing?.cancel()
+        val running = player
+        val playing = running?.currentMediaItem?.mediaId?.let(prepared::get)
         prepared.clear()
-        val running = player ?: return
+        if (running == null) return
+        if (playing != null && playing.local) {
+            // A downloaded file doesn't use the token, so reopening it would only cut into what's heard (MUS-10). It plays on;
+            // what's held around it is let go and asked for again with the new token.
+            prepared[playing.entry] = playing
+            val index = running.currentMediaItemIndex
+            if (index + 1 < running.mediaItemCount) running.removeMediaItems(index + 1, running.mediaItemCount)
+            if (index > 0) running.removeMediaItems(0, index)
+            sync()
+            return
+        }
         val at = currentTicks()
         // Stopped first, so the empty player is idle rather than ended, which would read as the track finishing.
         running.stop()
@@ -1176,8 +1203,12 @@ internal class MusicHost(
         target.forEachIndexed { index, entry ->
             if (entry !in prepared) {
                 val media = entries[entry]?.media ?: return
-                val outcome = gateway.negotiate(active, media, ceiling)
+                // A downloaded track plays from this device and asks the server nothing, connected or not (MUS-10).
+                val offline = local?.decision(active, media)
+                val outcome = if (offline == null) gateway.negotiate(active, media, ceiling) else null
                 when {
+                    offline != null -> prepared[entry] = PreparedTrack(offline, entry, media, local = true)
+
                     outcome is ClientResult.Success && outcome.value is PlayOutcome.Play ->
                         prepared[entry] = PreparedTrack((outcome.value as PlayOutcome.Play).decision, entry, media)
 
@@ -1207,9 +1238,22 @@ internal class MusicHost(
             error.status == 403 || error.status == 404 -> enqueue { failCurrent() }
 
             else -> enqueue {
-                player?.playWhenReady = false
-                commit { QueueEvent("pause", revision = it.revision, generation = it.generation) }
-                publish { it.copy(message = "Can't reach the server. Your queue is saved: press Play to try again.") }
+                val active = account
+                val q = queue.committed
+                val title = q.entries.firstOrNull { it.id == q.current }?.media?.let(tracks::get)?.title.orEmpty()
+                val downloaded = active?.let { local?.downloaded(it) }.orEmpty()
+                val unreachable = musicUnreachable(q, downloaded, title)
+                if (unreachable.step == "skip") {
+                    // One skip per track per pass: the reducer marks this one failed, so a queue that comes round again stops.
+                    commit {
+                        QueueEvent("error", revision = it.revision, generation = it.generation, completion = it.completion, music = true)
+                    }
+                    publish { it.copy(message = unreachable.message) }
+                } else {
+                    player?.playWhenReady = false
+                    commit { QueueEvent("pause", revision = it.revision, generation = it.generation) }
+                    publish { it.copy(message = unreachable.message) }
+                }
             }
         }
     }
@@ -1259,7 +1303,7 @@ internal class MusicHost(
     }
 
     private fun source(active: Account, track: PreparedTrack) = DefaultMediaSourceFactory(context)
-        .setDataSourceFactory(PlaybackMedia.httpFactory(active.server, track.decision))
+        .apply { if (!track.local) setDataSourceFactory(PlaybackMedia.httpFactory(active.server, track.decision)) }
         .createMediaSource(
             ExoItem.Builder()
                 .setUri(track.decision.url)
@@ -1580,7 +1624,10 @@ internal class MusicHost(
         val decision = track?.decision
         // Reports leave in the order they happened, on a queue of their own, so a slow server can't hold the player.
         reportJobs.trySend {
-            if (decision != null) {
+            if (track != null && track.local) {
+                // A downloaded listen is written down here and synced later, never sent live (MUS-10, OFF-08).
+                local?.report(active, effect.media, effect.serial, effect.report, effect.ticks, decision?.mediaSource?.runTimeTicks)
+            } else if (decision != null) {
                 when (effect.report) {
                     "start" -> gateway.start(active, progressInfo(decision, effect))
 

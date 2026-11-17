@@ -91,7 +91,11 @@ internal data class OfflineApiItem(
     @SerialName("Overview") val overview: String? = null,
     @SerialName("RunTimeTicks") val runtimeTicks: Long? = null,
     @SerialName("UserData") val userData: OfflineApiUserData? = null,
-    @SerialName("MediaSources") val sources: List<OfflineApiSource> = emptyList()
+    @SerialName("MediaSources") val sources: List<OfflineApiSource> = emptyList(),
+    @SerialName("Album") val album: String? = null,
+    @SerialName("AlbumId") val albumId: String? = null,
+    @SerialName("AlbumArtist") val albumArtist: String? = null,
+    @SerialName("Artists") val artists: List<String> = emptyList()
 ) {
     fun candidate(): OfflineCandidate = sources.firstOrNull().let { source ->
         OfflineCandidate(
@@ -184,6 +188,23 @@ internal class OfflineApi(private val client: Call.Factory, private val identity
             out += page
             if (page.size < 100) return out
         }
+    }
+
+    /**
+     * Tracks by id with what a download needs, in the order asked (the server answers in its own). At most 100 ids a request, so the
+     * request line stays well inside what a server accepts; an id the server doesn't return is left out.
+     */
+    suspend fun items(account: Account, ids: List<String>): List<OfflineApiItem> {
+        val found = mutableMapOf<String, OfflineApiItem>()
+        ids.distinct().chunked(100).forEach { batch ->
+            val url = "${account.server.url.trimEnd('/')}/Users/${account.user.id}/Items".toHttpUrl().newBuilder()
+                .addQueryParameter("ids", batch.joinToString(","))
+                .addQueryParameter("fields", "MediaSources,MediaStreams,CanDownload")
+                .addQueryParameter("limit", batch.size.toString())
+                .build().toString()
+            json.decodeFromString<OfflineApiItems>(call(url, interactive(account))).items.forEach { found[it.id] = it }
+        }
+        return ids.distinct().mapNotNull(found::get)
     }
 
     suspend fun policy(account: Account): OfflinePolicy {

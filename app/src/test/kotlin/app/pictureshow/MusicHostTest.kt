@@ -113,9 +113,43 @@ class MusicHostTest {
     private var checkGate: kotlinx.coroutines.CompletableDeferred<Unit>? = null
     private var negotiateGate: kotlinx.coroutines.CompletableDeferred<Unit>? = null
 
+    /** The server can't be reached: every negotiation fails as a lost connection does. */
+    @Volatile private var unreachable = false
+
+    /** Downloaded tracks by media id, and what their listens wrote to the outbox. */
+    private val downloaded = java.util.concurrent.ConcurrentHashMap<String, java.io.File>()
+    private val outbox = java.util.Collections.synchronizedList(mutableListOf<String>())
+
+    private inner class Local : MusicLocal {
+        override fun decision(account: Account, media: String): PlayDecision? = downloaded[media]?.let { file ->
+            PlayDecision(
+                media,
+                MediaSourceInfo(id = media, runTimeTicks = 1_000_000),
+                PlayMethod.DirectPlay,
+                android.net.Uri.fromFile(file).toString(),
+                emptyMap(),
+                null
+            )
+        }
+
+        override fun downloaded(account: Account): Set<String> = downloaded.keys.toSet()
+
+        override suspend fun report(account: Account, media: String, serial: Long, report: String, ticks: Long, runtimeTicks: Long?) {
+            outbox += "$report $media"
+        }
+    }
+
+    private fun download(vararg ids: String) = ids.forEach { id ->
+        downloaded[id] = java.io.File(context.cacheDir, "downloaded-$id.wav").apply { writeBytes(wav()) }
+    }
+
     private inner class Gateway : MusicGateway {
         override suspend fun negotiate(account: Account, media: String, ceiling: Int): ClientResult<PlayOutcome> {
             negotiateGate?.await()
+            if (unreachable) {
+                negotiated += "unreachable $media"
+                return ClientResult.Failure(app.pictureshow.core.ClientError(app.pictureshow.core.ErrorKind.NETWORK, "offline"))
+            }
             negotiated += media
             tokens += "${account.accessToken}:$media"
             return ClientResult.Success(
@@ -254,7 +288,8 @@ class MusicHostTest {
             startService = { services += 1 },
             seed = { 42 },
             metered = { false },
-            admitted = { !locked }
+            admitted = { !locked },
+            local = Local()
         ).also { hosts += it }
     }
 
@@ -294,6 +329,7 @@ class MusicHostTest {
         hosts.forEach { pump(200) }
         server.shutdown()
         java.io.File(context.filesDir, "music").deleteRecursively()
+        downloaded.values.forEach { it.delete() }
     }
 
     private fun wav(): ByteArray {
@@ -549,6 +585,76 @@ class MusicHostTest {
         music.request(album("broken", "b"))
         until("the next track") { "start b" in log }
         assertEquals("b", music.state.value.current!!.track.id)
+    }
+
+    /** MUS-10: with no server at all, a downloaded album plays through from the device and its listens wait in the outbox. */
+    @Test fun aDownloadedAlbumPlaysThroughWithNoServer() {
+        unreachable = true
+        download("a", "b")
+        val music = host()
+        ready(music)
+        music.request(album("a", "b"))
+        until("the album to end") { outbox.count { it.startsWith("stopped") } >= 2 && !music.state.value.outputActive }
+        assertEquals(listOf("start a", "stopped a", "start b", "stopped b"), outbox.filter { !it.startsWith("progress") })
+        assertTrue(negotiated.isEmpty(), "A downloaded track asks the server nothing: $negotiated")
+        assertTrue(log.isEmpty(), "Nothing is reported live: $log")
+        assertNull(music.state.value.message)
+    }
+
+    /** MUS-10: an online-only track in a downloaded queue is skipped once with the reason, and the downloaded one after it plays. */
+    @Test fun anOnlineOnlyTrackWithNoServerIsSkippedOnceAndSaysWhy() {
+        unreachable = true
+        download("a", "c")
+        val music = host()
+        ready(music)
+        music.request(album("a", "b", "c"))
+        until("the downloaded track after it") { "start c" in outbox }
+        assertTrue("start b" !in outbox)
+        assertEquals("Skipped Title b: it isn't downloaded, and the server can't be reached.", music.state.value.message)
+        assertTrue(negotiated.none { it == "a" || it == "c" || it == "unreachable a" || it == "unreachable c" })
+    }
+
+    /** MUS-10: with nothing downloaded after it, the queue stops on the track and says so instead of hunting. */
+    @Test fun anOnlineOnlyTrackWithNothingDownloadedAfterItStopsAndSaysWhy() {
+        unreachable = true
+        download("a")
+        val music = host()
+        ready(music)
+        music.request(album("a", "b"))
+        until("the stop on b") { music.state.value.message != null }
+        assertEquals(
+            "Title b isn't downloaded, and the server can't be reached. Nothing after it is downloaded.",
+            music.state.value.message
+        )
+        assertTrue(music.state.value.queue!!.paused)
+        assertEquals("b", music.state.value.queue!!.let { q -> q.entries.first { it.id == q.current }.media })
+    }
+
+    /** MUS-10: a new token never stops or reopens a downloaded track that is playing; the file doesn't use it. */
+    @Test fun aNewTokenLeavesAPlayingDownloadedTrackAlone() {
+        download("a")
+        val music = host()
+        ready(music)
+        // Repeat one keeps the same track in the output for as long as the test needs it there.
+        music.setRepeat("one")
+        music.request(album("a"))
+        until("a to play from the device") { "start a" in outbox && music.state.value.outputActive }
+        val player = lastPlayer!!
+        val playing = player.currentMediaItem
+        val idle = java.util.concurrent.atomic.AtomicInteger()
+        player.addListener(object : Player.Listener {
+            override fun onPlaybackStateChanged(state: Int) {
+                if (state == Player.STATE_IDLE) idle.incrementAndGet()
+            }
+        })
+        runBlocking { accounts.remember(account.copy(accessToken = "fresh")) }
+        until("the host to hold the new token") { music.state.value.account?.accessToken == "fresh" }
+        pump(500)
+        assertEquals(0, idle.get(), "The downloaded track was stopped")
+        assertTrue(playing === player.currentMediaItem, "The downloaded track was reopened")
+        assertTrue(negotiated.isEmpty(), "$negotiated")
+        music.stop()
+        until("the stop") { !music.state.value.outputActive }
     }
 
     @Test fun theNetworkClockPreservesExistingAndroidUptimeAndPacesBothRetryAndPlayerTime() {

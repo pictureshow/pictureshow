@@ -37,6 +37,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -466,10 +467,17 @@ internal fun TouchPlaylistPicker(account: Account, items: List<String>, onClose:
 }
 
 @Composable
-internal fun TouchMusicDetail(vm: MusicDetailViewModel, host: MusicHost, onOpen: (MediaItem, ArtistRole?) -> Unit, onBack: () -> Unit) {
+internal fun TouchMusicDetail(
+    vm: MusicDetailViewModel,
+    host: MusicHost,
+    onOpen: (MediaItem, ArtistRole?) -> Unit,
+    onBack: () -> Unit,
+    openDownloads: () -> Unit = {}
+) {
     val state by vm.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val account = state.account
+    val download = rememberMusicDownload(state, tv = false, openDownloads)
     LaunchedEffect(state.message) {
         state.message?.let {
             Toast.makeText(context, it, Toast.LENGTH_LONG).show()
@@ -519,6 +527,15 @@ internal fun TouchMusicDetail(vm: MusicDetailViewModel, host: MusicHost, onOpen:
                                 style = MaterialTheme.typography.bodySmall
                             )
                         }
+                        download?.status?.let { status ->
+                            Text(
+                                status.text,
+                                Modifier.testTag("music:download-status").semantics { liveRegion = LiveRegionMode.Polite },
+                                color = if (status.error) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                            status.fraction?.let { LinearProgressIndicator(progress = { it }, modifier = Modifier.fillMaxWidth()) }
+                        }
                     }
                 }
                 state.item.overview?.takeIf(String::isNotBlank)?.let { Text(it, maxLines = 4, overflow = TextOverflow.Ellipsis) }
@@ -563,7 +580,8 @@ internal fun TouchMusicDetail(vm: MusicDetailViewModel, host: MusicHost, onOpen:
                                             ?.let(host::request)
                                     }
                                 },
-                                rename = { renaming = true }
+                                rename = { renaming = true },
+                                download = download?.actions(state).orEmpty()
                             ).forEach { action ->
                                 DropdownMenuItem(text = { Text(action.label) }, enabled = action.enabled, onClick = {
                                     more = false
@@ -672,6 +690,7 @@ internal fun TouchMusicDetail(vm: MusicDetailViewModel, host: MusicHost, onOpen:
         )
     }
     if (picking) TouchPlaylistPicker(account, state.tracks.filter(::trackIsAvailable).map(MediaItem::id)) { picking = false }
+    download?.controller?.let { TouchMusicDownloadAsk(it) }
 }
 
 internal fun playableMusic(account: Account, tracks: List<MediaItem>): List<MusicTrack> =
@@ -979,4 +998,44 @@ internal fun TouchMusicNow(host: MusicHost, onBack: () -> Unit) {
         }
     }
     if (picking) TouchPlaylistPicker(ui.account ?: return, listOf(row.track.id)) { picking = false }
+}
+
+/** Download's questions on a phone: the destructive or costly choice is never the one a stray tap lands on first. */
+@Composable
+private fun TouchMusicDownloadAsk(controller: MusicDownloadController) {
+    when (val ask = controller.ask ?: return) {
+        MusicDownloadAsk.Checking -> AlertDialog(
+            onDismissRequest = controller::dismiss,
+            title = { Text("Download") },
+            text = { Text("Checking the tracks…") },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = controller::dismiss) { Text("Cancel") } }
+        )
+        is MusicDownloadAsk.Confirm -> AlertDialog(
+            onDismissRequest = controller::dismiss,
+            title = { Text("Download") },
+            text = { Text(ask.text, Modifier.testTag("music:download-question")) },
+            confirmButton = {
+                TextButton(onClick = {
+                    controller.start(ask.items)
+                }, modifier = Modifier.testTag("music:download-confirm")) { Text("Download") }
+            },
+            dismissButton = { TextButton(onClick = controller::dismiss) { Text("Cancel") } }
+        )
+        is MusicDownloadAsk.Notice -> AlertDialog(
+            onDismissRequest = controller::dismiss,
+            title = { Text("Download") },
+            text = { Text(ask.text, Modifier.testTag("music:download-notice")) },
+            confirmButton = { TextButton(onClick = controller::dismiss) { Text("OK") } }
+        )
+        is MusicDownloadAsk.Remove -> AlertDialog(
+            onDismissRequest = controller::dismiss,
+            title = { Text(ask.confirm) },
+            text = { Text(ask.text) },
+            confirmButton = {
+                TextButton(onClick = controller::remove, modifier = Modifier.testTag("music:download-remove-confirm")) { Text(ask.confirm) }
+            },
+            dismissButton = { TextButton(onClick = controller::dismiss) { Text("Cancel") } }
+        )
+    }
 }

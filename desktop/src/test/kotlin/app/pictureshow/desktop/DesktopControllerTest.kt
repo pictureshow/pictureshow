@@ -775,6 +775,44 @@ class DesktopControllerTest {
         }
     }
 
+    /** PLAY-17: Back to title after the end says Finished and offers Play again from the start; Stop mid-viewing says nothing. */
+    @Test fun finishedFilmReturnsWithTheFinishedLineAndPlayAgain(): Unit = runBlocking {
+        Fixture().use { f ->
+            val engines = CopyOnWriteArrayList<Engine>()
+            DesktopController(directory(), playbackFactory = { Engine().also { engines += it } }).use { c ->
+                c.login(f)
+                val film = MediaItem("movie", "The first picture", "Movie")
+                c.play(film)
+                c.await { it.playback?.ready == true }
+                c.stopPlayback()
+                val stopped = c.await { it.route == DesktopRoute.Detail && !it.busy }
+                assertNull(stopped.finished, "Stop before the end is not finishing")
+                c.play(film)
+                c.endWhenReady { engines.last() }
+                c.await { it.playback?.end != null }
+                c.stopPlayback()
+                val back = c.await { it.route == DesktopRoute.Detail && !it.busy }
+                assertEquals(DesktopFinished("movie", "Finished. You watched The first picture to the end."), back.finished)
+                assertEquals("play", back.returnFocus)
+                assertEquals("Play again" to true, desktopDetailPlay(back.detail!!, back.finished))
+                // The line belongs to that return: another page clears it.
+                c.back(); c.await { it.route != DesktopRoute.Detail && !it.busy }
+                assertNull(c.state.value.finished)
+                assertFalse(desktopDetailPlay(back.detail!!, c.state.value.finished).second, "Play again ends with that return")
+            }
+        }
+    }
+
+    @Test fun anUpNextCardOrLiveTvNeverCarriesTheFinishedLine() {
+        val decision = app.pictureshow.core.playback.PlayDecision(
+            "e1", app.pictureshow.core.playback.MediaSourceInfo(id = "e1"), app.pictureshow.core.playback.PlayMethod.DirectPlay, "", emptyMap(), null
+        )
+        val p = DesktopPlaybackState(item = e1, decision = decision, end = DesktopEndCard(MediaItem("e2", "Next", "Episode")))
+        assertNull(desktopFinished(p))
+        assertEquals("Finished. You watched Pilot to the end.", desktopFinished(p.copy(end = DesktopEndCard(null)))?.line)
+        assertNull(desktopFinished(p.copy(end = null)))
+    }
+
     @Test fun previousViewingReportErrorStaysVisibleWhenTheNextEpisodeOpens(): Unit = runBlocking {
         Fixture().use { f ->
             f.failStop = true

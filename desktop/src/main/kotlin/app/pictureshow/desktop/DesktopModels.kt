@@ -46,6 +46,24 @@ data class DesktopPlaybackState(
  */
 data class DesktopEndCard(val next: MediaItem?, val secondsLeft: Int? = null)
 
+/** PLAY-17: the return to a title after it played to its end, for that title's page only. */
+data class DesktopFinished(val itemId: String, val line: String)
+
+/**
+ * The Finished card's Back to title carries the line; Stop mid-viewing, an Up next card and live TV don't. Desktop has no SyncPlay,
+ * so a group ending can't reach here.
+ */
+internal fun desktopFinished(p: DesktopPlaybackState?): DesktopFinished? = p
+    ?.takeIf { it.end != null && it.end.next == null && it.liveChannel == null && !it.decision.isLive }
+    ?.let { DesktopFinished(it.item.id, app.pictureshow.core.playbackFinishedLine(it.item.name)) }
+
+/** The title page's primary action: "Play again" from the start on the return from its end; otherwise Resume or Play. */
+internal fun desktopDetailPlay(item: MediaItem, finished: DesktopFinished?): Pair<String, Boolean> = when {
+    finished?.itemId == item.id -> "Play again" to true
+    item.userData.playbackPositionTicks > 0 -> resumeLabel(item.userData.playbackPositionTicks) to false
+    else -> "Play" to false
+}
+
 data class DesktopState(
     val route: DesktopRoute = DesktopRoute.Loading,
     val account: Account? = null,
@@ -79,6 +97,8 @@ data class DesktopState(
     val root: String? = null,
     /** A control tag the next page focuses once, e.g. "play" on the title after a film finishes (PLAY-17). */
     val returnFocus: String? = null,
+    /** PLAY-17: set by Back to title after a genuine end; any other page change clears it. */
+    val finished: DesktopFinished? = null,
     val search: DesktopSearchState = DesktopSearchState(),
     val person: MediaItem? = null
 )

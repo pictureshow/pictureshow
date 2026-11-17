@@ -12,6 +12,8 @@ import app.pictureshow.core.Server
 import app.pictureshow.core.TextPersistence
 import app.pictureshow.core.User
 import app.pictureshow.core.offline.OFFLINE_PART_SUFFIX
+import app.pictureshow.core.offline.OfflineCollection
+import app.pictureshow.core.offline.OfflineCollectionKind
 import app.pictureshow.core.offline.OfflineEntry
 import app.pictureshow.core.offline.OfflineJob
 import app.pictureshow.core.offline.OfflineLabels
@@ -20,6 +22,7 @@ import app.pictureshow.core.offline.OfflineMediaKind
 import app.pictureshow.core.offline.OfflinePhase
 import app.pictureshow.core.offline.OfflinePreset
 import app.pictureshow.core.offline.OfflineUserData
+import app.pictureshow.core.offline.collectionPlayOrder
 import app.pictureshow.core.offline.offlineDecodeManifest
 import app.pictureshow.core.offline.offlineEncodeManifest
 import app.pictureshow.core.offline.offlineEntryId
@@ -1530,5 +1533,34 @@ class OfflineEngineTest {
         holdItems = false
         engine.resume(viewerA.key, entryId("1"))
         engine.awaitPhase(viewerA, "1", OfflinePhase.ready)
+    }
+
+    /** MUS-10: an album is its tracks as ordinary downloads plus its order; removing it keeps what another download still holds. */
+    @Test
+    fun `an album downloads each track once keeps its order and removing it spares a shared track`() = runBlocking<Unit> {
+        signIn(viewerA)
+        val engine = started()
+        val album = OfflineCollection("album", OfflineCollectionKind.album, "Album", itemIds = listOf("1", "2", "1"))
+        assertTrue(engine.enqueueCollection(viewerA, album, listOf(item("1"), item("2"), item("1")), cellular = false))
+        engine.awaitPhase(viewerA, "1", OfflinePhase.ready)
+        engine.awaitPhase(viewerA, "2", OfflinePhase.ready)
+        val manifest = engine.libraries.value[viewerA.key]!!.manifest
+        assertEquals(listOf(entryId("1"), entryId("2")), manifest.entries.map { it.id })
+        assertEquals(listOf("1", "2", "1"), manifest.collectionPlayOrder("album"))
+        // A playlist that shares track 2 keeps it when the album goes.
+        val playlist = OfflineCollection("list", OfflineCollectionKind.playlist, "List", itemIds = listOf("2"))
+        assertTrue(engine.enqueueCollection(viewerA, playlist, listOf(item("2")), cellular = false))
+        assertEquals(2, engine.libraries.value[viewerA.key]!!.manifest.entries.size)
+        engine.deleteCollection(viewerA.key, "album")
+        withTimeout(20_000) {
+            engine.libraries.first { all -> all[viewerA.key]?.manifest?.entries?.none { it.itemId == "1" } == true }
+        }
+        val after = engine.libraries.value[viewerA.key]!!.manifest
+        assertEquals(listOf("list"), after.collections.map { it.id })
+        assertEquals(OfflinePhase.ready, engine.entry(viewerA, "2")?.job?.phase)
+        assertTrue(mediaFile(engine, viewerA, "2").exists())
+        // The last track gone takes its snapshot with it.
+        engine.delete(viewerA.key, entryId("2"))
+        withTimeout(20_000) { engine.libraries.first { all -> all[viewerA.key]?.manifest?.collections?.isEmpty() == true } }
     }
 }

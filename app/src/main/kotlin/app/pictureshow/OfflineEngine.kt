@@ -14,6 +14,7 @@ import app.pictureshow.core.AccountStore
 import app.pictureshow.core.ClientIdentity
 import app.pictureshow.core.offline.OFFLINE_PART_SUFFIX
 import app.pictureshow.core.offline.OfflineBudget
+import app.pictureshow.core.offline.OfflineCollection
 import app.pictureshow.core.offline.OfflineEntry
 import app.pictureshow.core.offline.OfflineJobEvent
 import app.pictureshow.core.offline.OfflineManifest
@@ -21,6 +22,7 @@ import app.pictureshow.core.offline.OfflinePhase
 import app.pictureshow.core.offline.OfflineResource
 import app.pictureshow.core.offline.OfflineUserData
 import app.pictureshow.core.offline.OfflineVerifyInput
+import app.pictureshow.core.offline.collectionRemoval
 import app.pictureshow.core.offline.commit
 import app.pictureshow.core.offline.commitReady
 import app.pictureshow.core.offline.discard
@@ -36,11 +38,13 @@ import app.pictureshow.core.offline.offlineEntryId
 import app.pictureshow.core.offline.offlinePresets
 import app.pictureshow.core.offline.offlineSafePath
 import app.pictureshow.core.offline.offlineVerify
+import app.pictureshow.core.offline.prunedCollections
 import app.pictureshow.core.offline.reconcile
 import app.pictureshow.core.offline.reduceOfflineJob
 import app.pictureshow.core.offline.release
 import app.pictureshow.core.offline.reserve
 import app.pictureshow.core.offline.setCap
+import app.pictureshow.core.offline.withCollection
 import java.io.File
 import java.io.IOException
 import java.util.UUID
@@ -324,7 +328,9 @@ internal class OfflineEngine(
      * removing bytes. So a refused write leaves the state in memory and in effect, and is tried again. A restart before it
      * lands falls back on the last manifest and reconcile, which recounts from what's really on disk.
      */
-    private fun saveLocked(key: String, manifest: OfflineManifest) {
+    private fun saveLocked(key: String, written: OfflineManifest) {
+        // An album or playlist whose every track is gone goes with them, whichever way they went.
+        val manifest = written.prunedCollections()
         try {
             files.manifest(key).writeAtomically(offlineEncodeManifest(manifest))
             unsaved -= key
@@ -407,6 +413,51 @@ internal class OfflineEngine(
         item.userData?.let { userData(account, item.id, it.core()) }
         pumpLocked()
         return true
+    }
+
+    /**
+     * An album or playlist, whole (MUS-10): each track an ordinary entry, deduplicated with what's already here, plus the snapshot of
+     * its order. Downloading it again takes a new snapshot and adds what's new; nothing already stored is fetched twice.
+     */
+    suspend fun enqueueCollection(
+        account: Account,
+        collection: OfflineCollection,
+        items: List<OfflineApiItem>,
+        cellular: Boolean
+    ): Boolean = contained(false) {
+        mutex.withLock {
+            val library = library(account.key) ?: run {
+                loadLocked(account.key)
+                library(account.key)
+            } ?: return@withLock false
+            if (library.recoverable) return@withLock false
+            var manifest = library.manifest
+            items.distinctBy(OfflineApiItem::id).forEach { item ->
+                val choice = OfflineChoice(item.id, collection.preset, cellular = cellular)
+                if (manifest.entries.none { it.id == offlineEntryId(item.id, collection.preset) }) {
+                    val entry = offlineBuildEntry(item, choice, manifest.nextSequence)
+                    manifest = manifest.copy(entries = manifest.entries + entry, nextSequence = manifest.nextSequence + 1)
+                }
+            }
+            manifest = manifest.withCollection(collection.copy(createdSequence = manifest.nextSequence))
+                .copy(nextSequence = manifest.nextSequence + 1)
+            saveLocked(account.key, manifest)
+            items.forEach { item -> item.userData?.let { userData(account, item.id, it.core()) } }
+            pumpLocked()
+            true
+        }
+    }
+
+    /** Removes an album or playlist download: the snapshot, and each track no other downloaded collection still holds. */
+    suspend fun deleteCollection(key: String, collectionId: String) = contained(Unit) {
+        mutex.withLock {
+            val manifest = library(key)?.manifest ?: return@withLock
+            val doomed = manifest.collectionRemoval(collectionId)
+            saveLocked(key, manifest.copy(collections = manifest.collections.filter { it.id != collectionId }))
+            doomed.forEach { eventLocked(key, it, OfflineJobEvent("delete")) }
+            storageMayHaveFreedLocked(key)
+            pumpLocked()
+        }
     }
 
     suspend fun pause(key: String, entryId: String) = job(key, entryId, OfflineJobEvent("pause"))

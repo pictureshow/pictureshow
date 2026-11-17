@@ -294,10 +294,12 @@ internal fun NavGraphBuilder.offlineTvScreens(
     composable(OFFLINE_DOWNLOADS_ROUTE) {
         val current = account() ?: return@composable
         val back = rememberDownloadsBack(nav)
+        val playMusic = rememberOfflineMusicPlay(current)
         OfflineDownloadsTvScreen(
             current,
             nav.previousBackStackEntry == null,
-            onPlay = { nav.navigate(offlinePlayerRoute(it)) },
+            // A track plays in the music player with its album or playlist around it; a film or episode in the video player.
+            onPlay = { if (playMusic(it)) nav.navigate(MUSIC_NOW_ROUTE) else nav.navigate(offlinePlayerRoute(it)) },
             onStorage = { nav.navigate(OFFLINE_STORAGE_ROUTE) },
             onOnline = nav::openLibrary,
             onBack = back
@@ -355,10 +357,12 @@ internal fun NavGraphBuilder.offlineTouchScreens(
         val current = account() ?: return@composable
         val back = rememberDownloadsBack(nav)
         val root = nav.previousBackStackEntry == null
+        val playMusic = rememberOfflineMusicPlay(current)
         OfflineDownloadsTouchScreen(
             current,
             root,
-            onPlay = { nav.navigate(offlinePlayerRoute(it)) },
+            // A track plays in the music player with its album or playlist around it; a film or episode in the video player.
+            onPlay = { if (playMusic(it)) nav.navigate(MUSIC_NOW_ROUTE) else nav.navigate(offlinePlayerRoute(it)) },
             onStorage = { nav.navigate(OFFLINE_STORAGE_ROUTE) },
             onOnline = nav::openLibrary,
             onBack = if (root) null else back

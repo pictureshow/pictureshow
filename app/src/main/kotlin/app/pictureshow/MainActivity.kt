@@ -1189,7 +1189,9 @@ internal fun Pictureshow(
                 } else {
                     val role = entry.arguments?.getString("role").orEmpty()
                     val vm: MusicDetailViewModel = koinViewModel(parameters = { parametersOf(account, item, role, library, catalog) })
-                    TvMusicDetail(vm, music) { next, nextRole -> nav.navigate(musicRoute(next, nextRole, library)) }
+                    TvMusicDetail(vm, music, { nav.navigate(OFFLINE_DOWNLOADS_ROUTE) { launchSingleTop = true } }) { next, nextRole ->
+                        nav.navigate(musicRoute(next, nextRole, library))
+                    }
                 }
             }
         }

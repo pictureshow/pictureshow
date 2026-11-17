@@ -234,10 +234,13 @@ internal fun DetailPage(state: DesktopState, c: DesktopController) {
                 Column(Modifier.widthIn(min=280.dp).weight(1f),verticalArrangement=Arrangement.spacedBy(if (expansive) 18.dp else 14.dp)) {
                     Text(item.name, style = if (expansive) MaterialTheme.typography.displaySmall else MaterialTheme.typography.headlineMedium, modifier = Modifier.semantics { heading() })
                     Text(listOfNotNull(state.detailLibrary, titleHdrTag(item), item.productionYear?.toString(),item.officialRating,runtimeLabel(item.runTimeTicks).takeIf{it.isNotBlank()},episodeLabel(item).takeIf{item.type=="Episode" && it.isNotBlank()}).joinToString(" · "),color=MaterialTheme.colorScheme.onSurfaceVariant)
+                    // PLAY-17: the return from a viewing that played to its end says so, above the actions.
+                    state.finished?.takeIf { it.itemId == item.id }?.let { Text(it.line, Modifier.semantics { liveRegion = LiveRegionMode.Polite }.probe("finished")) }
                     FlowRow(horizontalArrangement=Arrangement.spacedBy(12.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
                         LaunchedEffect(state.returnFocus, state.busy, item.id) { if (state.returnFocus == "play" && !state.busy) { withFrameNanos { }; DesktopUiProbe.requestFocus["play"]?.requestFocus(); c.returnFocusDone() } }
-                        Button(onClick={c.play(item)},enabled=!state.busy,modifier = Modifier.controlFocus().heightIn(min=48.dp).probe("play")) { Text(if(item.userData.playbackPositionTicks>0) resumeLabel(item.userData.playbackPositionTicks) else "Play") }
-                        if(item.userData.playbackPositionTicks>0) OutlinedButton(onClick={c.play(item,true)},modifier = Modifier.controlFocus().heightIn(min=48.dp).probe("play-start")) { Text("Play from start") }
+                        val (playLabel, playFromStart) = desktopDetailPlay(item, state.finished)
+                        Button(onClick={c.play(item, playFromStart)},enabled=!state.busy,modifier = Modifier.controlFocus().heightIn(min=48.dp).probe("play")) { Text(playLabel) }
+                        if(!playFromStart && item.userData.playbackPositionTicks>0) OutlinedButton(onClick={c.play(item,true)},modifier = Modifier.controlFocus().heightIn(min=48.dp).probe("play-start")) { Text("Play from start") }
                         Row(verticalAlignment = Alignment.CenterVertically) {
                         DesktopTooltip(if (item.isWatched) "Mark unwatched" else "Mark watched") {
                             IconToggleButton(checked = item.isWatched, onCheckedChange = { c.toggleWatched() }, modifier = Modifier.controlFocus().probe("watched").semantics { contentDescription = "Watched"; stateDescription = if (item.isWatched) "Watched" else "Not watched" }) {

@@ -537,9 +537,15 @@ internal fun TvMusicLibrary(vm: MusicLibraryViewModel, host: MusicHost, onOpen: 
 }
 
 @Composable
-internal fun TvMusicDetail(vm: MusicDetailViewModel, host: MusicHost, onOpen: (MediaItem, ArtistRole?) -> Unit) {
+internal fun TvMusicDetail(
+    vm: MusicDetailViewModel,
+    host: MusicHost,
+    openDownloads: () -> Unit = {},
+    onOpen: (MediaItem, ArtistRole?) -> Unit
+) {
     val state by vm.state.collectAsStateWithLifecycle()
     val account = state.account
+    val download = rememberMusicDownload(state, tv = true, openDownloads)
     var renaming by rememberSaveable { mutableStateOf(false) }
     var picking by rememberSaveable { mutableStateOf(false) }
     var editing by rememberSaveable { mutableStateOf(false) }
@@ -574,6 +580,13 @@ internal fun TvMusicDetail(vm: MusicDetailViewModel, host: MusicHost, onOpen: (M
                         state.tracks.size.takeIf { it > 0 && state.tracksComplete }?.let { if (it == 1) "1 track" else "$it tracks" }
                     ).joinToString(" · ")
                     if (facts.isNotBlank()) Text(facts, color = MusicMuted)
+                    download?.status?.let { status ->
+                        Text(
+                            status.text,
+                            Modifier.testTag("music:download-status").semantics { liveRegion = LiveRegionMode.Polite },
+                            color = if (status.error) MusicError else MusicMuted
+                        )
+                    }
                     state.item.overview?.takeIf(String::isNotBlank)?.let {
                         Text(it, maxLines = 3, overflow = TextOverflow.Ellipsis, color = MusicMuted)
                     }
@@ -701,7 +714,8 @@ internal fun TvMusicDetail(vm: MusicDetailViewModel, host: MusicHost, onOpen: (M
                     account.musicPlay(mix, null, "mix:${state.item.id}", "Instant mix of ${state.item.name}")?.let(host::request)
                 }
             },
-            rename = { renaming = true }
+            rename = { renaming = true },
+            download = download?.actions(state).orEmpty()
         )
         TvDialog(state.item.name, { more = false }) {
             LazyColumn(Modifier.heightIn(max = 360.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -720,6 +734,41 @@ internal fun TvMusicDetail(vm: MusicDetailViewModel, host: MusicHost, onOpen: (M
         }
     }
     if (picking) TvPlaylistPicker(account, state.tracks.filter(::trackIsAvailable).map(MediaItem::id)) { picking = false }
+    download?.controller?.let { TvMusicDownloadAsk(it) }
+}
+
+/** Download's questions on TV. Cancel is first and focused, so a stray OK never starts or removes anything. */
+@Composable
+private fun TvMusicDownloadAsk(controller: MusicDownloadController) {
+    val ask = controller.ask ?: return
+    val first = remember { FocusRequester() }
+    when (ask) {
+        MusicDownloadAsk.Checking -> TvDialog("Download", controller::dismiss) {
+            Text("Checking the tracks…")
+            Button(onClick = controller::dismiss, modifier = Modifier.focusRequester(first)) { Text("Cancel") }
+        }
+        is MusicDownloadAsk.Confirm -> TvDialog("Download", controller::dismiss) {
+            Text(ask.text, Modifier.testTag("music:download-question"))
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Button(onClick = controller::dismiss, modifier = Modifier.focusRequester(first)) { Text("Cancel") }
+                Button(onClick = {
+                    controller.start(ask.items)
+                }, modifier = Modifier.testTag("music:download-confirm")) { Text("Download") }
+            }
+        }
+        is MusicDownloadAsk.Notice -> TvDialog("Download", controller::dismiss) {
+            Text(ask.text, Modifier.testTag("music:download-notice"))
+            Button(onClick = controller::dismiss, modifier = Modifier.focusRequester(first)) { Text("OK") }
+        }
+        is MusicDownloadAsk.Remove -> TvDialog(ask.confirm, controller::dismiss) {
+            Text(ask.text)
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Button(onClick = controller::dismiss, modifier = Modifier.focusRequester(first)) { Text("Cancel") }
+                Button(onClick = controller::remove, modifier = Modifier.testTag("music:download-remove-confirm")) { Text(ask.confirm) }
+            }
+        }
+    }
+    LaunchedEffect(ask) { runCatching { first.requestFocus() } }
 }
 
 /** One of a music page's secondary actions, behind its More button on TV and phone alike. */
@@ -733,13 +782,15 @@ internal fun musicPageActions(
     addToQueue: () -> Unit,
     addToPlaylist: () -> Unit,
     instantMix: () -> Unit,
-    rename: () -> Unit
+    rename: () -> Unit,
+    download: List<MusicPageAction> = emptyList()
 ): List<MusicPageAction> = buildList {
     add(MusicPageAction("Play next", "music:play-next", canPlay && !state.busy, playNext))
     add(MusicPageAction("Add to queue", "music:add-queue", canPlay && !state.busy, addToQueue))
     if (state.tracks.isNotEmpty() && state.tracksComplete) {
         add(MusicPageAction("Add to playlist", "music:add-playlist", true, addToPlaylist))
     }
+    addAll(download)
     add(MusicPageAction("Instant mix", "music:mix", !state.busy, instantMix))
     if (state.isPlaylist && state.canEdit) add(MusicPageAction("Rename", "music:rename", true, rename))
 }

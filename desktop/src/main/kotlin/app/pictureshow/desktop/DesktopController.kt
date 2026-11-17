@@ -108,7 +108,7 @@ class DesktopController(
         val g = generation.incrementAndGet()
         pageJob?.cancel()
         if (route !in setOf(DesktopRoute.SignIn, DesktopRoute.QuickConnect)) { pendingQuick = null; quickOwner = null }
-        updateState { it.copy(route = route, busy = true, error = null, errorKind = null, root = desktopRootFor(route, it.root)) }
+        updateState { it.copy(route = route, busy = true, error = null, errorKind = null, root = desktopRootFor(route, it.root), finished = null) }
         pageJob = scope.launch {
             try {
                 if (before.route == DesktopRoute.Player && route != DesktopRoute.Player) {
@@ -924,6 +924,7 @@ class DesktopController(
             return
         }
         val playback = mutable.value.playback
+        val finished = desktopFinished(playback)
         val old = playback?.item ?: mutable.value.detail
         if (old != null && playback != null) patchPlaybackData(old, playback.positionSeconds, playback.end != null)
         // Stop replaces the playback opener, including after an autoplay chain; Back must reach its parent.
@@ -931,7 +932,7 @@ class DesktopController(
         page(DesktopRoute.Detail) { g ->
             // page() finishes/report-stops first. Use its patched final engine position, not the poll's older item.
             val patched = mutable.value.detail?.takeIf { it.id == old?.id } ?: old
-            publish(g) { it.copy(playback = null, returnFocus = "play") }
+            publish(g) { it.copy(playback = null, returnFocus = "play", finished = finished) }
             takeCarriedReportError()?.let { e -> publish(g) { it.copy(error = e) } }
             if (patched != null) loadDetail(g, patched)
         }
