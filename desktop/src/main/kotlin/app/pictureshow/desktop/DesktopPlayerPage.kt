@@ -142,7 +142,7 @@ fun PlayerPage(state: DesktopState, c: DesktopController, fullscreen: () -> Unit
         PlayerKeyboard.handler = handler@{ e, openHelp ->
             val open = currentMenu
             if (e.key == Key.Escape) {
-                if (open != "info") return@handler false
+                if (open != "info" && open != "subtitle-download") return@handler false
                 closeInfo()
                 return@handler true
             }
@@ -174,7 +174,8 @@ fun PlayerPage(state: DesktopState, c: DesktopController, fullscreen: () -> Unit
         onDispose { PlayerKeyboard.handler = null }
     }
     if (menu == "info") DesktopPlaybackInfoDialog(playbackInfoSections(p, state.settings.bitrateMbps), ::closeInfo)
-    CompositionLocalProvider(LocalModalOpen provides (LocalModalOpen.current || menu == "info")) {
+    if (menu == "subtitle-download") DesktopSubtitleDownloadDialog(c, ::closeInfo)
+    CompositionLocalProvider(LocalModalOpen provides (LocalModalOpen.current || menu == "info" || menu == "subtitle-download")) {
     Column(Modifier.fillMaxSize().onGloballyPositioned { playerBottom = (it.positionInWindow().y + it.size.height).toDouble() }) {
         Box(Modifier.weight(1f).fillMaxWidth()
             .onGloballyPositioned { videoTop = it.positionInWindow().y.toDouble(); videoBottom = videoTop + it.size.height }
@@ -184,6 +185,7 @@ fun PlayerPage(state: DesktopState, c: DesktopController, fullscreen: () -> Unit
         Surface(color=MaterialTheme.colorScheme.surface.copy(alpha=.96f)) {
             val end = p.end
             if (end != null) EndCard(p, end, c) else Column(Modifier.fillMaxWidth().padding(20.dp),verticalArrangement=Arrangement.spacedBy(if (p.notice != null) 12.dp else 10.dp)) {
+                CreditsCard(p, c)
                 p.notice?.takeIf { menu != "info" }?.let { notice ->
                     Column(
                         Modifier.widthIn(max = 720.dp).semantics { liveRegion = LiveRegionMode.Polite },
@@ -203,6 +205,7 @@ fun PlayerPage(state: DesktopState, c: DesktopController, fullscreen: () -> Unit
                         label = { Text(if (sourceRange == "Not reported") PlaybackInformation.codec(video?.codec) else sourceRange, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                         modifier = Modifier.padding(horizontal = 8.dp).widthIn(max = 240.dp).controlFocus().probe("format-badge").semantics { contentDescription = "Source format: $sourceRange. Open Playback info" })
                     }
+                    SkipSegmentButton(p, c, state.settings.preferences().segmentModes)
                     flash?.let { Text(it, Modifier.semantics { liveRegion = LiveRegionMode.Polite }, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary) }
                 }
                 if (p.isLiveChannel) {
@@ -229,7 +232,10 @@ fun PlayerPage(state: DesktopState, c: DesktopController, fullscreen: () -> Unit
                             listOf(-1 to "Off") + p.subtitleTracks.zip(trackLabels(p.subtitleTracks)).map { (track, label) -> track.index to label }, p.subtitleIndex,
                             chipValue = if (p.subtitleIndex == -1) "Off" else p.subtitleTracks.firstOrNull { it.index == p.subtitleIndex }?.let(::shortTrackLabel) ?: "Off",
                             note = if (p.subtitleTracks.isEmpty()) "No subtitles in this file" else null,
-                            open = menu == "subtitles", onOpen = { menu = "subtitles" }, onDismiss = { menu = null }, ceiling = seekTop, onChoose = c::selectSubtitle)
+                            open = menu == "subtitles", onOpen = { menu = "subtitles" }, onDismiss = { menu = null }, ceiling = seekTop, onChoose = c::selectSubtitle,
+                            footer = { SubtitleMenuFooter(p, c) { infoOpener = "subtitles"; menu = "subtitle-download" } })
+                        SpeedMenu(p, c, menu == "speed", { menu = "speed" }, { menu = null }, seekTop)
+                        ChaptersMenu(p, c, menu == "chapters", { menu = "chapters" }, { menu = null }, seekTop)
                         OutlinedButton(onClick = { infoOpener = "playback-info"; menu = "info" }, enabled = p.ready,
                             shape = RoundedCornerShape(50), modifier = Modifier.heightIn(min = 40.dp).controlFocus().probe("playback-info")) { Text("Playback info") }
                         DesktopTooltip("Fullscreen", above = true) { IconButton(onClick=fullscreen,modifier = Modifier.controlFocus().probe("player-fullscreen")) { Icon(DesktopGlyph.Fullscreen,contentDescription="Fullscreen") } }
@@ -248,6 +254,7 @@ fun PlayerPage(state: DesktopState, c: DesktopController, fullscreen: () -> Unit
 /** PLAY-17 after a genuine end: Up next with Play now and a countdown, or Finished with Back to title and Replay. */
 @Composable
 internal fun EndCard(p: DesktopPlaybackState, end: DesktopEndCard, c: DesktopController) {
+    if (end.stillWatching) { StillWatchingCard(end, c); return }
     val next = end.next
     val primary = if (next != null) "end-play-now" else "end-back"
     LaunchedEffect(next?.id) { withFrameNanos { }; DesktopUiProbe.requestFocus[primary]?.let { runCatching { it.requestFocus() } } }
@@ -312,6 +319,7 @@ private fun SeekBar(p: DesktopPlaybackState, c: DesktopController, modifier: Mod
         if (x != null && width > 0 && p.durationSeconds > 0) {
             val inset = with(density) { (thumb.width / 2).toPx() }
             val fraction = ((x - inset) / (width - 2 * inset).coerceAtLeast(1f)).coerceIn(0f, 1f)
+            TrickplayPreview(p, c, fraction, x, width)
             Surface(color = MaterialTheme.colorScheme.inverseSurface, shape = RoundedCornerShape(4.dp),
                 modifier = Modifier.onSizeChanged { labelWidth = it.width }
                     .offset { IntOffset((x - labelWidth / 2f).roundToInt().coerceIn(0, (width - labelWidth).coerceAtLeast(0)), -with(density) { 22.dp.roundToPx() }) }) {
@@ -328,12 +336,15 @@ private fun SeekBar(p: DesktopPlaybackState, c: DesktopController, modifier: Mod
  */
 @Composable
 internal fun TrackMenu(label: String, tag: String, icon: androidx.compose.ui.graphics.vector.ImageVector, items: List<Pair<Int, String>>, selected: Int,
-                      chipValue: String, note: String?, open: Boolean, onOpen: () -> Unit, onDismiss: () -> Unit, ceiling: Int, chipWidth: Dp = 156.dp, onChoose: (Int) -> Unit) {
+                      chipValue: String, note: String?, open: Boolean, onOpen: () -> Unit, onDismiss: () -> Unit, ceiling: Int, chipWidth: Dp = 156.dp,
+                      refocusOnChoose: Boolean = false, footer: (@Composable ColumnScope.() -> Unit)? = null, onChoose: (Int) -> Unit) {
     val density = LocalDensity.current
     val opener = remember { FocusRequester() }
     val menuKeys = DesktopMenuRegistration(open, opener, onDismiss)
     val initialFocus = remember { FocusRequester() }
     val initialKey = items.firstOrNull { it.first == selected }?.first ?: items.firstOrNull()?.first
+    var refocus by remember { mutableStateOf(false) }
+    LaunchedEffect(open, refocus) { if (!open && refocus) { withFrameNanos { }; runCatching { opener.requestFocus() }; refocus = false } }
     Box {
         OutlinedButton(onClick = { if (open) onDismiss() else onOpen() }, enabled = items.isNotEmpty(), contentPadding = PaddingValues(horizontal = 12.dp),
             modifier = Modifier.focusRequester(opener).controlFocus(enabled = !open).width(chipWidth).probe(tag).semantics { contentDescription = "$label: $chipValue${note?.let { ". $it" } ?: ""}" }) {
@@ -362,10 +373,11 @@ internal fun TrackMenu(label: String, tag: String, icon: androidx.compose.ui.gra
                     Column(Modifier.width(IntrinsicSize.Max).verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
                         Text(label, Modifier.padding(horizontal = 16.dp, vertical = 6.dp), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         items.forEach { (key, text) ->
-                            DropdownMenuItem(text = { Text(text) }, onClick = { onDismiss(); onChoose(key) }, leadingIcon = { RadioButton(selected == key, null) },
+                            DropdownMenuItem(text = { Text(text) }, onClick = { onDismiss(); if (refocusOnChoose) refocus = true; onChoose(key) }, leadingIcon = { RadioButton(selected == key, null) },
                                 modifier = Modifier.fillMaxWidth().then(if (key == initialKey) Modifier.focusRequester(initialFocus) else Modifier).menuItemFocus().probe("$tag:$key"))
                         }
                         note?.let { Text(it, Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                        footer?.invoke(this)
                     }
                 }
             }

@@ -45,6 +45,8 @@ class CorpusVectorsTest {
                     "recovery",
                     // SubtitleDownloadVectorsTest executes SUB-DL-01..04.
                     "subtitle-download",
+                    // SubtitleTimingVectorsTest executes PLAY-11's timing rules.
+                    "subtitle-timing",
                     // SeerrVectorsTest executes the Seerr request rules.
                     "seerr"
                 ),

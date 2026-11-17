@@ -57,3 +57,5 @@ Snapshot 2026-11-13 after merging main `81f73948`: all 45 shared JSON contracts 
 | `player-quality.json` | 14 | `PlaybackQualityPresentationVectorsTest` |
 | `settings-presentation.json` | 65 | `SettingsPresentationVectorsTest` |
 | `seerr.json` | 95 | `SeerrVectorsTest` |
+| `subtitle-download.json` | 18 | `SubtitleDownloadVectorsTest` |
+| `subtitle-timing.json` | 20 | `SubtitleTimingVectorsTest` |

@@ -53,7 +53,10 @@ internal const val VIDEO_QUALITY_CAPTION = "Lower it if playback stutters. A cap
 @Composable
 internal fun SettingsPage(state:DesktopState,c:DesktopController,onSignOut:()->Unit) {
     val s=state.settings
+    val anchors = remember { DesktopSettingsAnchors() }
+    CompositionLocalProvider(LocalSettingsAnchors provides anchors) {
     FormPage("Settings","Playback and viewing preferences for this computer.") {
+        SettingsJumpList()
         SettingsSection("Account") {
             SettingRow(state.account?.user?.name ?: "Signed out", state.account?.server?.name ?: "No account is connected") {
                 OutlinedButton(onClick = onSignOut, modifier = Modifier.controlFocus().heightIn(min = 40.dp).probe("sign-out")) { Text("Sign out") }
@@ -77,6 +80,7 @@ internal fun SettingsPage(state:DesktopState,c:DesktopController,onSignOut:()->U
                 }
                 Slider(s.volume.toFloat(),{c.saveSettings(s.copy(volume=it.toInt()))},valueRange=0f..100f,modifier=Modifier.controlFocus(RoundedCornerShape(12.dp)).probe("volume").semantics { contentDescription="Volume" })
             }
+            DesktopPlaybackRows(s, c)
         }
         SettingsSection("Home") {
             // HOME-12: the same setting as the Home editor's Combine switch, saved per viewer.
@@ -85,16 +89,20 @@ internal fun SettingsPage(state:DesktopState,c:DesktopController,onSignOut:()->U
                 Switch(prefs?.mergeWatching == false, { separate -> c.changeHome { it.copy(mergeWatching = !separate) } }, Modifier.controlFocus().probe("separate-next-up").semantics { contentDescription = "Separate Next up row" }, enabled = prefs != null && !state.catalog.saving)
             }
         }
+        DesktopPlaybackSections(state, c)
         SettingsSection("Interface") {
             SettingSwitch("Living-room size","Larger text and controls for watching from a distance.",s.largeInterface,"large-interface") { c.saveSettings(s.copy(largeInterface=it)) }
         }
         InformationSettingsSection(c)
     }
+    }
 }
 @Composable
 internal fun SettingsSection(title: String, content: @Composable ColumnScope.() -> Unit) {
-    Column(Modifier.fillMaxWidth().padding(bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        CatalogHeading(title, section = true)
+    val anchors = LocalSettingsAnchors.current
+    Column(Modifier.fillMaxWidth().padding(bottom = 12.dp).then(anchors?.views?.get(title)?.let { Modifier.bringIntoViewRequester(it) } ?: Modifier), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        // SET-23: the jump list moves focus to this heading.
+        Box(anchors?.headings?.get(title)?.let { Modifier.focusRequester(it).controlFocus(RoundedCornerShape(6.dp)).focusable() } ?: Modifier) { CatalogHeading(title, section = true) }
         Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp), content = content)
     }
 }

@@ -27,7 +27,8 @@ class DesktopController(
     private val dispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val playbackFactory: (File) -> DesktopPlaybackEngine = { NativeDesktopPlayback(it) },
     /** PLAY-17's countdown after a genuine end before the next episode opens. */
-    private val endCountdownSeconds: Int = 10
+    /** Tests pin the end countdown; null follows Settings (PLAY-30). */
+    private val endCountdownSeconds: Int? = null
 ) : AutoCloseable {
     internal val scope = CoroutineScope(SupervisorJob() + dispatcher)
     internal val mutable = MutableStateFlow(DesktopState())
@@ -50,6 +51,10 @@ class DesktopController(
     val information = DesktopInformation(scope, { mutable.value.settings }, nativeMpvProbe(File(directory, "probe")))
     internal val appVersion: String get() = identity.version
     internal val generation = AtomicLong()
+    private val extrasLoader = DesktopPlayerExtrasLoader(http, identity)
+    internal val viewerInput = DesktopViewerInput()
+    internal val serverPreferences by lazy { DesktopServerPreferences(UserConfigurationClient(http, identity), scope) { mutable.value.account } }
+    private val subtitleClient = app.pictureshow.core.subtitles.RemoteSubtitleClient(http, identity)
     private var pageJob: Job? = null
     private var discoveryJob: Job? = null
     internal val history = mutableListOf<DesktopState>()
@@ -75,8 +80,8 @@ class DesktopController(
         val ourWindow = window
         if (ourWindow != null && generateSequence(eventWindow) { it.owner }.any { it === ourWindow }) {
             when (event) {
-                is java.awt.event.KeyEvent -> inputDiagnostics.key()
-                is java.awt.event.MouseEvent -> inputDiagnostics.pointer()
+                is java.awt.event.KeyEvent -> { inputDiagnostics.key(); if (event.id == java.awt.event.KeyEvent.KEY_PRESSED) viewerInput.input() }
+                is java.awt.event.MouseEvent -> { inputDiagnostics.pointer(); if (event.id == java.awt.event.MouseEvent.MOUSE_PRESSED) viewerInput.input() }
             }
         }
     }
@@ -616,7 +621,11 @@ class DesktopController(
             if (playable == null || playable.isFolder || playable.type !in setOf("Movie", "Episode", "Video", "MusicVideo", "Recording", "Trailer")) {
                 publish(g) { it.copy(error = "There is no playable video in this item.") }; return@page
             }
-            prepareViewing(g, a, playable, if (fromStart) 0.0 else playable.userData.playbackPositionTicks.coerceAtLeast(0) / 10_000_000.0)
+            // SET-18: rewind applies once, to a fresh resume only.
+            val saved = playable.userData.playbackPositionTicks.coerceAtLeast(0)
+            val tuning = mutable.value.settings.preferences().tuning.normalized()
+            val start = when { fromStart -> 0.0; tuning.rewindSeconds == 0 -> saved / 10_000_000.0; else -> tuning.resumedPositionMs(saved / 10_000) / 1000.0 }
+            prepareViewing(g, a, playable, start)
         }
     }
     fun tuneChannel(channel: LiveChannel) {
@@ -631,19 +640,20 @@ class DesktopController(
             prepareViewing(g, a, MediaItem(fresh.id, fresh.name, "TvChannel"), 0.0, liveChannel = fresh)
         }
     }
-    private suspend fun prepareViewing(g: Long, a: Account, item: MediaItem, start: Double, audio: Int? = null, subtitle: Int? = null, sourceId: String? = null, audioChosen: Boolean = audio != null, subtitleChosen: Boolean = subtitle != null, subtitleCodec: String? = null, liveChannel: LiveChannel? = null) {
+    private suspend fun prepareViewing(g: Long, a: Account, item: MediaItem, start: Double, audio: Int? = null, subtitle: Int? = null, sourceId: String? = null, audioChosen: Boolean = audio != null, subtitleChosen: Boolean = subtitle != null, subtitleCodec: String? = null, liveChannel: LiveChannel? = null, carry: DesktopViewingCarry? = null) {
         music.beforeVideo() // MUS-04: a video start stops music, which resumes only by the viewer's Play.
         publish(g) { it.copy(detail = item, playback = null) }
         val player = try { playbackFactory(File(directory, "playback")) }
         catch (e: LinkageError) { recordDesktopPlayerFailure("factory", e); publish(g) { it.copy(error = "The desktop player is not installed correctly. Check libmpv and its native adapter.") }; return }
-        val profile = try { player.profile(mutable.value.settings).forDesktopSubtitle(subtitleCodec) }
+        val prefs = mutable.value.settings.preferences()
+        val maxBitrate = prefs.deviceSettings(desktopPlaybackNetwork(a.server.url)).maxStreamingBitrate
+        val profile = try { player.profile(mutable.value.settings).forDesktopPreferences(prefs, maxBitrate).forDesktopSubtitle(subtitleCodec) }
         catch (e: Throwable) {
             recordDesktopPlayerFailure("profile", e)
             runCatching { player.close() }
             if (e is CancellationException || e is VirtualMachineError) throw e
             publish(g) { it.copy(error = "The desktop player could not load its decoder capabilities. Check the installed libmpv build.") }; return
         }
-        val maxBitrate = mutable.value.settings.preferences().deviceSettings().maxStreamingBitrate
         val rejectedDecisions = mutableListOf<PlayDecision>()
         suspend fun discardPreparedPlayer() {
             runCatching { player.close() }
@@ -769,14 +779,17 @@ class DesktopController(
         val v = Viewing(a, item, decision, player, audioChosen = audioChosen, subtitleChosen = subtitleChosen)
         viewing = v
         val notice = if (mutable.value.settings.conversionNotice) ConversionNotice.of(decision, si, "this computer") else null
-        publish(g) { it.copy(playback = DesktopPlaybackState(item, decision, notice, streams.filter { t -> t.type == MediaStreamType.Audio }, streams.filter { t -> t.type == MediaStreamType.Subtitle }, ai, si, positionSeconds = start, durationSeconds = (item.runTimeTicks ?: 0).toDouble() / 10_000_000, liveChannel = liveChannel), error = takeCarriedReportError()) }
+        publish(g) { it.copy(playback = DesktopPlaybackState(item, decision, notice, streams.filter { t -> t.type == MediaStreamType.Audio }, streams.filter { t -> t.type == MediaStreamType.Subtitle }, ai, si, positionSeconds = start, durationSeconds = (item.runTimeTicks ?: 0).toDouble() / 10_000_000, liveChannel = liveChannel,
+            extras = DesktopPlayerExtras(speed = carry?.speed ?: 1f, subtitleDelayMs = carry?.subtitleDelayMs ?: 0, autoSkipped = carry?.autoSkipped.orEmpty())), error = takeCarriedReportError()) }
         seekTarget = null; pausedLivePosition = null
         try {
             viewingMutex.withLock {
                 currentCoroutineContext().ensureActive()
                 if (viewing !== v) return
                 player.informationQuality(mutable.value.settings.bitrateMbps)
+                player.preferences(prefs)
                 player.open(a, decision, start, ai, si, mutable.value.settings.volume)
+                carry?.let { k -> if (k.speed != 1f && !player.speed(k.speed)) updateExtras { it.copy(speed = 1f) }; if (k.subtitleDelayMs != 0) player.subtitleDelay(k.subtitleDelayMs) }
             }
             currentCoroutineContext().ensureActive()
         }
@@ -824,6 +837,7 @@ class DesktopController(
                     elapsed++
                     if (v.startAttempted && elapsed % 10 == 0) sendProgress(v)
                     if (snap.exitRequested) { stopPlayback(); break }
+                    if (!snap.ended) extrasTick(v, snap)
                     if (snap.ended && !informationOpen && !snap.informationOpen) {
                         if (liveChannel != null || v.decision.isLive) {
                             updateState { it.copy(error = "The live stream ended. Return to Live TV and tune again.") }
@@ -839,6 +853,10 @@ class DesktopController(
                     updateState { it.copy(error = "Playback stopped unexpectedly. Return to the title and try again.") }
                 }
             }
+        }
+        if (liveChannel == null && !decision.isLive) scope.launch {
+            val loaded = extrasLoader.load(a, item, decision.mediaSourceId)
+            if (viewing === v) updateExtras { it.copy(chapters = loaded.chapters, trickplay = loaded.trickplay, segments = loaded.segments) }
         }
         if (catalogSession.queue.any { it.id == item.id }) {
             publish(g) { it.copy(playback = it.playback?.copy(nextEpisode = desktopQueueNext(catalogSession.queue, item))) }
@@ -951,7 +969,110 @@ class DesktopController(
         page(DesktopRoute.Player) { g ->
             finishViewing()
             prepareViewing(g, a, p.item, if (p.isLiveChannel) 0.0 else p.positionSeconds, audio ?: p.audioIndex, subtitle ?: p.subtitleIndex, p.decision.mediaSourceId,
-                current.audioChosen || audio != null, current.subtitleChosen || subtitle != null, requestedSubtitleCodec, p.liveChannel)
+                current.audioChosen || audio != null, current.subtitleChosen || subtitle != null, requestedSubtitleCodec, p.liveChannel, p.extras.carry())
+        }
+    }
+    // Stream A player extras (PLAY-11/13/14/15/25/30, SUB-DL). Rules live in DesktopPlayerExtras.kt.
+    private fun updateExtras(change: (DesktopPlayerExtras) -> DesktopPlayerExtras) =
+        updateState { s -> s.copy(playback = s.playback?.let { it.copy(extras = change(it.extras)) }) }
+    @Volatile private var creditsWallMs = 0L
+    @Volatile private var creditsAdvanced: Any? = null
+    private fun extrasTick(v: Viewing, snap: EngineSnapshot) {
+        val p = mutable.value.playback ?: return
+        if (viewing !== v || v.closing || p.end != null || p.isLiveChannel) return
+        val prefs = mutable.value.settings.preferences()
+        val positionMs = (snap.positionSeconds * 1000).toLong()
+        val action = desktopSegmentAction(p.extras, positionMs, prefs.segmentModes)
+        if (action is DesktopSegmentAction.Skip) {
+            updateExtras { it.copy(autoSkipped = it.autoSkipped + action.segment.id) }
+            events.log("playback segment-skip type=${action.segment.type} mode=automatic")
+            seek(action.segment.endMs / 1000.0)
+            return
+        }
+        // PLAY-30 / SET-17: "Next episode when credits start" counts down over the credits while they play.
+        val tuning = prefs.tuning.normalized()
+        val durationMs = (p.durationSeconds * 1000).toLong()
+        val credits = creditsStartMs(durationMs, p.extras.segments)
+        val count = endCountdownSeconds ?: tuning.nextEpisodeCountdownSeconds
+        val eligible = p.nextEpisode != null && mutable.value.settings.autoplayNext && tuning.postCredits == PostCredits.NextEpisode &&
+            credits != null && positionMs >= credits && !p.extras.creditsCancelled && count > 0 && !viewerInput.due(tuning.stillWatching)
+        if (!eligible) {
+            creditsWallMs = 0
+            if (p.extras.creditsSecondsLeft != null) updateExtras { it.copy(creditsSecondsLeft = null) }
+            return
+        }
+        if (p.extras.creditsSecondsLeft != null && !snap.paused) creditsWallMs += 500
+        val left = nextEpisodeCardSeconds((count - creditsWallMs / 1000).coerceAtLeast(0), true, (durationMs - positionMs).coerceAtLeast(0),
+            p.extras.speed.toDouble(), autoPlay = true, ended = false, suspended = snap.paused)?.toInt() ?: p.extras.creditsSecondsLeft ?: count
+        if (left != p.extras.creditsSecondsLeft) updateExtras { it.copy(creditsSecondsLeft = left) }
+        if (left <= 0 && creditsAdvanced !== v) {
+            creditsAdvanced = v
+            events.log("playback credits-advance item=${v.item.id}")
+            viewerInput.automaticallyAdvanced()
+            nextEpisode()
+        }
+    }
+    /** The credits card's Cancel: the credits play on and the episode ends normally. */
+    fun cancelCreditsCountdown() = updateExtras { it.copy(creditsSecondsLeft = null, creditsCancelled = true) }
+    /** "Are you still watching?" answered yes. */
+    fun continueWatching() { viewerInput.input(); nextEpisode() }
+    /** PLAY-15 Ask: the Skip button jumps to the segment's end, once. */
+    fun skipSegment() {
+        val p = mutable.value.playback ?: return
+        val action = desktopSegmentAction(p.extras, (p.positionSeconds * 1000).toLong(), mutable.value.settings.preferences().segmentModes)
+        if (action is DesktopSegmentAction.Ask) { events.log("playback segment-skip type=${action.segment.type} mode=ask"); seek(action.segment.endMs / 1000.0) }
+    }
+    /** PLAY-13: one seek to the chapter's start. */
+    fun seekChapter(index: Int) {
+        val chapter = mutable.value.playback?.extras?.chapters?.getOrNull(index) ?: return
+        seek(chapter.startMs / 1000.0)
+    }
+    /** PLAY-25: the seven speeds; never claims a rate the engine refused or encoded audio can't follow. */
+    fun setSpeed(speed: Float) {
+        val p = mutable.value.playback ?: return
+        val e = engine ?: return
+        val encoded = runCatching { e.passthroughActive() }.getOrDefault(false)
+        if (!PlaybackSpeeds.allowed(speed, encoded)) { updateExtras { it.copy(speedMessage = PlaybackSpeeds.ENCODED_AUDIO) }; return }
+        val applied = runCatching { e.speed(speed) }.getOrDefault(false)
+        updateExtras {
+            if (applied) it.copy(speed = speed, speedMessage = if (speed != 1f && p.decision.method == PlayMethod.Transcode) PlaybackSpeeds.TRANSCODE else null)
+            else it.copy(speedMessage = "This player couldn't change speed.")
+        }
+    }
+    /** PLAY-11: Earlier (-1), Later (+1) or Reset (0). */
+    fun stepSubtitleDelay(direction: Int) {
+        val e = engine ?: return
+        val current = mutable.value.playback?.extras?.subtitleDelayMs ?: return
+        val next = if (direction == 0) 0 else SubtitleTiming.step(current, direction)
+        runCatching { e.subtitleDelay(next) }
+        updateExtras { it.copy(subtitleDelayMs = next) }
+    }
+    /** PLAY-14: one trickplay sheet for the preview, or null. */
+    suspend fun trickplaySheet(sheet: Int): ByteArray? {
+        val p = mutable.value.playback ?: return null
+        val a = mutable.value.account ?: return null
+        val info = p.extras.trickplay ?: return null
+        val source = p.decision.mediaSourceId ?: return null
+        return extrasLoader.sheet(a, p.item.id, source, info.width, sheet)
+    }
+    /** SUB-DL from the player: a search bound to this viewing's item and source. */
+    internal fun subtitleSearch(): app.pictureshow.core.subtitles.RemoteSubtitleSearch? {
+        val a = mutable.value.account ?: return null
+        val p = mutable.value.playback ?: return null
+        if (p.isLiveChannel || p.decision.isLive) return null
+        return app.pictureshow.core.subtitles.RemoteSubtitleSearch(subtitleClient, a, scope, java.util.Locale.getDefault().language).also {
+            it.open(app.pictureshow.core.subtitles.RemoteSubtitleTarget(p.item.id, p.item.type, true, p.decision.mediaSourceId, p.decision.mediaSource.mediaStreams, p.audioIndex))
+        }
+    }
+    /** SUB-DL: the server listed the downloaded file; reopen at the same place with it selected (speed and timing kept). */
+    fun adoptDownloadedSubtitle(subtitleIndex: Int, audioIndex: Int) {
+        val p = mutable.value.playback ?: return; val a = mutable.value.account ?: return
+        val current = viewing ?: return
+        if (current.closing || current.stopped) return
+        page(DesktopRoute.Player) { g ->
+            finishViewing()
+            prepareViewing(g, a, p.item, p.positionSeconds, audioIndex.takeIf { it >= 0 } ?: p.audioIndex, subtitleIndex, p.decision.mediaSourceId,
+                true, true, null, null, p.extras.carry())
         }
     }
     /** Manual "Next episode" in the control bar, or Play now on the end card. */
@@ -1008,11 +1129,15 @@ class DesktopController(
         v.ended = true
         patchPlaybackData(v.item, v.endPosition, true)
         val next = mutable.value.playback?.nextEpisode
-        val countdown = if (next != null && mutable.value.settings.autoplayNext) endCountdownSeconds.coerceAtLeast(0) else null
+        val configured = endCountdownSeconds?.coerceAtLeast(0) ?: mutable.value.settings.preferences().tuning.nextEpisodeCountdownSeconds.takeIf { it > 0 }
+        val autoplay = next != null && mutable.value.settings.autoplayNext && configured != null
+        // PLAY-30: after enough episodes in a row, or long enough without a key press, ask instead of counting down.
+        val ask = autoplay && viewerInput.due(mutable.value.settings.preferences().tuning.stillWatching)
+        val countdown = if (autoplay && !ask) configured else null
         countdownCancelled = false
-        updateState { s -> if (viewing === v) s.copy(playback = s.playback?.copy(end = DesktopEndCard(next, countdown),
+        updateState { s -> if (viewing === v) s.copy(playback = s.playback?.copy(end = DesktopEndCard(next, countdown, stillWatching = ask),
             positionSeconds = v.endPosition, paused = true)) else s }
-        events.log("playback end item=${v.item.id} next=${next?.id ?: "none"} countdown=${countdown ?: "off"}")
+        events.log("playback end item=${v.item.id} next=${next?.id ?: "none"} countdown=${countdown ?: if (ask) "ask" else "off"}")
         val g = generation.get()
         endJob = scope.launch {
             finishViewing()
@@ -1025,7 +1150,7 @@ class DesktopController(
                 updateState { s -> s.copy(playback = s.playback?.let { p -> p.end?.takeIf { it.secondsLeft != null }?.let { p.copy(end = it.copy(secondsLeft = left)) } ?: p }) }
             }
             if (generation.get() == g && !countdownCancelled && mutable.value.route == DesktopRoute.Player &&
-                mutable.value.playback?.end?.let { it.next?.id == next.id && it.secondsLeft != null } == true) nextEpisode()
+                mutable.value.playback?.end?.let { it.next?.id == next.id && it.secondsLeft != null } == true) { viewerInput.automaticallyAdvanced(); nextEpisode() }
         }
     }
     private suspend fun releaseEncoding(v: Viewing): Boolean {
