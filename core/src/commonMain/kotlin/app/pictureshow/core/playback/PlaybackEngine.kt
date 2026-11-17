@@ -103,15 +103,9 @@ object EngineFirstFrame {
 
     /**
      * [dataReadyForMs]: how long the stream has held at least [DATA_MS] of buffered media, or null if it never has;
-     * [loadedForMs]: how long since the file opened; [passthrough]: this open passes compressed audio to the output.
+     * [loadedForMs]: how long since the file opened; [passthrough]: the selected audio track is passed through compressed.
      */
-    fun action(
-        loaded: Boolean,
-        firstFrame: Boolean,
-        dataReadyForMs: Long?,
-        loadedForMs: Long,
-        passthrough: Boolean
-    ): FirstFrameAction {
+    fun action(loaded: Boolean, firstFrame: Boolean, dataReadyForMs: Long?, loadedForMs: Long, passthrough: Boolean): FirstFrameAction {
         if (!loaded || firstFrame) return FirstFrameAction.Wait
         val stalled = (dataReadyForMs != null && dataReadyForMs >= READY_MS) || loadedForMs >= CEILING_MS
         return when {
