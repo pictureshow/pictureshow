@@ -1,0 +1,362 @@
+/* SPDX-License-Identifier: MPL-2.0
+ * Copyright (c) Legitimate LLC.
+ */
+package app.pictureshow.desktop
+
+import app.pictureshow.core.Account
+import app.pictureshow.core.offline.OfflineConflict
+import app.pictureshow.core.offline.OfflineOutboxEntry
+import app.pictureshow.core.offline.OfflineOutboxEvent
+import app.pictureshow.core.offline.OfflineUserData
+import app.pictureshow.core.offline.offlineEntryDir
+import app.pictureshow.core.offline.offlineResumeTicks
+import app.pictureshow.core.offline.offlineSafePath
+import app.pictureshow.core.offline.offlineSha256Hex
+import app.pictureshow.core.offline.reduceOfflineOutbox
+import java.io.File
+import java.io.IOException
+import java.security.MessageDigest
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+/** Every viewer's private bytes live under one directory named by a hash, under the desktop data directory (OFF-10). */
+internal class OfflineFiles(private val base: File) {
+    val root: File get() = File(base, "offline")
+    val trash: File get() = File(root, "trash")
+
+    fun accountDir(accountKey: String) = File(root, "a-" + offlineSha256Hex(accountKey.encodeToByteArray()).take(32))
+    fun accountDirs(): List<File> = root.listFiles()?.filter { it.isDirectory && it.name.startsWith("a-") }.orEmpty()
+    fun mediaDir(accountKey: String) = File(accountDir(accountKey), "media")
+    fun manifest(accountKey: String) = File(accountDir(accountKey), "manifest.json")
+    fun progress(accountKey: String) = File(accountDir(accountKey), "progress.json")
+    fun sessions() = File(root, "sessions.json")
+
+    fun resource(accountKey: String, entryId: String, path: String): File {
+        require(offlineSafePath(path)) { "Unsafe offline path" }
+        return File(File(mediaDir(accountKey), offlineEntryDir(entryId)), path)
+    }
+
+    /** Relative path -> size, as the manifest reconcile expects it. */
+    fun inventory(accountKey: String): Map<String, Long> {
+        val media = mediaDir(accountKey)
+        return media.walkTopDown().filter(File::isFile).associate { it.relativeTo(media).invariantSeparatorsPath to it.length() }
+    }
+
+    /** A rename makes the viewer's data unreachable first; the slow delete follows and is retried at next start. */
+    fun moveToTrash(dir: File): Boolean {
+        if (!dir.exists()) return true
+        trash.mkdirs()
+        return dir.renameTo(File(trash, dir.name + "-" + System.nanoTime()))
+    }
+
+    fun emptyTrash() {
+        trash.listFiles()?.forEach { it.deleteRecursively() }
+    }
+}
+
+/** A crash leaves the old file or the new one, never a torn one; owner-only like every private file here. */
+internal fun File.writeAtomically(text: String) = atomicPrivateWrite(this, text.encodeToByteArray())
+
+internal fun File.sha256Hex(): String {
+    val digest = MessageDigest.getInstance("SHA-256")
+    inputStream().use { input ->
+        val buffer = ByteArray(1024 * 1024)
+        while (true) {
+            val read = input.read(buffer)
+            if (read < 0) break
+            digest.update(buffer, 0, read)
+        }
+    }
+    return digest.digest().joinToString("") { "%02x".format(it) }
+}
+
+@Serializable
+internal data class OfflineProgressFile(
+    val sequence: Long = 0,
+    val lastKnown: Map<String, OfflineUserData> = emptyMap(),
+    val outbox: Map<String, OfflineOutboxEntry> = emptyMap()
+)
+
+/** What the sync needs from the server, narrow so tests can answer with exact states. */
+internal interface OfflineProgressRemote {
+    suspend fun sameViewer(account: Account): Boolean
+    suspend fun read(account: Account, itemId: String): OfflineUserData
+
+    /** The HTTP status, or null when the answer never arrived. */
+    suspend fun write(account: Account, itemId: String, positionTicks: Long?, played: Boolean?): Int?
+}
+
+internal class OfflineApiProgressRemote(private val api: DesktopOfflineApi) : OfflineProgressRemote {
+    override suspend fun sameViewer(account: Account) = api.sameViewer(account)
+    override suspend fun read(account: Account, itemId: String) = api.userData(account, itemId)
+    override suspend fun write(account: Account, itemId: String, positionTicks: Long?, played: Boolean?): Int? = try {
+        api.writeUserData(account, itemId, app.pictureshow.core.offline.OfflineUserDataWrite(positionTicks, played))
+        200
+    } catch (e: DesktopOfflineHttpException) {
+        e.status
+    } catch (e: IOException) {
+        null
+    }
+}
+
+internal enum class OfflineSettleResult { Settled, Conflict, Failed }
+
+/** One viewer's durable outbox (OFF-07, OFF-08): writes commit to disk before anything touches the server. */
+internal class OfflineProgressStore(private val file: File, account: Account, private val log: (String) -> Unit = {}) {
+    /** The newest credentials the app has for this viewer: a re-sign-in replaces the token this store was made with. */
+    @Volatile
+    var account: Account = account
+
+    /** The viewer signed out. A player still open must not put their history back on disk. */
+    @Volatile
+    private var retired = false
+
+    fun retire() {
+        retired = true
+    }
+
+    private val mutex = Mutex()
+    private val json = Json { ignoreUnknownKeys = true }
+    private val mutableConflicts = MutableStateFlow(emptyMap<String, OfflineConflict>())
+    private var cached: OfflineProgressFile? = null
+
+    /** Items where the server's progress was kept. */
+    val conflicts: StateFlow<Map<String, OfflineConflict>> = mutableConflicts
+
+    private fun load(): OfflineProgressFile = cached ?: run {
+        val loaded = runCatching { json.decodeFromString<OfflineProgressFile>(file.readText()) }.getOrDefault(OfflineProgressFile())
+        // A crash mid-write resolves through a read first; the reducer decides.
+        val restarted = loaded.copy(
+            outbox = loaded.outbox.mapValues { (_, entry) ->
+                reduceOfflineOutbox(entry, OfflineOutboxEvent("process-restart")).entry ?: entry
+            }
+        )
+        cached = restarted
+        publish(restarted)
+        restarted
+    }
+
+    private fun save(value: OfflineProgressFile) {
+        cached = value
+        publish(value)
+        if (retired) return
+        // A full disk: this device keeps it in memory and tries again at the next save. A viewer mid-film never sees this.
+        try {
+            file.writeAtomically(json.encodeToString(OfflineProgressFile.serializer(), value))
+        } catch (e: IOException) {
+            log("offline progress-not-saved kind=${e.javaClass.simpleName}")
+        } catch (e: IllegalStateException) {
+            log("offline progress-not-saved kind=${e.javaClass.simpleName}")
+        }
+    }
+
+    private fun publish(value: OfflineProgressFile) {
+        mutableConflicts.value = value.outbox.mapNotNull { (id, entry) -> entry.conflict?.let { id to it } }.toMap()
+    }
+
+    /** A viewing resumes from what this device last saw. */
+    suspend fun resumeTicks(itemId: String): Long = mutex.withLock {
+        val saved = load()
+        offlineResumeTicks(saved.outbox[itemId], saved.lastKnown[itemId])
+    }
+
+    /** The outbox record and last-known server data for [itemId], for a title's own page to work out where its local Play starts. */
+    suspend fun place(itemId: String): Pair<OfflineOutboxEntry?, OfflineUserData?> = mutex.withLock {
+        val saved = load()
+        saved.outbox[itemId] to saved.lastKnown[itemId]
+    }
+
+    suspend fun watched(itemIds: List<String>): Set<String> = mutex.withLock {
+        val saved = load()
+        itemIds.filter { id -> saved.outbox[id]?.played ?: saved.lastKnown[id]?.played ?: false }.toSet()
+    }
+
+    suspend fun remember(itemId: String, data: OfflineUserData) = mutex.withLock {
+        val saved = load()
+        save(saved.copy(lastKnown = saved.lastKnown + (itemId to data)))
+    }
+
+    suspend fun newSequence(): Long = mutex.withLock {
+        val saved = load()
+        val next = saved.sequence + 1
+        save(saved.copy(sequence = next))
+        next
+    }
+
+    suspend fun viewing(itemId: String, sequence: Long, positionTicks: Long) = apply(itemId, "viewing", positionTicks, sequence)
+
+    suspend fun completed(itemId: String, sequence: Long) = apply(itemId, "completed", null, sequence)
+
+    private suspend fun apply(itemId: String, op: String, positionTicks: Long?, sequence: Long) = mutex.withLock {
+        val saved = load()
+        val base = saved.lastKnown[itemId] ?: OfflineUserData()
+        val result = reduceOfflineOutbox(
+            saved.outbox[itemId],
+            OfflineOutboxEvent(
+                op,
+                server = account.server.id,
+                viewer = account.user.id,
+                itemId = itemId,
+                positionTicks = positionTicks,
+                sequence = sequence,
+                base = base
+            )
+        )
+        if (result.ignored == null) save(saved.copy(outbox = saved.outbox.withEntry(itemId, result.entry)))
+    }
+
+    /** What the server holds now that an online viewing here stopped. */
+    suspend fun onlineViewingEnded(itemId: String, data: OfflineUserData) = mutex.withLock {
+        val saved = load()
+        val result = reduceOfflineOutbox(saved.outbox[itemId], OfflineOutboxEvent("online-viewing", current = data))
+        save(
+            saved.copy(
+                lastKnown = saved.lastKnown + (itemId to data),
+                outbox = if (result.ignored == null) saved.outbox.withEntry(itemId, result.entry) else saved.outbox
+            )
+        )
+    }
+
+    suspend fun dismissConflict(itemId: String) = mutex.withLock {
+        val saved = load()
+        val entry = saved.outbox[itemId] ?: return@withLock
+        val result = reduceOfflineOutbox(entry, OfflineOutboxEvent("dismiss-conflict"))
+        save(saved.copy(outbox = saved.outbox.withEntry(itemId, result.entry)))
+    }
+
+    /**
+     * Same viewer first, then read before every write. A failure leaves the record to try again later; a crash during a
+     * write is read first by the reducer, so an unknown outcome can't bump PlayCount.
+     */
+    suspend fun sync(remote: OfflineProgressRemote): Boolean = mutex.withLock {
+        val dirty = load().outbox.filterValues { it.phase != "conflict" && it.phase != "synced" }
+        if (dirty.isEmpty()) return@withLock true
+        val same = runCatching { remote.sameViewer(account) }.getOrNull() ?: return@withLock false
+        if (!same || retired) return@withLock false
+        var clean = true
+        dirty.forEach { (itemId, start) ->
+            try {
+                syncOne(remote, itemId, start)
+            } catch (e: IOException) {
+                clean = false
+            }
+        }
+        clean
+    }
+
+    /**
+     * One item's progress, now, for a viewer waiting on it. Unlike a background sync this answers what happened; a Failed record stays in the
+     * outbox for later, and a write whose answer never came is read first by the reducer as always.
+     */
+    suspend fun settle(itemId: String, remote: OfflineProgressRemote): OfflineSettleResult = mutex.withLock {
+        val start = load().outbox[itemId]?.takeIf { it.phase != "synced" } ?: return@withLock OfflineSettleResult.Settled
+        if (start.phase == "conflict") return@withLock OfflineSettleResult.Conflict
+        if (retired) return@withLock OfflineSettleResult.Failed
+        try {
+            if (!remote.sameViewer(account)) return@withLock OfflineSettleResult.Failed
+            syncOne(remote, itemId, start)
+        } catch (e: IOException) {
+            return@withLock OfflineSettleResult.Failed
+        } catch (e: IllegalArgumentException) {
+            return@withLock OfflineSettleResult.Failed
+        }
+        val after = load().outbox[itemId]
+        when {
+            after == null || after.phase == "synced" -> OfflineSettleResult.Settled
+            after.phase == "conflict" -> OfflineSettleResult.Conflict
+            else -> OfflineSettleResult.Failed
+        }
+    }
+
+    private suspend fun syncOne(remote: OfflineProgressRemote, itemId: String, start: OfflineOutboxEntry) {
+        var entry: OfflineOutboxEntry? = start
+        var step = reduceOfflineOutbox(entry, OfflineOutboxEvent("reconnect", server = account.server.id, viewer = account.user.id))
+        // Bounded: read, write, read back, and one reconcile if the answer was lost.
+        repeat(6) {
+            if (step.ignored != null) return
+            // A sign-out while this viewer's progress was in flight: no further request goes out with their credentials.
+            if (retired) throw IOException("Viewer signed out")
+            entry = step.entry
+            when (step.effect) {
+                "read" -> {
+                    val current = remote.read(account, itemId)
+                    remember(itemId, current, entry)
+                    step = reduceOfflineOutbox(entry, OfflineOutboxEvent("server-state", current = current))
+                }
+                "write" -> {
+                    // Durable before the request leaves: a kill between the two is an ambiguous write, read first.
+                    persist(itemId, step.entry)
+                    val write = step.write
+                    val status = remote.write(account, itemId, write?.positionTicks, write?.played)
+                    if (status == null || status !in 200..299) {
+                        persist(itemId, step.entry)
+                        throw IOException("Write unconfirmed")
+                    }
+                    step = reduceOfflineOutbox(entry, OfflineOutboxEvent("write-result", status = status))
+                }
+                "readback" -> {
+                    val current = remote.read(account, itemId)
+                    remember(itemId, current, entry)
+                    step = reduceOfflineOutbox(entry, OfflineOutboxEvent("readback", current = current))
+                }
+                else -> {
+                    persist(itemId, step.entry)
+                    return
+                }
+            }
+        }
+        persist(itemId, step.entry)
+    }
+
+    private fun remember(itemId: String, data: OfflineUserData, entry: OfflineOutboxEntry?) {
+        if (entry != null) cached = load().let { it.copy(lastKnown = it.lastKnown + (itemId to data)) }
+    }
+
+    private fun persist(itemId: String, entry: OfflineOutboxEntry?) {
+        val saved = load()
+        save(saved.copy(outbox = saved.outbox.withEntry(itemId, entry)))
+    }
+
+    private fun Map<String, OfflineOutboxEntry>.withEntry(itemId: String, entry: OfflineOutboxEntry?) =
+        if (entry == null) this - itemId else this + (itemId to entry)
+}
+
+/** What a viewer hears after leaving a local viewing (P-11): progress reached the server, or it's kept here until the server is back. */
+internal const val OFFLINE_PROGRESS_KEPT = "Progress saved on this computer. It syncs when your server is back."
+
+/**
+ * A local viewing's last word, sent now when the server answers. Calls for one item run in order and only the newest reports: a viewing
+ * that ends writes its stop and then its completion, and the viewer should hear one result, for the completion. [settle] is
+ * [OfflineProgressStore.settle] bounded by a deadline, or Failed at once with no network.
+ */
+internal class OfflineViewingSettler(
+    private val scope: kotlinx.coroutines.CoroutineScope,
+    private val settle: suspend (Account, String) -> OfflineSettleResult
+) {
+    private val latest = mutableMapOf<String, kotlinx.coroutines.Job>()
+    private val revisions = MutableStateFlow(0L)
+
+    /** Bumps after every settle, whatever it found, so a page showing a local place reads it again. */
+    val revision: StateFlow<Long> = revisions
+
+    fun ended(account: Account, itemId: String, onResult: (OfflineSettleResult) -> Unit) {
+        val key = "${account.key}|$itemId"
+        synchronized(latest) {
+            val previous = latest[key]
+            lateinit var job: kotlinx.coroutines.Job
+            job = scope.launch(start = kotlinx.coroutines.CoroutineStart.LAZY) {
+                previous?.join()
+                val result = settle(account, itemId)
+                revisions.value = revisions.value + 1
+                val newest = synchronized(latest) { (latest[key] === job).also { if (it) latest.remove(key) } }
+                if (newest) onResult(result)
+            }
+            latest[key] = job
+            job.start()
+        }
+    }
+}
