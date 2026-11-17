@@ -808,6 +808,26 @@ enum SpecCaseManifest {
         fixed-head-in-list.just-above-the-size|grid-navigation/fixed-head-in-list
         fixed-head-in-list.fixed-at-the-size-itself|grid-navigation/fixed-head-in-list
         fixed-head-in-list.fixed-without-an-assistive-service|grid-navigation/fixed-head-in-list
+        music-offline.nothing-downloaded-pauses-as-before|music-offline/unreachable
+        music-offline.downloaded-ahead-skips-and-says-why|music-offline/unreachable
+        music-offline.downloaded-only-behind-stops|music-offline/unreachable
+        music-offline.repeat-all-wraps-to-a-download|music-offline/unreachable
+        music-offline.repeat-one-has-nothing-ahead|music-offline/unreachable
+        music-offline.a-download-already-skipped-this-traversal-does-not-count|music-offline/unreachable
+        music-offline.shuffled-order-decides-what-is-ahead|music-offline/unreachable
+        music-offline.a-duplicate-of-a-downloaded-song-ahead-counts|music-offline/unreachable
+        music-offline.blank-title-reads-this-track|music-offline/unreachable
+        music-offline.album-removal-keeps-a-track-a-playlist-holds|music-offline/collection
+        music-offline.playlist-plays-its-snapshot-order-with-duplicates|music-offline/collection
+        music-offline.partial-download-plays-only-ready-tracks-in-order|music-offline/collection
+        music-offline.a-track-removed-on-its-own-leaves-the-rest-ready|music-offline/collection
+        music-offline.waiting-and-paused-come-before-failed|music-offline/collection
+        music-offline.deleting-entries-count-as-gone|music-offline/collection
+        music-offline.unknown-collection-is-nothing|music-offline/collection
+        music-offline.no-limit-yet-refuses-nothing|music-offline/budget
+        music-offline.exactly-fits|music-offline/budget
+        music-offline.one-byte-over-counts-reservations|music-offline/budget
+        music-offline.over-the-limit-already-has-no-room|music-offline/budget
         music-catalog.album-section-stays-in-its-library|music-catalog/section
         music-catalog.album-artists-and-artists-are-distinct-routes|music-catalog/section
         music-catalog.contributing-artists-route|music-catalog/section

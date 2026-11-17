@@ -98,7 +98,7 @@ final class SpecVectorTests:XCTestCase {
         let pendingSuites = Set(PendingSpecCaseManifest.suites.keys)
         let syncSuites = SyncVectorRunner.suites
         var discoveredPendingSuites = Set<String>()
-        let allowedSuites:Set<String>=Set(["reference","application","discovery","recovery","playback-information","track-labels","grid-navigation","home-browse","account-sign-out","catalog-return","search-presentation","subtitle-download","seerr"]).union(traceSuites).union(pendingSuites).union(syncSuites).union(LiveVectorRunner.suites)
+        let allowedSuites:Set<String>=Set(["reference","application","discovery","recovery","playback-information","track-labels","grid-navigation","home-browse","account-sign-out","catalog-return","search-presentation","subtitle-download","seerr",MusicOfflineVectorRunner.suite]).union(traceSuites).union(pendingSuites).union(syncSuites).union(LiveVectorRunner.suites)
         var discoveredControlSuites=Set<String>()
         let documents=try files.map { file -> ([String:Any],[[String:Any]]) in
             let document=try XCTUnwrap(JSONSerialization.jsonObject(with:Data(contentsOf:file)) as? [String:Any])
@@ -219,6 +219,7 @@ final class SpecVectorTests:XCTestCase {
                     else if suite == "home-browse" { result = try await executeHome(text(vector,"operation"), input:vector["input"] as! [String:Any]) }
                     else if suite == "subtitle-download" { result = try SubtitleDownloadVectors.execute(text(vector,"operation"), input:vector["input"] as! [String:Any]) }
                     else if suite == "seerr" { result = try SeerrVectorRunner.execute(operation: text(vector,"operation"), input: vector["input"] as! [String:Any]) }
+                    else if suite == MusicOfflineVectorRunner.suite { result = try MusicOfflineVectorRunner.execute(operation: text(vector,"operation"), input: vector["input"] as! [String:Any]) }
                     else if suite == "account-sign-out" { result = try AccountCatalogState.execute(input: vector["input"] as! [String:Any]) }
                     else if musicSuites.contains(suite) { result = try MusicVectorRunner.execute(suite:suite,operation:text(vector,"operation"),input:vector["input"] as! [String:Any],context:document["context"] as? [String:Any] ?? [:]) }
                     else { result = try await execute(text(vector,"operation"),input:vector["input"] as! [String:Any],context:document["context"] as? [String:Any] ?? [:]) }
