@@ -181,6 +181,25 @@ class ProfilePinScreenTest {
         waitUntil { opened == 1 }
     }
 
+    /** D-pad only: pressing ⌫ until the PIN is empty turns ⌫ off under focus, so focus goes back to "1", not nowhere. */
+    @Test
+    fun deletingTheLastDigitWithTheDPadReturnsFocusToTheFirstKey() {
+        remote()
+        lockScreen {}
+        "24".forEach { digit ->
+            compose.onNodeWithTag("pin:key:$digit").requestFocus()
+            compose.onNodeWithTag("pin:key:$digit").performKeyInput { pressKey(Key.DirectionCenter) }
+        }
+        val delete = compose.onNodeWithTag("pin:delete")
+        delete.requestFocus()
+        delete.performKeyInput { pressKey(Key.DirectionCenter) }
+        compose.waitForIdle()
+        delete.assertIsFocused()
+        delete.performKeyInput { pressKey(Key.DirectionCenter) }
+        waitUntil { runCatching { compose.onNodeWithTag("pin:key:1").assertIsFocused() }.isSuccess }
+        compose.onNodeWithTag("pin:dots").assertContentDescriptionContains("0 digits", substring = true)
+    }
+
     @Test
     fun afterTenWrongTriesOnlyThePasswordRouteIsLeft() {
         val hasher = JvmProfilePinHasher(rounds = 1_000)

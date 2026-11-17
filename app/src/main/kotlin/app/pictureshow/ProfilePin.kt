@@ -93,6 +93,7 @@ internal fun ProfilePinPad(
     // typed by pressing a focused key (D-pad only) leaves focus where it is.
     var focusOk by remember { mutableStateOf(0) }
     var okFocused by remember { mutableStateOf(false) }
+    var deleteFocused by remember { mutableStateOf(false) }
     var focusFirst by remember { mutableStateOf(0) }
     LaunchedEffect(focusOk) { if (focusOk > 0) runCatching { ok.requestFocus() } }
     LaunchedEffect(focusFirst) { if (focusFirst > 0) runCatching { first.requestFocus() } }
@@ -194,8 +195,12 @@ internal fun ProfilePinPad(
         val clearLabel = stringResource(R.string.pin_delete)
         val okLabel = stringResource(R.string.pin_ok)
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            PinKey("⌫", tv, keysOn && pin.isNotEmpty(), Modifier.testTag("pin:delete").semantics { contentDescription = clearLabel }) {
+            val deleteModifier = Modifier.testTag("pin:delete").semantics { contentDescription = clearLabel }
+                .onFocusChanged { deleteFocused = it.isFocused }
+            PinKey("⌫", tv, keysOn && pin.isNotEmpty(), deleteModifier) {
                 pin = pin.dropLast(1)
+                // ⌫ turns off with an empty PIN; a D-pad remote would be left with no focus, so the pad starts over at "1".
+                if (pin.isEmpty() && deleteFocused) focusFirst++
             }
             PinKey("0", tv, keysOn, Modifier.testTag("pin:key:0")) { type('0') }
             val okModifier = Modifier.testTag("pin:ok").focusRequester(ok).onFocusChanged { okFocused = it.isFocused }
