@@ -251,9 +251,15 @@ internal class DesktopOfflineEngine(
             signedOut += key
             progressStores.remove(key)?.retire()
         }
-        mutableLibraries.update { it - key }
         // The rename hides everything in one step; a failed slow delete stays private in trash and retries at next start.
-        files.moveToTrash(files.accountDir(key))
+        // Bytes go before the library says the viewer is gone, so nothing that watches it can see a purged viewer's files.
+        // Windows refuses the rename while a just-cancelled transfer still holds a handle; then the bytes are deleted where they are.
+        val dir = files.accountDir(key)
+        if (!files.moveToTrash(dir)) {
+            dir.deleteRecursively()
+            log("offline purge-rename-refused deleted-in-place")
+        }
+        mutableLibraries.update { it - key }
         emptyTrashSoon()
         publishForeground()
     }
