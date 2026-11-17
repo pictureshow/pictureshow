@@ -227,6 +227,17 @@ final class ClientTests: XCTestCase {
         }
         try await client.authorizeQuickConnect(account: account, code: "123456")
     }
+    /// AUTH-17: a 403 at sign-in names viewing hours and a turned-off account; a wrong password stays a 401.
+    func testSignInForbiddenIsAnAccessRefusalNotAWrongPassword() async throws {
+        StubProtocol.handler = { _ in (403, Data("Error processing request.".utf8)) }
+        do { _ = try await client.signIn(server: server, username: "Viewer", password: "password"); XCTFail("signed in") }
+        catch { XCTAssertEqual(error as? ClientError, .accessRefusedAtSignIn); XCTAssertTrue(error.localizedDescription.contains("viewing hours")) }
+        StubProtocol.handler = { _ in (401, Data()) }
+        do { _ = try await client.signIn(server: server, username: "Viewer", password: "wrong"); XCTFail("signed in") }
+        catch { XCTAssertEqual(error as? ClientError, .invalidCredentials) }
+        XCTAssertEqual(ClientError.server(403).errorDescription, ClientError.accessRefusal(signIn: false))
+    }
+
     func testPasswordAndQuickConnectUseStableInstallIdentityAndNeverURLCredentials() async throws {
         var calls: [String] = []
         StubProtocol.handler = { request in

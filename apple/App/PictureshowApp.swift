@@ -41,8 +41,15 @@ struct RootView: View {
     var body: some View {
         Group {
             if let account = app.account {
-                MainShell().id(account.key)
-                    .modifier(ScreensaverHost())
+                // AUTH-16: the lock stands in for the whole app, so nothing behind it is built.
+                if app.pinGateNeeded(account) {
+                    ProfileLockScreen(account: account).id(account.key)
+                } else {
+                    MainShell().id(account.key)
+                        .modifier(ScreensaverHost())
+                        // Past the gate this viewer is the open one, so leaving it locks it again behind its PIN.
+                        .task(id: account.key) { if app.pins.unlocked != account.key { app.pins.markUnlocked(account.key) } }
+                }
             } else {
                 NavigationStack { SignInFlowView() }
             }
@@ -51,6 +58,9 @@ struct RootView: View {
         // PLAY-30 and SAVER-01 count time from the viewer's last touch or press anywhere in the app.
         .background(InputWatcherInstaller())
         // SYN-08: video rendering in the background leaves the group once; with no player open the device stays.
+        // AUTH-18: five minutes away locks again.
+        .onChange(of: scenePhase) { _, phase in app.sceneMoved(to: phase) }
+        .sheet(item: $app.pinSwitch) { account in ProfilePinSwitchSheet(account: account).environmentObject(app) }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .background, let controller = app.activeController, let box = controller.syncRenderer,
                   controller.grouped, controller.isUnpaused else { return }
@@ -76,14 +86,19 @@ struct RootView: View {
                 .environmentObject(app)
         }
         #if os(tvOS)
-        .fullScreenCover(item: $app.player) { request in
+        .fullScreenCover(item: lockedPlayer) { request in
             PlayerScreen(request: request).environmentObject(app)
         }
         #else
-        .fullScreenCover(item: $app.player) { request in
+        .fullScreenCover(item: lockedPlayer) { request in
             PlayerScreen(request: request).environmentObject(app)
         }
         #endif
+    }
+
+    /// AUTH-16: the player is shown only for the viewer past the PIN gate, whatever route set the request.
+    private var lockedPlayer: Binding<PlayerRequest?> {
+        Binding(get: { app.shownPlayer }, set: { app.player = $0 })
     }
 }
 
