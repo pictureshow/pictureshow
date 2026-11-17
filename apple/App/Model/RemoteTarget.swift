@@ -64,6 +64,8 @@ final class RemoteTarget {
     /// What the last message or event led to, for tests and the log.
     private(set) var lastRejection: String?
     private(set) var lastEffects: [String] = []
+    /// Remote opens refused because the viewer was behind its PIN lock.
+    private(set) var refusedWhileLocked = 0
 
     private func opened(_ account: Account) async {
         guard let app = appModel else { return }
@@ -111,6 +113,12 @@ final class RemoteTarget {
         case "open":
             let items = effect["items"] as? [String] ?? [], index = effect["index"] as? Int ?? 0
             guard items.indices.contains(index), let account = app.account else { return }
+            // AUTH-16: a remote can't start a viewing behind the PIN lock; the open is refused, not held.
+            guard app.pastPinGate(account) else {
+                refusedWhileLocked += 1
+                Task { @MainActor [weak self] in self?.reduce(["op": "resolved", "generation": generation, "ok": false]) }
+                return
+            }
             let ticks = (effect["ticks"] as? String).flatMap(Int64.init)
             let client = app.client(for: account)
             openRequest += 1
@@ -121,6 +129,8 @@ final class RemoteTarget {
                     // A later Stop or Play, a reconnect, or an account switch while fetching makes this open stale.
                     guard let self, let app, self.openRequest == request, self.state["generation"] as? String == generation,
                           app.account?.key == account.key else { return }
+                    // AUTH-16: a remote can't start a viewing behind the PIN lock.
+                    guard app.pastPinGate(account) else { self.reduce(["op": "resolved", "generation": generation, "ok": false]); return }
                     // SYN-10: a remote controlling a device in a group makes a group request; the server opens it everywhere.
                     if app.syncPlay.participating { app.syncPlay.queue(item, fromStart: ticks == 0, startTicks: ticks); return }
                     app.activeController?.close()

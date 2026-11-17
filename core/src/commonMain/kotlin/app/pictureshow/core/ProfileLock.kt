@@ -114,6 +114,40 @@ fun profilePinRelock(backgroundedAt: Long?, now: Long): Boolean = when {
 fun profilePinChangeAllowed(lock: ProfileLock?, pinConfirmed: Boolean, passwordProven: Boolean): Boolean =
     lock == null || pinConfirmed || passwordProven
 
+/** What can happen to a password proof (AUTH-19) after a password or Quick Connect sign-in. */
+enum class ProfilePinProofEvent {
+    /** A PIN was set, changed, turned off, or its opening question changed. */
+    CHANGE_MADE,
+
+    /** Another viewer became current after the proven one had been. */
+    VIEWER_CHANGED,
+
+    /** Five minutes away (AUTH-18). */
+    RELOCKED,
+
+    /** The PIN settings were left, so the next visit is a new one. */
+    SETTINGS_LEFT,
+
+    /** The proven viewer became current: the sign-in landing. */
+    SIGN_IN_LANDED,
+
+    /** The new-PIN screen was cancelled without a change. */
+    SETUP_CANCELLED
+}
+
+/**
+ * Whether a password proof survives [event] (AUTH-19). It is one-time, like a typed current PIN: the change it was
+ * for uses it up, and so does leaving that viewer or locking again, so a parent's sign-in can't leave a viewer whose
+ * PIN anyone may then turn off.
+ */
+fun profilePinProofKept(event: ProfilePinProofEvent): Boolean = when (event) {
+    ProfilePinProofEvent.CHANGE_MADE,
+    ProfilePinProofEvent.VIEWER_CHANGED,
+    ProfilePinProofEvent.RELOCKED,
+    ProfilePinProofEvent.SETTINGS_LEFT -> false
+    ProfilePinProofEvent.SIGN_IN_LANDED, ProfilePinProofEvent.SETUP_CANCELLED -> true
+}
+
 /** LOCKED_OUT: the hard limit was reached and only the server password opens this viewer now. */
 enum class ProfilePinResult { UNLOCKED, WRONG, WAIT, LOCKED_OUT }
 
@@ -146,8 +180,28 @@ class ProfileLockStore(private val persistence: TextPersistence, private val has
     /** A right current PIN typed in Settings, good for one change (AUTH-19). Process memory only. */
     private var changeGrant: String? = null
 
-    /** The viewer that signed in with its server password in this run, which may change its PIN without the old one. */
+    /** The viewer that just signed in with its server password, which may make one PIN change without the old PIN. */
     private var passwordKey: String? = null
+
+    /** Whether the proven viewer has become current yet (the sign-in lands a moment after the proof). */
+    private var passwordLanded = false
+
+    private fun proofEvent(event: ProfilePinProofEvent) {
+        if (!profilePinProofKept(event)) {
+            passwordKey = null
+            passwordLanded = false
+        }
+    }
+
+    /** Tracks the current viewer for the proof: landing on it keeps it, any other viewer after that ends it. */
+    private fun proofSees(current: String?) {
+        val proven = passwordKey ?: return
+        if (current == proven) {
+            passwordLanded = true
+        } else if (passwordLanded) {
+            proofEvent(ProfilePinProofEvent.VIEWER_CHANGED)
+        }
+    }
 
     /** Monotonic time Pictureshow left the screen, while it is away (AUTH-18). */
     private var backgroundedAt: Long? = null
@@ -168,7 +222,7 @@ class ProfileLockStore(private val persistence: TextPersistence, private val has
         if (relock) {
             admitted = null
             changeGrant = null
-            passwordKey = null
+            proofEvent(ProfilePinProofEvent.RELOCKED)
             openedSeen = false
             opened = null
             unlockedKey.value = null
@@ -176,14 +230,29 @@ class ProfileLockStore(private val persistence: TextPersistence, private val has
         return relock
     }
 
+    /**
+     * Whether [key] is past the lock (AUTH-18): unlocked, or a viewer opening wouldn't ask (no PIN, or "Ask when
+     * Pictureshow opens" off). What background work (remote commands, music controls, a relock's stops) asks before it
+     * acts for a viewer. Nothing is admitted before the saved PINs are read. Unlike [gateNeeded] it changes nothing.
+     */
+    fun admits(key: String?): Boolean = key != null &&
+        (unlockedKey.value == key || loaded && !profilePinNeeded(lock(key), ProfileUnlockReason.START, false))
+
     /** Ends a one-change permission unused: the new-PIN screen was cancelled or left (AUTH-19). */
     fun dropChangeGrant() {
         changeGrant = null
     }
 
+    /** Leaving the PIN settings ends both permissions: a typed PIN and a password proof (AUTH-19). */
+    fun leftPinSettings() {
+        changeGrant = null
+        proofEvent(ProfilePinProofEvent.SETTINGS_LEFT)
+    }
+
     /** A password or Quick Connect sign-in: the viewer is open and may set a new PIN without the old one. */
     fun provenByPassword(key: String) {
         passwordKey = key
+        passwordLanded = false
         unlockedKey.value = key
     }
 
@@ -202,6 +271,7 @@ class ProfileLockStore(private val persistence: TextPersistence, private val has
         }
         // A change permission belongs to the viewer it was typed for; becoming anyone else ends it.
         if (changeGrant != null && changeGrant != key) changeGrant = null
+        proofSees(key)
         if (key == null || unlockedKey.value == key) {
             admitted = key
             return false
@@ -217,6 +287,7 @@ class ProfileLockStore(private val persistence: TextPersistence, private val has
     /** A viewer with no PIN, or one proven another way (its password at sign-in), is simply open. */
     fun markUnlocked(key: String?) {
         if (changeGrant != key) changeGrant = null
+        if (key != null) proofSees(key)
         unlockedKey.value = key
     }
 
@@ -290,10 +361,11 @@ class ProfileLockStore(private val persistence: TextPersistence, private val has
         if (unlockedKey.value != null && unlockedKey.value !in keys) unlockedKey.value = null
     }
 
-    /** A change uses up the PIN typed for it; a password proof lasts until Pictureshow locks again. */
+    /** A change uses up whatever allowed it: the PIN typed for it, or the password proof. */
     private fun checkChangeAllowed(key: String) {
         check(profilePinChangeAllowed(mutable.value[key], changeGrant == key, passwordKey == key)) { "Type the current PIN first." }
         if (changeGrant == key) changeGrant = null
+        if (passwordKey == key) proofEvent(ProfilePinProofEvent.CHANGE_MADE)
     }
 
     private suspend fun loadLocked() {

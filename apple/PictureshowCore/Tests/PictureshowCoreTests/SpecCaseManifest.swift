@@ -2472,6 +2472,31 @@ enum SpecCaseManifest {
         create-timeout|sync-membership-registration/case
         join-route|sync-membership-registration/case
         create-route|sync-membership-registration/case
+        sync-completion-reporting.current-decision|sync-completion-reporting/video-completion
+        sync-completion-reporting.obsolete-decision|sync-completion-reporting/video-completion
+        sync-completion-reporting.earlier-current-decision|sync-completion-reporting/video-completion
+        sync-completion-reporting.earlier-obsolete-decision|sync-completion-reporting/video-completion
+        sync-completion-reporting.repeat-one-current-decision|sync-completion-reporting/video-completion
+        sync-completion-reporting.repeat-one-obsolete-decision|sync-completion-reporting/video-completion
+        consent-account|sync-route-consent/case
+        consent-token|sync-route-consent/case
+        consent-logout|sync-route-consent/case
+        consent-same|sync-route-consent/case
+        stale-confirm|sync-route-consent/case
+        stale-cancel|sync-route-consent/case
+        wrong-scope-confirm|sync-route-consent/case
+        wrong-scope-cancel|sync-route-consent/case
+        duplicate|sync-route-consent/case
+        scope-change-during-leave|sync-route-consent/case
+        remote-only-picker|sync-group-social-summary-and-picker-role/case
+        media-play-picker|sync-group-social-summary-and-picker-role/case
+        native-direction-none-single|sync-group-social-summary-and-picker-role/case
+        native-direction-none-first|sync-group-social-summary-and-picker-role/case
+        native-direction-none-last|sync-group-social-summary-and-picker-role/case
+        native-direction-one-single|sync-group-social-summary-and-picker-role/case
+        native-direction-all-single|sync-group-social-summary-and-picker-role/case
+        tv-roster-lifecycle-font-one|sync-tv-player-coherence/case
+        tv-roster-lifecycle-large-font|sync-tv-player-coherence/case
         existing-membership-rejoin-cancel|sync-membership-registration/case
         confirmed-server-left-clears-membership|sync-membership-registration/case
         definite-denial-clears-unsent-cancellation|sync-membership-registration/case
@@ -2940,6 +2965,46 @@ enum SpecCaseManifest {
         touch-back-sheet-first|application/touch-player-back
         touch-back-menu-next|application/touch-player-back
         touch-back-controls-showing-exits|application/touch-player-back
+        access-refusal-sign-in|application/access-refusal
+        access-refusal-in-session|application/access-refusal
+        profile-pin-valid-four-digits|application/profile-pin-valid
+        profile-pin-valid-eight-digits|application/profile-pin-valid
+        profile-pin-valid-too-short|application/profile-pin-valid
+        profile-pin-valid-too-long|application/profile-pin-valid
+        profile-pin-valid-letter|application/profile-pin-valid
+        profile-pin-valid-space|application/profile-pin-valid
+        profile-pin-valid-non-ascii-digits|application/profile-pin-valid
+        profile-pin-valid-empty|application/profile-pin-valid
+        profile-pin-needed-no-pin-switch|application/profile-pin-needed
+        profile-pin-needed-no-pin-start|application/profile-pin-needed
+        profile-pin-needed-switch-always-asks|application/profile-pin-needed
+        profile-pin-needed-switch-asks-even-if-unlocked|application/profile-pin-needed
+        profile-pin-needed-start-asks|application/profile-pin-needed
+        profile-pin-needed-start-off|application/profile-pin-needed
+        profile-pin-needed-start-already-unlocked|application/profile-pin-needed
+        profile-pin-attempt-first-wrong|application/profile-pin-attempt
+        profile-pin-attempt-fourth-wrong-no-wait|application/profile-pin-attempt
+        profile-pin-attempt-fifth-wrong-waits-30s|application/profile-pin-attempt
+        profile-pin-attempt-wait-ending-keeps-the-count|application/profile-pin-attempt
+        profile-pin-attempt-seventh-wrong-waits-5min|application/profile-pin-attempt
+        profile-pin-attempt-eighth-wrong-waits-15min|application/profile-pin-attempt
+        profile-pin-attempt-ninth-wrong-waits-1h|application/profile-pin-attempt
+        profile-pin-attempt-tenth-wrong-locks-out|application/profile-pin-attempt
+        profile-pin-attempt-locked-out-right-pin-refused|application/profile-pin-attempt
+        profile-pin-attempt-right-clears|application/profile-pin-attempt
+        profile-pin-attempt-during-wait-not-counted|application/profile-pin-attempt
+        profile-pin-attempt-restart-begins-the-wait-again|application/profile-pin-attempt
+        profile-pin-attempt-restart-wait-served-since-boot|application/profile-pin-attempt
+        profile-pin-relock-never-left|application/profile-pin-relock
+        profile-pin-relock-four-minutes-away-stays-open|application/profile-pin-relock
+        profile-pin-relock-just-under-five-minutes-stays-open|application/profile-pin-relock
+        profile-pin-relock-five-minutes-away-locks|application/profile-pin-relock
+        profile-pin-relock-an-hour-away-locks|application/profile-pin-relock
+        profile-pin-relock-restart-while-away-locks|application/profile-pin-relock
+        profile-pin-change-first-pin-is-free|application/profile-pin-change
+        profile-pin-change-open-viewer-is-not-enough|application/profile-pin-change
+        profile-pin-change-current-pin-typed|application/profile-pin-change
+        profile-pin-change-password-sign-in|application/profile-pin-change
         quick-connect-code-pasted-with-spaces|application/quick-connect-code
         quick-connect-code-too-short|application/quick-connect-code
         quick-connect-code-too-long|application/quick-connect-code

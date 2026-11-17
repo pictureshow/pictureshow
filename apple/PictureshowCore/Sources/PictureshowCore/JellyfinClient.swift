@@ -119,7 +119,9 @@ public final class JellyfinClient: @unchecked Sendable {
         return parts.lexicographicallyPrecedes([10, 10, 0]) == false
     }
     public func signIn(server: Server, username: String, password: String) async throws -> Account {
-        let data = try await request(server: server, path: "Users/AuthenticateByName", method: "POST", body: ["Username": username, "Pw": password])
+        let data: Data
+        do { data = try await request(server: server, path: "Users/AuthenticateByName", method: "POST", body: ["Username": username, "Pw": password]) }
+        catch ClientError.server(403) { throw ClientError.accessRefusedAtSignIn }
         return try account(from: data, server: server)
     }
     public func initiateQuickConnect(server: Server) async throws -> QuickConnectState {

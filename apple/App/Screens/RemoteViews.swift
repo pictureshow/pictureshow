@@ -15,6 +15,9 @@ struct PlayOnSheet: View {
     var body: some View {
         NavigationStack {
             List {
+                if let pending = remote.pendingPlay {
+                    Text(pending.item.name).font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
+                }
                 if let failure {
                     Text(failure).foregroundStyle(.secondary)
                 } else if targets.isEmpty && !loading {
@@ -32,7 +35,7 @@ struct PlayOnSheet: View {
             }
             .overlay { if loading && targets.isEmpty { ProgressView() } }
             .refreshable { await load() }
-            .navigationTitle(remote.pendingPlay.map { "Play \($0.item.name) on" } ?? "Control a TV")
+            .navigationTitle(RemotePickerPresentation(mediaRequestPresent: remote.pendingPlay != nil).title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { remote.choosing = false } } }
         }

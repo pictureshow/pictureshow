@@ -26,6 +26,8 @@ final class SyncPlaySession: ObservableObject {
     private(set) var engine: SyncSessionEngine
     private var bridge: SyncAppBridge
     private var accountKey: String?
+    /// Account/token epoch: each new engine gets the next one, so an older consent can't act on it (SYN-10).
+    private var scope: Int64 = 0
     private var subscription: ServerSocket.Subscription?
     private var refresher: Task<Void, Never>?
     private let log = Logger(subsystem: "app.pictureshow", category: "syncplay")
@@ -54,11 +56,12 @@ final class SyncPlaySession: ObservableObject {
     func accountChanged() {
         guard let app = appModel else { return }
         let next = app.account.flatMap { $0.isSignedIn ? $0 : nil }
-        guard next?.key != accountKey || next?.accessToken != bridge.account?.accessToken else { return }
+        guard SyncAccountScope.rebinds(currentKey: accountKey, currentToken: bridge.account?.accessToken, nextKey: next?.key, nextToken: next?.accessToken) else { return }
         engine.terminate()
         accountKey = next?.key
         bridge = SyncAppBridge(account: next, client: next.map { app.client(for: $0) })
-        engine = SyncSessionEngine(transport: bridge, clock: bridge, scheduler: bridge)
+        scope += 1
+        engine = SyncSessionEngine(transport: bridge, clock: bridge, scheduler: bridge, scope: scope)
         engine.host = bridge
         bridge.session = self
         groups = []; policy = nil; policyFailed = false; listFailed = false
@@ -75,7 +78,8 @@ final class SyncPlaySession: ObservableObject {
     /// For tests: the same engine wiring with a fake transport, clock and scheduler in place of the server.
     func installForTesting(_ platform: SyncEngineTransport & SyncEngineClock & SyncEngineScheduler) {
         engine.terminate()
-        engine = SyncSessionEngine(transport: platform, clock: platform, scheduler: platform)
+        scope += 1
+        engine = SyncSessionEngine(transport: platform, clock: platform, scheduler: platform, scope: scope)
         engine.host = bridge
         bridge.session = self
         changed()
@@ -159,6 +163,33 @@ final class SyncPlaySession: ObservableObject {
         changed()
     }
 
+    // MARK: AirPlay while grouped (SYN-10)
+
+    /// The open "leave the group to use AirPlay" question, if any.
+    var airPlayConsent: SyncRouteConsent? { engine.externalRouteConsent }
+
+    /// Asks before AirPlay takes a grouped viewing; `route` runs once the server accepted the Leave. Returns false when
+    /// this device isn't in a group, and the caller routes straight away.
+    @discardableResult
+    func askToLeaveForAirPlay(_ route: @escaping () -> Void) -> Bool {
+        let asked = engine.confirmExternalRoute(route)
+        changed()
+        return asked
+    }
+
+    /// The question's Leave and Cancel act only on the consent the dialog showed.
+    func leaveForAirPlay(_ consent: SyncRouteConsent) { engine.leaveForExternalRoute(scope: consent.scope, id: consent.id); changed() }
+    func cancelAirPlay(_ consent: SyncRouteConsent) { engine.cancelExternalRoute(scope: consent.scope, id: consent.id); changed() }
+
+    /// Group transport for the Watch together sheet; presses are server requests (SYN-03).
+    var transport: SyncGroupTransport { SyncGroupTransport(engine) }
+    func requestPrevious() { engine.requestPrevious(); changed() }
+    func requestNext() { engine.requestNext(); changed() }
+    func requestPlayPause() {
+        if transport.primary == "pause" { engine.requestPause() } else { engine.requestUnpause() }
+        changed()
+    }
+
     /// The reminder's Watch: open the group's current entry again.
     func watch() { engine.watch(); changed() }
 
@@ -187,6 +218,8 @@ final class SyncPlaySession: ObservableObject {
                 let item = try await client.item(account: account, id: request.itemId)
                 guard let self, let app, self.engine.membership.generation == request.generation, self.accountKey == account.key,
                       self.engine.following, self.engine.membership.queue?.current?.playlistItemId == request.playlistItemId else { return }
+                // AUTH-16: the group's entry never opens behind the PIN lock.
+                guard app.pastPinGate(account) else { self.log.info("group entry held: viewer locked"); return }
                 if let current = app.activeController {
                     if current.sync?.playlistItemId == request.playlistItemId && current.sync?.generation == request.generation { return }
                     current.closeReplacedBySync()
