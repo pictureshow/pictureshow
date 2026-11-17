@@ -34,6 +34,8 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
     @Published private(set) var externalRoute: String?
     /// Live TV (LIVE-04/05): the measured window, pause/expiry and the programme on air; unused for other items.
     @Published private(set) var live = LivePlayerState()
+    /// The current item's display size (pixel aspect applied); zero until the first frame's size is known.
+    @Published internal(set) var videoSize: CGSize = .zero
     fileprivate var liveTask: Task<Void, Never>?
     /// When the current live item was opened, and how many times it has been reopened without becoming ready.
     fileprivate var liveOpened = Date()
@@ -502,6 +504,11 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
     }
 
     private func observe(_ playerItem: AVPlayerItem) {
+        videoSize = .zero
+        observations.append(playerItem.observe(\.presentationSize, options: [.new]) { [weak self] item, _ in
+            let size = item.presentationSize
+            Task { @MainActor in self?.videoSize = size }
+        })
         observations.append(playerItem.observe(\.status, options: [.new]) { [weak self] item, _ in
             let status = item.status
             let message = item.error?.localizedDescription
@@ -968,5 +975,39 @@ enum LiveStartWatchdog {
     static let maxReopens = 3
     static func shouldReopen(ready: Bool, openedSecondsAgo: Double, reopens: Int) -> Bool {
         !ready && openedSecondsAgo >= patienceSeconds && reopens < maxReopens
+    }
+}
+
+// MARK: Picture in picture (TOUCH-15)
+
+extension PlaybackController {
+    /// TOUCH-15's gate, read from this viewing. The interface and the device's support come from the platform.
+    func pictureInPictureState(tvInterface: Bool, deviceSupports: Bool) -> PictureInPictureState {
+        PictureInPictureState(
+            tvInterface: tvInterface,
+            deviceSupports: deviceSupports,
+            hasVideo: player.currentItem != nil && videoSize.width > 0 && videoSize.height > 0,
+            error: error != nil,
+            // A stream being negotiated (the next episode, a reopened source) has nothing settled on screen yet.
+            switching: local == nil && decision == nil,
+            exiting: finished,
+            atEnd: pictureInPictureAtEnd,
+            // The picture plays on an AirPlay receiver; there is nothing here to keep watching in a small window.
+            handedOff: externalRoute != nil
+        )
+    }
+
+    /// A finished title, or one waiting at its end on "Are you still watching?".
+    var pictureInPictureAtEnd: Bool {
+        if isLive { return false }
+        if askingStillWatching, nextCountdown == -1 { return true }
+        return duration > 0 && position >= duration - 0.5
+    }
+
+    /// Back 10, Play or Pause, Forward 10 for the window, with what each can do right now.
+    var pictureInPictureActions: [PictureInPictureAction] {
+        let canSeek = !isLive || (live.canTimeShift && !live.expired)
+        let primary: String? = isLive && !live.canTimeShift ? nil : (isUnpaused || isPlaying ? "pause" : "play")
+        return PictureInPicture.actions(primary: primary, canSeekBack: canSeek, canSeekForward: canSeek && !(isLive && live.atEdge))
     }
 }

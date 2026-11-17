@@ -2940,6 +2940,25 @@ enum SpecCaseManifest {
         touch-back-sheet-first|application/touch-player-back
         touch-back-menu-next|application/touch-player-back
         touch-back-controls-showing-exits|application/touch-player-back
+        touch-pip-playing-video|application/touch-pip-allowed
+        touch-pip-never-on-tv|application/touch-pip-allowed
+        touch-pip-device-without-feature|application/touch-pip-allowed
+        touch-pip-no-video-yet|application/touch-pip-allowed
+        touch-pip-error-card|application/touch-pip-allowed
+        touch-pip-loading-next|application/touch-pip-allowed
+        touch-pip-leaving|application/touch-pip-allowed
+        touch-pip-finished|application/touch-pip-allowed
+        touch-pip-handed-off|application/touch-pip-allowed
+        touch-pip-actions-playing|application/touch-pip-actions
+        touch-pip-actions-paused|application/touch-pip-actions
+        touch-pip-actions-live-no-timeshift|application/touch-pip-actions
+        touch-pip-actions-live-at-edge|application/touch-pip-actions
+        touch-pip-aspect-1080p|application/touch-pip-aspect
+        touch-pip-aspect-unknown|application/touch-pip-aspect
+        touch-pip-aspect-scope-clamped|application/touch-pip-aspect
+        touch-pip-aspect-tall-clamped|application/touch-pip-aspect
+        touch-pip-aspect-anamorphic-dvd|application/touch-pip-aspect
+        touch-pip-aspect-4x3|application/touch-pip-aspect
         quick-connect-code-pasted-with-spaces|application/quick-connect-code
         quick-connect-code-too-short|application/quick-connect-code
         quick-connect-code-too-long|application/quick-connect-code
