@@ -154,6 +154,12 @@ public struct PlayDecision: Sendable, CustomStringConvertible, CustomDebugString
     public var initialSeekSeconds: Double { Ticks.seconds(startTicks) }
     public var description: String { "PlayDecision(item=\(itemID), method=\(method.rawValue), credentials=REDACTED)" }
     public var debugDescription: String { description }
+    public init(itemID: String, url: URL, headers: [String: String] = [:], method: PlayMethod, source: MediaSource, playSessionId: String? = nil,
+                startTicks: Int64 = 0, audioIndex: Int? = nil, subtitleIndex: Int? = nil, transcodeReasons: [String] = []) {
+        self.itemID = itemID; self.url = url; self.headers = headers; self.method = method; self.source = source
+        self.playSessionId = playSessionId; self.startTicks = startTicks; self.audioIndex = audioIndex
+        self.subtitleIndex = subtitleIndex; self.transcodeReasons = transcodeReasons
+    }
 }
 
 public enum Ticks {

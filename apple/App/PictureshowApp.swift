@@ -154,6 +154,7 @@ struct MainShell: View {
         .onChange(of: app.showingDownloads) { _, show in if show { tab = .downloads; app.showingDownloads = false } }
         #endif
         .onChange(of: app.seerr.config(app.account?.key) == nil) { _, gone in if gone && tab == .requests { tab = .home } }
+        .modifier(MusicChrome(music: app.music))
     }
 }
 
@@ -167,6 +168,8 @@ struct RoutedStack<Root: View>: View {
         #if os(iOS)
             .safeAreaInset(edge: .bottom, spacing: 0) { if !RemoteBar.usesAccessory { RemoteBar(remote: app.remote) } }
         #endif
+            // MUS-03: what's playing stays one tap away on every tab.
+            .safeAreaInset(edge: .bottom, spacing: 0) { MiniPlayer(music: app.music) }
     }
 
     private var stack: some View {
@@ -178,10 +181,12 @@ struct RoutedStack<Root: View>: View {
                 .navigationDestination(for: Route.self) { route in
                     switch route {
                     case .item(let item): DetailView(seed: item)
-                    case .library(let library): LibraryView(library: library)
+                    case .library(let library):
+                        if let music = library.musicRoute { MusicRouteView(route: music) } else { LibraryView(library: library) }
                     case .person(let id, let name): PersonView(personID: id, name: name)
                     case .photo(let photo, let sortBy, let descending): PhotoViewer(photo: photo, sortBy: sortBy, descending: descending)
                     case .liveTV: LiveTVRoute()
+                    case .music(let music): MusicRouteView(route: music)
                     }
                 }
                 .navigationDestination(for: SeerrTitleRoute.self) { SeerrTitleView(route: $0) }

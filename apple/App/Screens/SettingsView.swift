@@ -41,6 +41,7 @@ struct SettingsView: View {
                     }
                 }
             }
+            MusicQualitySection()
             LanguageSection()
             SeerrSettingsSection()
             Section("Subtitles") {
@@ -330,5 +331,18 @@ struct LicenseView: View {
         }
         .navigationTitle("License")
         .pageBackground()
+    }
+}
+
+/// MUS-06: the local Music quality choice. It applies from the next track opened.
+struct MusicQualitySection: View {
+    @State private var quality = MusicSettings.quality
+    var body: some View {
+        Section {
+            Picker("Music quality", selection: $quality) {
+                ForEach(MusicQuality.choices, id: \.self) { Text(MusicSettings.label($0)).tag($0) }
+            }
+            .onChange(of: quality) { _, value in MusicSettings.quality = value }
+        } header: { Text("Music") } footer: { Text("Applies from the next track.") }
     }
 }

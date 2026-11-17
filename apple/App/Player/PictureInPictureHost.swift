@@ -91,6 +91,10 @@ private let log = Logger(subsystem: "app.pictureshow", category: "PictureInPictu
 
     /// More's "Picture in picture". False when the gate or AVKit says no.
     @discardableResult func start() -> Bool {
+        #if DEBUG
+        // The simulator has no window: the preview shows the screen left behind, so its wording can be checked.
+        if Self.preview, system == nil || system?.isPictureInPicturePossible == false { willStart(); return true }
+        #endif
         guard allowed, let system, system.isPictureInPicturePossible else { return false }
         system.startPictureInPicture()
         return true

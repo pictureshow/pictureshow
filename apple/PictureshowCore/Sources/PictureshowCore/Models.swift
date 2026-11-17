@@ -119,6 +119,8 @@ public struct MediaItem: Codable, Equatable, Sendable, Identifiable {
     public var recordingStatus: String? = nil
     public var canDelete: Bool? = nil
     public var channelId: String? = nil
+    /// "Audio" on a music playlist, so it opens in the music screens rather than the video grid (MUS-01). Decoded only.
+    public var mediaType: String? = nil
     /// The server's Live TV view; it is reached through Live TV, never as an ordinary library.
     public var isLiveTvLibrary: Bool {
         (type == "UserView" || type == "CollectionFolder") && collectionType?.lowercased() == "livetv"
@@ -181,7 +183,9 @@ public struct MediaItem: Codable, Equatable, Sendable, Identifiable {
         recordingStatus = try? live.decodeIfPresent(String.self, forKey: .status)
         canDelete = try? live.decodeIfPresent(Bool.self, forKey: .canDelete)
         channelId = try? live.decodeIfPresent(String.self, forKey: .channelId)
+        mediaType = try? decoder.container(keyedBy: MusicKeys.self).decodeIfPresent(String.self, forKey: .mediaType)
     }
+    private enum MusicKeys: String, CodingKey { case mediaType = "MediaType" }
     public var isEmptyContainer: Bool {
         let container = isFolder || ["BoxSet", "Playlist", "Folder", "CollectionFolder", "Series", "Season"].contains(type)
         return container && !(childCount.map { $0 > 0 } ?? false) && !(recursiveItemCount.map { $0 > 0 } ?? false) && (childCount == 0 || recursiveItemCount == 0)
