@@ -1,0 +1,1220 @@
+{
+  "schemaVersion": 1,
+  "suite": "music-offline",
+  "cases": [
+    {
+      "id": "music-offline.nothing-downloaded-pauses-as-before",
+      "operation": "unreachable",
+      "input": {
+        "queue": {
+          "server": "s",
+          "viewer": "v",
+          "entries": [
+            {
+              "id": "a",
+              "media": "m-a"
+            },
+            {
+              "id": "b",
+              "media": "m-b"
+            }
+          ],
+          "current": "a",
+          "repeat": "off",
+          "paused": false,
+          "order": [
+            "a",
+            "b"
+          ]
+        },
+        "local": [],
+        "title": "Song A"
+      },
+      "expected": {
+        "step": "pause",
+        "message": "Can't reach the server. Your queue is saved: press Play to try again."
+      }
+    },
+    {
+      "id": "music-offline.downloaded-ahead-skips-and-says-why",
+      "operation": "unreachable",
+      "input": {
+        "queue": {
+          "server": "s",
+          "viewer": "v",
+          "entries": [
+            {
+              "id": "a",
+              "media": "m-a"
+            },
+            {
+              "id": "b",
+              "media": "m-b"
+            }
+          ],
+          "current": "a",
+          "repeat": "off",
+          "paused": false,
+          "order": [
+            "a",
+            "b"
+          ]
+        },
+        "local": [
+          "m-b"
+        ],
+        "title": "Song A"
+      },
+      "expected": {
+        "step": "skip",
+        "message": "Skipped Song A: it isn't downloaded, and the server can't be reached."
+      }
+    },
+    {
+      "id": "music-offline.downloaded-only-behind-stops",
+      "operation": "unreachable",
+      "input": {
+        "queue": {
+          "server": "s",
+          "viewer": "v",
+          "entries": [
+            {
+              "id": "a",
+              "media": "m-a"
+            },
+            {
+              "id": "b",
+              "media": "m-b"
+            }
+          ],
+          "current": "b",
+          "repeat": "off",
+          "paused": false,
+          "order": [
+            "a",
+            "b"
+          ]
+        },
+        "local": [
+          "m-a"
+        ],
+        "title": "Song B"
+      },
+      "expected": {
+        "step": "pause",
+        "message": "Song B isn't downloaded, and the server can't be reached. Nothing after it is downloaded."
+      }
+    },
+    {
+      "id": "music-offline.repeat-all-wraps-to-a-download",
+      "operation": "unreachable",
+      "input": {
+        "queue": {
+          "server": "s",
+          "viewer": "v",
+          "entries": [
+            {
+              "id": "a",
+              "media": "m-a"
+            },
+            {
+              "id": "b",
+              "media": "m-b"
+            }
+          ],
+          "current": "b",
+          "repeat": "all",
+          "paused": false,
+          "order": [
+            "a",
+            "b"
+          ]
+        },
+        "local": [
+          "m-a"
+        ],
+        "title": "Song B"
+      },
+      "expected": {
+        "step": "skip",
+        "message": "Skipped Song B: it isn't downloaded, and the server can't be reached."
+      }
+    },
+    {
+      "id": "music-offline.repeat-one-has-nothing-ahead",
+      "operation": "unreachable",
+      "input": {
+        "queue": {
+          "server": "s",
+          "viewer": "v",
+          "entries": [
+            {
+              "id": "a",
+              "media": "m-a"
+            },
+            {
+              "id": "b",
+              "media": "m-b"
+            }
+          ],
+          "current": "a",
+          "repeat": "one",
+          "paused": false,
+          "order": [
+            "a",
+            "b"
+          ]
+        },
+        "local": [
+          "m-b"
+        ],
+        "title": "Song A"
+      },
+      "expected": {
+        "step": "pause",
+        "message": "Song A isn't downloaded, and the server can't be reached. Nothing after it is downloaded."
+      }
+    },
+    {
+      "id": "music-offline.a-download-already-skipped-this-traversal-does-not-count",
+      "operation": "unreachable",
+      "input": {
+        "queue": {
+          "server": "s",
+          "viewer": "v",
+          "entries": [
+            {
+              "id": "a",
+              "media": "m-a"
+            },
+            {
+              "id": "b",
+              "media": "m-b"
+            },
+            {
+              "id": "c",
+              "media": "m-c"
+            }
+          ],
+          "current": "a",
+          "repeat": "off",
+          "paused": false,
+          "order": [
+            "a",
+            "b",
+            "c"
+          ],
+          "failed": [
+            "b"
+          ]
+        },
+        "local": [
+          "m-b"
+        ],
+        "title": "Song A"
+      },
+      "expected": {
+        "step": "pause",
+        "message": "Song A isn't downloaded, and the server can't be reached. Nothing after it is downloaded."
+      }
+    },
+    {
+      "id": "music-offline.shuffled-order-decides-what-is-ahead",
+      "operation": "unreachable",
+      "input": {
+        "queue": {
+          "server": "s",
+          "viewer": "v",
+          "entries": [
+            {
+              "id": "a",
+              "media": "m-a"
+            },
+            {
+              "id": "b",
+              "media": "m-b"
+            },
+            {
+              "id": "c",
+              "media": "m-c"
+            }
+          ],
+          "current": "a",
+          "repeat": "off",
+          "paused": false,
+          "order": [
+            "c",
+            "a",
+            "b"
+          ]
+        },
+        "local": [
+          "m-c"
+        ],
+        "title": "Song A"
+      },
+      "expected": {
+        "step": "pause",
+        "message": "Song A isn't downloaded, and the server can't be reached. Nothing after it is downloaded."
+      }
+    },
+    {
+      "id": "music-offline.a-duplicate-of-a-downloaded-song-ahead-counts",
+      "operation": "unreachable",
+      "input": {
+        "queue": {
+          "server": "s",
+          "viewer": "v",
+          "entries": [
+            {
+              "id": "a",
+              "media": "m-y"
+            },
+            {
+              "id": "b",
+              "media": "m-z"
+            },
+            {
+              "id": "c",
+              "media": "m-y"
+            }
+          ],
+          "current": "b",
+          "repeat": "off",
+          "paused": false,
+          "order": [
+            "a",
+            "b",
+            "c"
+          ]
+        },
+        "local": [
+          "m-y"
+        ],
+        "title": "Song Z"
+      },
+      "expected": {
+        "step": "skip",
+        "message": "Skipped Song Z: it isn't downloaded, and the server can't be reached."
+      }
+    },
+    {
+      "id": "music-offline.blank-title-reads-this-track",
+      "operation": "unreachable",
+      "input": {
+        "queue": {
+          "server": "s",
+          "viewer": "v",
+          "entries": [
+            {
+              "id": "a",
+              "media": "m-a"
+            },
+            {
+              "id": "b",
+              "media": "m-b"
+            }
+          ],
+          "current": "a",
+          "repeat": "off",
+          "paused": false,
+          "order": [
+            "a",
+            "b"
+          ]
+        },
+        "local": [
+          "m-b"
+        ],
+        "title": ""
+      },
+      "expected": {
+        "step": "skip",
+        "message": "Skipped This track: it isn't downloaded, and the server can't be reached."
+      }
+    },
+    {
+      "id": "music-offline.album-removal-keeps-a-track-a-playlist-holds",
+      "operation": "collection",
+      "input": {
+        "manifest": {
+          "entries": [
+            {
+              "id": "t1:original",
+              "itemId": "t1",
+              "kind": "audio",
+              "preset": "original",
+              "labels": {
+                "title": "t1"
+              },
+              "resources": [
+                {
+                  "id": "media",
+                  "role": "media",
+                  "path": "media.flac",
+                  "bytes": 100,
+                  "sha256": "h",
+                  "complete": true
+                }
+              ],
+              "job": {
+                "phase": "ready"
+              }
+            },
+            {
+              "id": "t2:original",
+              "itemId": "t2",
+              "kind": "audio",
+              "preset": "original",
+              "labels": {
+                "title": "t2"
+              },
+              "resources": [
+                {
+                  "id": "media",
+                  "role": "media",
+                  "path": "media.flac",
+                  "bytes": 200,
+                  "sha256": "h",
+                  "complete": true
+                }
+              ],
+              "job": {
+                "phase": "ready"
+              }
+            },
+            {
+              "id": "t3:original",
+              "itemId": "t3",
+              "kind": "audio",
+              "preset": "original",
+              "labels": {
+                "title": "t3"
+              },
+              "resources": [
+                {
+                  "id": "media",
+                  "role": "media",
+                  "path": "media.flac",
+                  "bytes": 300,
+                  "sha256": "h",
+                  "complete": true
+                }
+              ],
+              "job": {
+                "phase": "ready"
+              }
+            },
+            {
+              "id": "t4:original",
+              "itemId": "t4",
+              "kind": "audio",
+              "preset": "original",
+              "labels": {
+                "title": "t4"
+              },
+              "resources": [
+                {
+                  "id": "media",
+                  "role": "media",
+                  "path": "media.flac",
+                  "bytes": 400,
+                  "sha256": "h",
+                  "complete": true
+                }
+              ],
+              "job": {
+                "phase": "ready"
+              }
+            }
+          ],
+          "collections": [
+            {
+              "id": "album",
+              "kind": "album",
+              "title": "album",
+              "itemIds": [
+                "t1",
+                "t2",
+                "t3"
+              ],
+              "createdSequence": 1
+            },
+            {
+              "id": "list",
+              "kind": "playlist",
+              "title": "list",
+              "itemIds": [
+                "t2",
+                "t4",
+                "t2"
+              ],
+              "createdSequence": 2
+            }
+          ]
+        },
+        "collection": "album",
+        "item": "t2"
+      },
+      "expected": {
+        "removal": [
+          "t1:original",
+          "t3:original"
+        ],
+        "progress": {
+          "tracks": 3,
+          "ready": 3,
+          "transferring": 0,
+          "waiting": 0,
+          "paused": 0,
+          "failed": 0,
+          "absent": 0,
+          "readyBytes": 600,
+          "phase": "ready"
+        },
+        "playOrder": [
+          "t1",
+          "t2",
+          "t3"
+        ],
+        "collectionFor": "list",
+        "prunedCollections": [
+          "album",
+          "list"
+        ]
+      }
+    },
+    {
+      "id": "music-offline.playlist-plays-its-snapshot-order-with-duplicates",
+      "operation": "collection",
+      "input": {
+        "manifest": {
+          "entries": [
+            {
+              "id": "t1:original",
+              "itemId": "t1",
+              "kind": "audio",
+              "preset": "original",
+              "labels": {
+                "title": "t1"
+              },
+              "resources": [
+                {
+                  "id": "media",
+                  "role": "media",
+                  "path": "media.flac",
+                  "bytes": 100,
+                  "sha256": "h",
+                  "complete": true
+                }
+              ],
+              "job": {
+                "phase": "ready"
+              }
+            },
+            {
+              "id": "t2:original",
+              "itemId": "t2",
+              "kind": "audio",
+              "preset": "original",
+              "labels": {
+                "title": "t2"
+              },
+              "resources": [
+                {
+                  "id": "media",
+                  "role": "media",
+                  "path": "media.flac",
+                  "bytes": 200,
+                  "sha256": "h",
+                  "complete": true
+                }
+              ],
+              "job": {
+                "phase": "ready"
+              }
+            },
+            {
+              "id": "t3:original",
+              "itemId": "t3",
+              "kind": "audio",
+              "preset": "original",
+              "labels": {
+                "title": "t3"
+              },
+              "resources": [
+                {
+                  "id": "media",
+                  "role": "media",
+                  "path": "media.flac",
+                  "bytes": 300,
+                  "sha256": "h",
+                  "complete": true
+                }
+              ],
+              "job": {
+                "phase": "ready"
+              }
+            },
+            {
+              "id": "t4:original",
+              "itemId": "t4",
+              "kind": "audio",
+              "preset": "original",
+              "labels": {
+                "title": "t4"
+              },
+              "resources": [
+                {
+                  "id": "media",
+                  "role": "media",
+                  "path": "media.flac",
+                  "bytes": 400,
+                  "sha256": "h",
+                  "complete": true
+                }
+              ],
+              "job": {
+                "phase": "ready"
+              }
+            }
+          ],
+          "collections": [
+            {
+              "id": "album",
+              "kind": "album",
+              "title": "album",
+              "itemIds": [
+                "t1",
+                "t2",
+                "t3"
+              ],
+              "createdSequence": 1
+            },
+            {
+              "id": "list",
+              "kind": "playlist",
+              "title": "list",
+              "itemIds": [
+                "t2",
+                "t4",
+                "t2"
+              ],
+              "createdSequence": 2
+            }
+          ]
+        },
+        "collection": "list",
+        "item": "t1"
+      },
+      "expected": {
+        "removal": [
+          "t4:original"
+        ],
+        "progress": {
+          "tracks": 2,
+          "ready": 2,
+          "transferring": 0,
+          "waiting": 0,
+          "paused": 0,
+          "failed": 0,
+          "absent": 0,
+          "readyBytes": 600,
+          "phase": "ready"
+        },
+        "playOrder": [
+          "t2",
+          "t4",
+          "t2"
+        ],
+        "collectionFor": "album",
+        "prunedCollections": [
+          "album",
+          "list"
+        ]
+      }
+    },
+    {
+      "id": "music-offline.partial-download-plays-only-ready-tracks-in-order",
+      "operation": "collection",
+      "input": {
+        "manifest": {
+          "entries": [
+            {
+              "id": "t1:original",
+              "itemId": "t1",
+              "kind": "audio",
+              "preset": "original",
+              "labels": {
+                "title": "t1"
+              },
+              "resources": [
+                {
+                  "id": "media",
+                  "role": "media",
+                  "path": "media.flac",
+                  "bytes": null,
+                  "sha256": null,
+                  "complete": false
+                }
+              ],
+              "job": {
+                "phase": "transferring"
+              }
+            },
+            {
+              "id": "t2:original",
+              "itemId": "t2",
+              "kind": "audio",
+              "preset": "original",
+              "labels": {
+                "title": "t2"
+              },
+              "resources": [
+                {
+                  "id": "media",
+                  "role": "media",
+                  "path": "media.flac",
+                  "bytes": 50,
+                  "sha256": "h",
+                  "complete": true
+                }
+              ],
+              "job": {
+                "phase": "ready"
+              }
+            },
+            {
+              "id": "t3:original",
+              "itemId": "t3",
+              "kind": "audio",
+              "preset": "original",
+              "labels": {
+                "title": "t3"
+              },
+              "resources": [
+                {
+                  "id": "media",
+                  "role": "media",
+                  "path": "media.flac",
+                  "bytes": null,
+                  "sha256": null,
+                  "complete": false
+                }
+              ],
+              "job": {
+                "phase": "failed"
+              }
+            }
+          ],
+          "collections": [
+            {
+              "id": "album",
+              "kind": "album",
+              "title": "album",
+              "itemIds": [
+                "t1",
+                "t2",
+                "t3"
+              ],
+              "createdSequence": 0
+            }
+          ]
+        },
+        "collection": "album",
+        "item": "t9"
+      },
+      "expected": {
+        "removal": [
+          "t1:original",
+          "t2:original",
+          "t3:original"
+        ],
+        "progress": {
+          "tracks": 3,
+          "ready": 1,
+          "transferring": 1,
+          "waiting": 0,
+          "paused": 0,
+          "failed": 1,
+          "absent": 0,
+          "readyBytes": 50,
+          "phase": "downloading"
+        },
+        "playOrder": [
+          "t2"
+        ],
+        "collectionFor": null,
+        "prunedCollections": [
+          "album"
+        ]
+      }
+    },
+    {
+      "id": "music-offline.a-track-removed-on-its-own-leaves-the-rest-ready",
+      "operation": "collection",
+      "input": {
+        "manifest": {
+          "entries": [
+            {
+              "id": "t1:original",
+              "itemId": "t1",
+              "kind": "audio",
+              "preset": "original",
+              "labels": {
+                "title": "t1"
+              },
+              "resources": [
+                {
+                  "id": "media",
+                  "role": "media",
+                  "path": "media.flac",
+                  "bytes": 10,
+                  "sha256": "h",
+                  "complete": true
+                }
+              ],
+              "job": {
+                "phase": "ready"
+              }
+            }
+          ],
+          "collections": [
+            {
+              "id": "album",
+              "kind": "album",
+              "title": "album",
+              "itemIds": [
+                "t1",
+                "t2"
+              ],
+              "createdSequence": 0
+            }
+          ]
+        },
+        "collection": "album",
+        "item": "t1"
+      },
+      "expected": {
+        "removal": [
+          "t1:original"
+        ],
+        "progress": {
+          "tracks": 2,
+          "ready": 1,
+          "transferring": 0,
+          "waiting": 0,
+          "paused": 0,
+          "failed": 0,
+          "absent": 1,
+          "readyBytes": 10,
+          "phase": "ready"
+        },
+        "playOrder": [
+          "t1"
+        ],
+        "collectionFor": "album",
+        "prunedCollections": [
+          "album"
+        ]
+      }
+    },
+    {
+      "id": "music-offline.waiting-and-paused-come-before-failed",
+      "operation": "collection",
+      "input": {
+        "manifest": {
+          "entries": [
+            {
+              "id": "t1:original",
+              "itemId": "t1",
+              "kind": "audio",
+              "preset": "original",
+              "labels": {
+                "title": "t1"
+              },
+              "resources": [
+                {
+                  "id": "media",
+                  "role": "media",
+                  "path": "media.flac",
+                  "bytes": null,
+                  "sha256": null,
+                  "complete": false
+                }
+              ],
+              "job": {
+                "phase": "waitingStorage"
+              }
+            },
+            {
+              "id": "t2:original",
+              "itemId": "t2",
+              "kind": "audio",
+              "preset": "original",
+              "labels": {
+                "title": "t2"
+              },
+              "resources": [
+                {
+                  "id": "media",
+                  "role": "media",
+                  "path": "media.flac",
+                  "bytes": null,
+                  "sha256": null,
+                  "complete": false
+                }
+              ],
+              "job": {
+                "phase": "paused"
+              }
+            },
+            {
+              "id": "t3:original",
+              "itemId": "t3",
+              "kind": "audio",
+              "preset": "original",
+              "labels": {
+                "title": "t3"
+              },
+              "resources": [
+                {
+                  "id": "media",
+                  "role": "media",
+                  "path": "media.flac",
+                  "bytes": null,
+                  "sha256": null,
+                  "complete": false
+                }
+              ],
+              "job": {
+                "phase": "failed"
+              }
+            }
+          ],
+          "collections": [
+            {
+              "id": "album",
+              "kind": "album",
+              "title": "album",
+              "itemIds": [
+                "t1",
+                "t2",
+                "t3"
+              ],
+              "createdSequence": 0
+            }
+          ]
+        },
+        "collection": "album",
+        "item": "t1"
+      },
+      "expected": {
+        "removal": [
+          "t1:original",
+          "t2:original",
+          "t3:original"
+        ],
+        "progress": {
+          "tracks": 3,
+          "ready": 0,
+          "transferring": 0,
+          "waiting": 1,
+          "paused": 1,
+          "failed": 1,
+          "absent": 0,
+          "readyBytes": 0,
+          "phase": "waiting"
+        },
+        "playOrder": [],
+        "collectionFor": "album",
+        "prunedCollections": [
+          "album"
+        ]
+      }
+    },
+    {
+      "id": "music-offline.deleting-entries-count-as-gone",
+      "operation": "collection",
+      "input": {
+        "manifest": {
+          "entries": [
+            {
+              "id": "t1:original",
+              "itemId": "t1",
+              "kind": "audio",
+              "preset": "original",
+              "labels": {
+                "title": "t1"
+              },
+              "resources": [
+                {
+                  "id": "media",
+                  "role": "media",
+                  "path": "media.flac",
+                  "bytes": null,
+                  "sha256": null,
+                  "complete": false
+                }
+              ],
+              "job": {
+                "phase": "deleting"
+              }
+            },
+            {
+              "id": "t2:original",
+              "itemId": "t2",
+              "kind": "audio",
+              "preset": "original",
+              "labels": {
+                "title": "t2"
+              },
+              "resources": [
+                {
+                  "id": "media",
+                  "role": "media",
+                  "path": "media.flac",
+                  "bytes": null,
+                  "sha256": null,
+                  "complete": false
+                }
+              ],
+              "job": {
+                "phase": "deleting"
+              }
+            }
+          ],
+          "collections": [
+            {
+              "id": "album",
+              "kind": "album",
+              "title": "album",
+              "itemIds": [
+                "t1",
+                "t2"
+              ],
+              "createdSequence": 0
+            },
+            {
+              "id": "other",
+              "kind": "album",
+              "title": "other",
+              "itemIds": [
+                "t3"
+              ],
+              "createdSequence": 0
+            }
+          ]
+        },
+        "collection": "album",
+        "item": "t3"
+      },
+      "expected": {
+        "removal": [],
+        "progress": null,
+        "playOrder": [],
+        "collectionFor": "other",
+        "prunedCollections": []
+      }
+    },
+    {
+      "id": "music-offline.unknown-collection-is-nothing",
+      "operation": "collection",
+      "input": {
+        "manifest": {
+          "entries": [
+            {
+              "id": "t1:original",
+              "itemId": "t1",
+              "kind": "audio",
+              "preset": "original",
+              "labels": {
+                "title": "t1"
+              },
+              "resources": [
+                {
+                  "id": "media",
+                  "role": "media",
+                  "path": "media.flac",
+                  "bytes": 100,
+                  "sha256": "h",
+                  "complete": true
+                }
+              ],
+              "job": {
+                "phase": "ready"
+              }
+            },
+            {
+              "id": "t2:original",
+              "itemId": "t2",
+              "kind": "audio",
+              "preset": "original",
+              "labels": {
+                "title": "t2"
+              },
+              "resources": [
+                {
+                  "id": "media",
+                  "role": "media",
+                  "path": "media.flac",
+                  "bytes": 200,
+                  "sha256": "h",
+                  "complete": true
+                }
+              ],
+              "job": {
+                "phase": "ready"
+              }
+            },
+            {
+              "id": "t3:original",
+              "itemId": "t3",
+              "kind": "audio",
+              "preset": "original",
+              "labels": {
+                "title": "t3"
+              },
+              "resources": [
+                {
+                  "id": "media",
+                  "role": "media",
+                  "path": "media.flac",
+                  "bytes": 300,
+                  "sha256": "h",
+                  "complete": true
+                }
+              ],
+              "job": {
+                "phase": "ready"
+              }
+            },
+            {
+              "id": "t4:original",
+              "itemId": "t4",
+              "kind": "audio",
+              "preset": "original",
+              "labels": {
+                "title": "t4"
+              },
+              "resources": [
+                {
+                  "id": "media",
+                  "role": "media",
+                  "path": "media.flac",
+                  "bytes": 400,
+                  "sha256": "h",
+                  "complete": true
+                }
+              ],
+              "job": {
+                "phase": "ready"
+              }
+            }
+          ],
+          "collections": [
+            {
+              "id": "album",
+              "kind": "album",
+              "title": "album",
+              "itemIds": [
+                "t1",
+                "t2",
+                "t3"
+              ],
+              "createdSequence": 1
+            },
+            {
+              "id": "list",
+              "kind": "playlist",
+              "title": "list",
+              "itemIds": [
+                "t2",
+                "t4",
+                "t2"
+              ],
+              "createdSequence": 2
+            }
+          ]
+        },
+        "collection": "nope",
+        "item": "t4"
+      },
+      "expected": {
+        "removal": [],
+        "progress": null,
+        "playOrder": [],
+        "collectionFor": "list",
+        "prunedCollections": [
+          "album",
+          "list"
+        ]
+      }
+    },
+    {
+      "id": "music-offline.no-limit-yet-refuses-nothing",
+      "operation": "budget",
+      "input": {
+        "budget": {
+          "usedBytes": 5
+        },
+        "bytes": 1000000000000
+      },
+      "expected": {
+        "refusal": null,
+        "room": null
+      }
+    },
+    {
+      "id": "music-offline.exactly-fits",
+      "operation": "budget",
+      "input": {
+        "budget": {
+          "capBytes": 1000,
+          "usedBytes": 400,
+          "reservations": {
+            "x": 100
+          }
+        },
+        "bytes": 500
+      },
+      "expected": {
+        "refusal": null,
+        "room": 500
+      }
+    },
+    {
+      "id": "music-offline.one-byte-over-counts-reservations",
+      "operation": "budget",
+      "input": {
+        "budget": {
+          "capBytes": 1000,
+          "usedBytes": 400,
+          "reservations": {
+            "x": 100
+          }
+        },
+        "bytes": 501
+      },
+      "expected": {
+        "refusal": "cap",
+        "room": 500
+      }
+    },
+    {
+      "id": "music-offline.over-the-limit-already-has-no-room",
+      "operation": "budget",
+      "input": {
+        "budget": {
+          "capBytes": 1000,
+          "usedBytes": 1200
+        },
+        "bytes": 1
+      },
+      "expected": {
+        "refusal": "cap",
+        "room": 0
+      }
+    }
+  ]
+}

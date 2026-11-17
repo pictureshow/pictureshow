@@ -20,7 +20,7 @@ const val OFFLINE_PART_SUFFIX = ".part"
 @Serializable
 enum class OfflinePreset { original, video720, video1080, audio128, audio256 }
 
-/** audio arrives with music; no music UI here. */
+/** audio is a music track, downloaded on its own or as part of a collection. */
 @Suppress("ktlint:standard:enum-entry-name-case", "EnumEntryName")
 @Serializable
 enum class OfflineMediaKind { movie, episode, audio }
@@ -102,7 +102,9 @@ data class OfflineManifest(
     val budget: OfflineBudget = OfflineBudget(),
     val wifiOnly: Boolean = true,
     val autoCleanWatched: Boolean = false,
-    val pendingByteCleanup: List<String> = emptyList()
+    val pendingByteCleanup: List<String> = emptyList(),
+    /** Albums and playlists downloaded whole (MUS-10); their tracks are ordinary entries. Older manifests have none. */
+    val collections: List<OfflineCollection> = emptyList()
 )
 
 data class OfflineManifestResult(

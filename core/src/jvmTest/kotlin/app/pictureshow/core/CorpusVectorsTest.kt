@@ -55,6 +55,7 @@ class CorpusVectorsTest {
                     "cast-session",
                     "cast-queue",
                     "music-catalog",
+                    "music-offline",
                     "music-playlists",
                     "music-quality",
                     "music-queue",

@@ -66,7 +66,8 @@ tasks.named<ProcessResources>("jvmTestProcessResources") {
             "music-session.json",
             "music-reports.json",
             "music-quality.json",
-            "music-playlists.json"
+            "music-playlists.json",
+            "music-offline.json"
         )
     val remoteSuites = listOf(
         "remote-targets.json",

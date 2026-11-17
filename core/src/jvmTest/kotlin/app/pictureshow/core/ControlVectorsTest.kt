@@ -84,7 +84,9 @@ class ControlVectorsTest {
             "music-session",
             "music-reports",
             "music-quality",
-            "music-playlists"
+            "music-playlists",
+            // Run by MusicOfflineVectorsTest.
+            "music-offline"
         )
 
     @Test fun sessionOwner() = run("session-owner")

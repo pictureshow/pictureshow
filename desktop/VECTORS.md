@@ -16,6 +16,7 @@ Snapshot 2026-11-13 after merging main `81f73948`: all 45 shared JSON contracts 
 | `compatibility.json` | 53 | `ReferenceParityVectorsTest` |
 | `grid-navigation.json` | 40 | `GridNavigationVectorsTest` |
 | `music-catalog.json` | 30 | `MusicVectorsTest` |
+| `music-offline.json` | 20 | `MusicOfflineVectorsTest` |
 | `music-playlists.json` | 14 | `MusicVectorsTest` |
 | `music-quality.json` | 20 | `MusicVectorsTest` |
 | `music-queue.json` | 26 | `MusicVectorsTest` |

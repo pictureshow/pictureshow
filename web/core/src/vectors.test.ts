@@ -87,6 +87,8 @@ const pendingPortSuites = new Set([
     "music-reports",
     "music-quality",
     "music-playlists",
+    // MUS-10 offline music (Android leg 169): web has no in-app offline library at launch (OFF-PD04).
+    "music-offline",
     "remote-targets",
     "remote-wire",
     "remote-receive",
