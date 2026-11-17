@@ -40,6 +40,9 @@ internal fun deviceDisplayName(context: android.content.Context): String =
         .getOrNull()?.takeIf(String::isNotBlank) ?: Build.MODEL
 
 class PictureshowApplication : Application() {
+    /** AUTH-18's away clock, which the touch player also tells about picture-in-picture. */
+    internal var relockObserver: ProfileRelockObserver? = null
+        private set
     internal val supporter by lazy {
         SupporterController(
             PlaySupporterBilling(this),
@@ -275,9 +278,8 @@ class PictureshowApplication : Application() {
         // nothing of ours is on screen, so the in-app screensaver and picture-in-picture never count as away.
         // A relock also ends what kept going while away: music and its controls, being a remote target, and following a
         // Watch-together group. The open video goes with the screens the lock replaces.
-        androidx.lifecycle.ProcessLifecycleOwner.get().lifecycle.addObserver(
-            ProfileRelockObserver(lock, onRelock = { profileRelocked(lock, koin.get(), koin.get(), koin.get()) })
-        )
+        relockObserver = ProfileRelockObserver(lock, onRelock = { profileRelocked(lock, koin.get(), koin.get(), koin.get()) })
+        androidx.lifecycle.ProcessLifecycleOwner.get().lifecycle.addObserver(requireNotNull(relockObserver))
         val remoteTarget = koin.get<RemoteTargetHost>()
         CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate).launch {
             kotlinx.coroutines.flow.combine(lock.unlocked, lock.locks) { _, _ -> }.collect { remoteTarget.lockChanged() }
