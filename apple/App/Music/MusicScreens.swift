@@ -90,6 +90,11 @@ struct MusicLibraryView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: platformValue(tv: 36, touch: 16)) {
+                #if os(tvOS)
+                // tvOS pins a navigation title over scrolled content, so on TV the page carries its own title,
+                // as the video library grid does.
+                Text(route.name).font(.title2.weight(.bold)).accessibilityAddTraits(.isHeader)
+                #endif
                 sectionPicker
                 Button { Task { await shuffleAll() } } label: { Label("Shuffle all", systemImage: "shuffle") }
                     .primaryAction().disabled(shuffling)
@@ -99,7 +104,9 @@ struct MusicLibraryView: View {
             .padding(Theme.gutter)
         }
         .pageBackground()
+        #if os(iOS)
         .navigationTitle(route.name)
+        #endif
         .task(id: sectionName) { list.reset(); await list.loadMore(app: app, request) }
     }
 
@@ -297,7 +304,7 @@ struct MusicTrackRow: View {
                 MusicArtwork(url: app.account.flatMap { item.track.imageURL(server: $0.server.url, width: 160) })
                     .frame(width: platformValue(tv: 80, touch: 44))
             } else {
-                Text(number.map(String.init) ?? "").font(.callout.monospacedDigit()).foregroundStyle(Theme.muted)
+                Text(number.map(String.init) ?? "").font(.callout.monospacedDigit()).foregroundStyle(.secondary)
                     .frame(width: platformValue(tv: 48, touch: 28), alignment: .trailing)
             }
             VStack(alignment: .leading, spacing: 2) {
@@ -307,7 +314,7 @@ struct MusicTrackRow: View {
             }
             Spacer(minLength: 8)
             NowPlayingMark(music: app.music, id: item.id)
-            if let length = item.runTimeTicks.map({ Format.clock(Double($0) / 10_000_000) }) { Text(length).font(.caption.monospacedDigit()).foregroundStyle(Theme.muted) }
+            if let length = item.runTimeTicks.map({ Format.clock(Double($0) / 10_000_000) }) { Text(length).font(.caption.monospacedDigit()).foregroundStyle(.secondary) }
         }
         .padding(.vertical, platformValue(tv: 14, touch: 8))
         .frame(minHeight: platformValue(tv: 0, touch: 44))
@@ -333,14 +340,18 @@ struct MusicTrackRow: View {
 struct MusicRowStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View { MusicRowBody(configuration: configuration) }
 }
-private struct MusicRowBody: View {
+struct MusicRowBody: View {
+    static let focusedSecondary = Color.black.opacity(0.68)
     let configuration: ButtonStyleConfiguration
     @Environment(\.isFocused) private var focused
     @Environment(\.isEnabled) private var enabled
     var body: some View {
         configuration.label
             .padding(.horizontal, platformValue(tv: 20, touch: 4))
-            .foregroundStyle(focused ? Color.black : .primary)
+            // Two levels, so a row's `.secondary` line follows the row: on a focused (white) row it is black at
+            // 0.68, about 6:1 on white, where the system secondary label would be pale grey on white.
+            .foregroundStyle(focused ? AnyShapeStyle(Color.black) : AnyShapeStyle(.primary),
+                             focused ? AnyShapeStyle(Self.focusedSecondary) : AnyShapeStyle(Theme.muted))
             .opacity(enabled ? 1 : 0.55)
             .background(RoundedRectangle(cornerRadius: Theme.corner).fill(focused ? Color.white : (configuration.isPressed ? Theme.surface : .clear)))
             .scaleEffect(focused ? 1.02 : 1)
@@ -523,8 +534,8 @@ struct MusicDetailView: View {
             .padding(Theme.gutter)
         }
         .pageBackground()
-        .navigationTitle(model.header?.name ?? model.route.name)
         #if os(iOS)
+        .navigationTitle(model.header?.name ?? model.route.name)
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .task { await model.load(app: app) }
@@ -742,10 +753,12 @@ struct PlaylistPicker: View {
 /// The speaker beside the song that is playing, kept current by the host itself.
 private struct NowPlayingMark: View {
     @ObservedObject var music: MusicHost
+    @Environment(\.isFocused) private var focused
     let id: String
     var body: some View {
         if music.currentCard?.id == id {
-            Image(systemName: "speaker.wave.2.fill").foregroundStyle(Theme.accent).accessibilityLabel("Now playing")
+            // The accent is pale on a focused (white) row, so there the mark takes the row's black.
+            Image(systemName: "speaker.wave.2.fill").foregroundStyle(focused ? AnyShapeStyle(Color.black) : AnyShapeStyle(Theme.accent)).accessibilityLabel("Now playing")
         }
     }
 }

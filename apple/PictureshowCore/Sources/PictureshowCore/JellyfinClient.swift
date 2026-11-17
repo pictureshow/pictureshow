@@ -267,8 +267,18 @@ public final class JellyfinClient: @unchecked Sendable {
         let term = String(query.trimmingCharacters(in: .whitespacesAndNewlines).prefix(200)).trimmingCharacters(in: .whitespacesAndNewlines)
         guard term.count >= 2 else { return try decoder.decode(ItemPage.self, from: Data("{}".utf8)) }
         var parameters = [URLQueryItem(name: "searchTerm", value: term), URLQueryItem(name: "limit", value: "24")]
-        if kind != .people { parameters += [URLQueryItem(name: "recursive", value: "true"), URLQueryItem(name: "includeItemTypes", value: kind.rawValue), URLQueryItem(name: "enableTotalRecordCount", value: "true"), URLQueryItem(name: "fields", value: "PrimaryImageAspectRatio,ProductionYear,Overview,Genres,ChildCount,RecursiveItemCount")] }
-        return try decoder.decode(ItemPage.self, from: await request(account: account, path: kind == .people ? "Persons" : "Items", query: parameters))
+        let cardFields = "PrimaryImageAspectRatio,ProductionYear,Overview,Genres,ChildCount,RecursiveItemCount"
+        switch kind {
+        case .people: break
+        // Artists aren't library items: /Items searches them badly, and /Artists is where the music tabs read them.
+        case .artists: parameters += [URLQueryItem(name: "enableTotalRecordCount", value: "true"), URLQueryItem(name: "fields", value: cardFields)]
+        default:
+            parameters += [URLQueryItem(name: "recursive", value: "true"), URLQueryItem(name: "includeItemTypes", value: kind.rawValue), URLQueryItem(name: "enableTotalRecordCount", value: "true"), URLQueryItem(name: "fields", value: kind == .songs ? cardFields + ",SortName,ParentId" : cardFields)]
+            // Only music playlists: a video playlist isn't a music result.
+            if kind == .playlists { parameters.append(URLQueryItem(name: "mediaTypes", value: "Audio")) }
+        }
+        let path = switch kind { case .people: "Persons"; case .artists: "Artists"; default: "Items" }
+        return try decoder.decode(ItemPage.self, from: await request(account: account, path: path, query: parameters))
     }
     public func personItems(account: Account, personID: String, startIndex: Int = 0, limit: Int = 60) async throws -> ItemPage {
         try decoder.decode(ItemPage.self, from: await request(account: account, path: "Items", query: [URLQueryItem(name: "personIds", value: personID), URLQueryItem(name: "recursive", value: "true"), URLQueryItem(name: "includeItemTypes", value: "Movie,Series"), URLQueryItem(name: "sortBy", value: "ProductionYear,SortName"), URLQueryItem(name: "sortOrder", value: "Descending"), URLQueryItem(name: "startIndex", value: String(max(0,startIndex))), URLQueryItem(name: "limit", value: String(min(200,max(1,limit)))), URLQueryItem(name: "enableTotalRecordCount", value: "true"), URLQueryItem(name: "fields", value: "PrimaryImageAspectRatio,ProductionYear,Overview,Genres,ChildCount,RecursiveItemCount")]))

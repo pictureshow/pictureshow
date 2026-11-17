@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) Legitimate LLC.
 import MediaPlayer
+import SwiftUI
 import XCTest
 import PictureshowCore
 #if os(tvOS)
@@ -351,5 +352,23 @@ final class MusicAppTests: XCTestCase {
         XCTAssertEqual(try item(#"{"Id":"p","Name":"Mix","Type":"Playlist","MediaType":"Audio"}"#).musicRoute?.kind, "Playlist")
         XCTAssertNil(try item(#"{"Id":"v","Name":"Films","Type":"Playlist","MediaType":"Video"}"#).musicRoute)
         XCTAssertNil(try item(#"{"Id":"m","Name":"Movie","Type":"Movie"}"#).musicRoute)
+    }
+
+    /// MUS-01: search shows music after every video group, and each music result opens a music screen.
+    func testSearchAddsMusicGroupsAfterTheVideoGroups() throws {
+        XCTAssertEqual(SearchKind.allCases, [.movies, .shows, .episodes, .collections, .people, .albums, .artists, .songs, .playlists])
+        XCTAssertEqual(SearchKind.allCases.filter(\.isMusic).map(\.title), ["Albums", "Artists", "Songs", "Playlists"])
+        func item(_ json: String) throws -> MediaItem { try JSONDecoder().decode(MediaItem.self, from: Data(json.utf8)) }
+        XCTAssertEqual(try item(#"{"Id":"r","Name":"Ensemble","Type":"MusicArtist"}"#).musicRoute?.kind, "MusicArtist")
+        XCTAssertEqual(try item(#"{"Id":"s","Name":"Signal","Type":"Audio"}"#).musicRoute?.kind, "Audio")
+    }
+
+    /// A focused (white) music row draws its second line dark enough to read: at least 4.5:1 on white.
+    func testAFocusedMusicRowKeepsItsSecondLineReadable() {
+        let opacity = 0.68 // MusicRowBody.focusedSecondary is black at this opacity over white.
+        let channel = 1 - opacity
+        let linear = channel <= 0.04045 ? channel / 12.92 : pow((channel + 0.055) / 1.055, 2.4)
+        XCTAssertGreaterThanOrEqual(1.05 / (linear + 0.05), 4.5)
+        XCTAssertEqual(MusicRowBody.focusedSecondary, Color.black.opacity(opacity))
     }
 }
