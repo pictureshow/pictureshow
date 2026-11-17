@@ -22,6 +22,7 @@ dependencies {
     implementation(libs.coroutines.core)
     testImplementation(libs.kotlin.test.junit)
     testImplementation(libs.coroutines.test)
+    testImplementation(libs.mockwebserver)
     testImplementation(compose.desktop.uiTestJUnit4)
     // Compose UI tests for the desktop pages (keys, focus and copy), on the same Skiko runtime as the app.
     @OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class)

@@ -55,6 +55,10 @@ class DesktopController(
     internal val viewerInput = DesktopViewerInput()
     internal val serverPreferences by lazy { DesktopServerPreferences(UserConfigurationClient(http, identity), scope) { mutable.value.account } }
     private val subtitleClient = app.pictureshow.core.subtitles.RemoteSubtitleClient(http, identity)
+    private val offlineApi = DesktopOfflineApi(identity)
+    /** OFF-01..12: downloads and offline viewing, under this computer's own data directory (OFF-10). */
+    internal val offline = DesktopOffline(DesktopOfflineEngine(directory, store, identity, { line -> events.log(line) }, api = offlineApi, scope = scope),
+        offlineApi, scope, state.map { it.account }, { mutable.value.account })
     private var pageJob: Job? = null
     private var discoveryJob: Job? = null
     internal val history = mutableListOf<DesktopState>()
@@ -110,7 +114,9 @@ class DesktopController(
         @Volatile var ended: Boolean = false, @Volatile var endPosition: Double = 0.0,
         /** The media itself failed (decoder/stream error). Only this is reported to the server as Failed. */
         @Volatile var playbackFailed: Boolean = false,
-        @Volatile var muted: Boolean = false
+        @Volatile var muted: Boolean = false,
+        /** A downloaded copy playing from this computer: progress goes to its outbox, never to a play session (OFF-05/07). */
+        val local: DesktopLocalPlay? = null
     )
     private fun takeCarriedReportError(): String? = carriedReportError.also { carriedReportError = null }
 
@@ -188,13 +194,18 @@ class DesktopController(
         val settings = settingsStore.read()
         snapshotAccounts()
         publish(g) { it.copy(settings = settings, server = s.lastServer) }
+        offline.start()
         val account = s.currentAccount
         if (account != null && !account.expired && account.accessToken.isNotBlank()) {
             when (val checked = client.me(account)) {
-                is ClientResult.Success -> { updateState { it.copy(account = account) }; loadHome(g) }
+                is ClientResult.Success -> { offline.serverReach(false); updateState { it.copy(account = account) }; loadHome(g) }
                 is ClientResult.Failure -> if (checked.error.kind == ErrorKind.INVALID_CREDENTIALS) {
                     store.expire(account.key, account.accessToken); snapshotAccounts()
                     publish(g) { it.copy(route = DesktopRoute.SignIn, server = account.server, signInUsername = account.user.name, error = "Your session ended. Sign in again.", errorKind = ErrorKind.EXPIRED) }
+                } else if (checked.error.kind in setOf(ErrorKind.NETWORK, ErrorKind.SERVER) && offline.readyFor(account)) {
+                    // Offline start: the server is out of reach and something saved can play (OFF-04, HOME_UNREACHABLE).
+                    offline.serverReach(true); events.log("offline start route=downloads kind=${checked.error.kind}")
+                    publish(g) { it.copy(route = DesktopRoute.Downloads, account = account, root = DESKTOP_ROOT_DOWNLOADS) }
                 } else publish(g) { it.copy(route = DesktopRoute.Home, account = account, error = checked.error.message, errorKind = checked.error.kind) }
             }
         } else publish(g) { it.copy(route = if (s.accounts.isNotEmpty()) DesktopRoute.Accounts else DesktopRoute.Servers) }
@@ -508,6 +519,31 @@ class DesktopController(
         }
     }
     fun settings() { if (!pins.gated()) page(DesktopRoute.Settings, remember = mutable.value.route != DesktopRoute.Settings) { _ -> } }
+    fun downloads() = page(DesktopRoute.Downloads, remember = mutable.value.route != DesktopRoute.Downloads) { _ -> }
+    /** Downloads' "Try the server again": the same check a launch makes, landing on Home when it answers. */
+    fun retryServer() = start()
+    /** Plays a ready download from Downloads, with or without the server (OFF-05). */
+    fun playDownload(entry: app.pictureshow.core.offline.OfflineEntry) {
+        if (mutable.value.busy || !pins.admits(mutable.value.account?.key) || pins.gated()) return
+        page(DesktopRoute.Player, remember = true) { g ->
+            finishViewing()
+            val a = mutable.value.account ?: return@page
+            playLocal(g, a, entry, fromStart = false, server = null)
+        }
+    }
+    private suspend fun playLocal(g: Long, a: Account, entry: app.pictureshow.core.offline.OfflineEntry, fromStart: Boolean, server: ItemUserData?) {
+        val local = offline.prepareLocal(a, entry, fromStart, server)
+        if (local == null) { publish(g) { it.copy(error = "This download is no longer on this computer. Download it again from its title.") }; return }
+        events.log("playback local item=${entry.itemId}")
+        prepareViewing(g, a, local.item, local.startSeconds, local = local)
+    }
+    /** A title's own Play uses its ready download unless the server is the only way (offlineDetailPlaySource). Returns true when it did. */
+    private suspend fun playLocalCopy(g: Long, a: Account, item: MediaItem, fromStart: Boolean): Boolean {
+        val entry = offline.state.value.readyFor(item.id) ?: return false
+        if (offline.detailSource(a, item.id) != app.pictureshow.core.offline.OfflineDetailSource.local) return false
+        playLocal(g, a, entry, fromStart, item.userData.takeIf { !offline.state.value.serverUnreachable })
+        return true
+    }
     fun saveSettings(settings: DesktopSettings) = page(DesktopRoute.Settings) { g -> settingsStore.write(settings); publish(g) { it.copy(settings = settings) }; engine?.volume(settings.volume) }
     @Synchronized fun back() {
         val s = mutable.value
@@ -606,6 +642,7 @@ class DesktopController(
         page(DesktopRoute.Player, remember = true) { g ->
             finishViewing()
             val a = mutable.value.account ?: return@page
+            if (playLocalCopy(g, a, item, fromStart)) return@page
             val fresh = attempt(g, a) { client.item(a, item.id) } ?: return@page
             val playable = if (fresh.type in setOf("Series", "Season")) {
                 val next = if (fresh.type == "Series") attempt(g, a) { client.nextUp(a, fresh.id) }?.items.orEmpty() else emptyList()
@@ -640,7 +677,7 @@ class DesktopController(
             prepareViewing(g, a, MediaItem(fresh.id, fresh.name, "TvChannel"), 0.0, liveChannel = fresh)
         }
     }
-    private suspend fun prepareViewing(g: Long, a: Account, item: MediaItem, start: Double, audio: Int? = null, subtitle: Int? = null, sourceId: String? = null, audioChosen: Boolean = audio != null, subtitleChosen: Boolean = subtitle != null, subtitleCodec: String? = null, liveChannel: LiveChannel? = null, carry: DesktopViewingCarry? = null) {
+    private suspend fun prepareViewing(g: Long, a: Account, item: MediaItem, start: Double, audio: Int? = null, subtitle: Int? = null, sourceId: String? = null, audioChosen: Boolean = audio != null, subtitleChosen: Boolean = subtitle != null, subtitleCodec: String? = null, liveChannel: LiveChannel? = null, carry: DesktopViewingCarry? = null, local: DesktopLocalPlay? = null) {
         music.beforeVideo() // MUS-04: a video start stops music, which resumes only by the viewer's Play.
         publish(g) { it.copy(detail = item, playback = null) }
         val player = try { playbackFactory(File(directory, "playback")) }
@@ -676,11 +713,12 @@ class DesktopController(
                 return answer
             } catch (e: Throwable) { discardPreparedPlayer(); throw e }
         }
-        var outcome = negotiate { playbackClient.prepareFor(a, item.id, profile, maxBitrate,
+        // A download needs no negotiation: its decision is the file on this computer (OFF-05).
+        var outcome = if (local != null) PlayOutcome.Play(local.decision) else negotiate { playbackClient.prepareFor(a, item.id, profile, maxBitrate,
             PlaybackRequest(startPosition = start.seconds, audioStreamIndex = audio, subtitleStreamIndex = subtitle, mediaSourceId = sourceId)) }
         var negotiatedAudio = audio
         var negotiatedSubtitle = subtitle
-        if (outcome is PlayOutcome.Play) {
+        if (outcome is PlayOutcome.Play && local == null) {
             val firstDecision = outcome.decision
             rejectedDecisions += firstDecision
             val firstStreams = firstDecision.mediaSource.mediaStreams
@@ -776,7 +814,7 @@ class DesktopController(
         val si = negotiatedSubtitle ?: StreamDefaults.choose(streams, MediaStreamType.Subtitle, decision.mediaSource.defaultSubtitleStreamIndex, java.util.Locale.getDefault().language)
         window?.let(player::attach)
         engine = player
-        val v = Viewing(a, item, decision, player, audioChosen = audioChosen, subtitleChosen = subtitleChosen)
+        val v = Viewing(a, item, decision, player, audioChosen = audioChosen, subtitleChosen = subtitleChosen, local = local)
         viewing = v
         val notice = if (mutable.value.settings.conversionNotice) ConversionNotice.of(decision, si, "this computer") else null
         publish(g) { it.copy(playback = DesktopPlaybackState(item, decision, notice, streams.filter { t -> t.type == MediaStreamType.Audio }, streams.filter { t -> t.type == MediaStreamType.Subtitle }, ai, si, positionSeconds = start, durationSeconds = (item.runTimeTicks ?: 0).toDouble() / 10_000_000, liveChannel = liveChannel,
@@ -827,7 +865,7 @@ class DesktopController(
                                 v.startAttempted = true
                                 val report = PlaybackReports(decision).progress(observed.positionSeconds.seconds, observed.paused,
                                     p.audioIndex.takeIf { v.audioChosen }, p.subtitleIndex.takeIf { v.subtitleChosen })
-                                when (val sent = playbackClient.reportStart(a, report)) {
+                                when (val sent = if (v.local != null) ClientResult.Success(Unit) else playbackClient.reportStart(a, report)) {
                                     is ClientResult.Failure -> { events.log("playback start item=${v.item.id} report=failed:${sent.error.kind}"); if (viewing === v) updateState { it.copy(error = sent.error.message) } }
                                     is ClientResult.Success -> { v.startReported = true; events.log("playback start item=${v.item.id} method=${decision.method} report=ok") }
                                 }
@@ -854,20 +892,22 @@ class DesktopController(
                 }
             }
         }
-        if (liveChannel == null && !decision.isLive) scope.launch {
+        if (liveChannel == null && !decision.isLive && local == null) scope.launch {
             val loaded = extrasLoader.load(a, item, decision.mediaSourceId)
             if (viewing === v) updateExtras { it.copy(chapters = loaded.chapters, trickplay = loaded.trickplay, segments = loaded.segments) }
         }
         if (catalogSession.queue.any { it.id == item.id }) {
             publish(g) { it.copy(playback = it.playback?.copy(nextEpisode = desktopQueueNext(catalogSession.queue, item))) }
         } else if (item.type == "Episode" && item.seriesId != null) {
-            val next = attempt(g, a) { extras.nextEpisode(a, item) }
+            // A local viewing never asks the server: the next downloaded episode, by the downloads' own order.
+            val next = if (local != null) offline.localNext(a, local, serverAnswered = false, serverNext = null) else attempt(g, a) { extras.nextEpisode(a, item) }
             publish(g) { it.copy(playback = it.playback?.copy(nextEpisode = next)) }
         }
     }
     private suspend fun sendProgress(v: Viewing) = v.reports.withLock {
         if (!v.startAttempted || v.stopped || v.closing || viewing !== v) return@withLock
         val p = mutable.value.playback ?: return@withLock
+        v.local?.let { local -> runCatching { v.engine.snapshot() }.getOrNull()?.let { offline.localProgress(local, it.positionSeconds) }; return@withLock }
         val observed = runCatching { v.engine.snapshot() }.getOrElse {
             updateState { state -> state.copy(error = "Progress could not be read from the player. Return to the title and try again.") }
             return@withLock
@@ -965,6 +1005,7 @@ class DesktopController(
             scope.launch { if (viewing === current) sendProgress(current) }
             return
         }
+        if (current.local != null) { updateState { it.copy(error = "That track could not be switched in this download.") }; return }
         val requestedSubtitleCodec = subtitle?.takeIf { it >= 0 }?.let { index -> p.subtitleTracks.firstOrNull { it.index == index }?.codec }
         page(DesktopRoute.Player) { g ->
             finishViewing()
@@ -1068,7 +1109,7 @@ class DesktopController(
     fun adoptDownloadedSubtitle(subtitleIndex: Int, audioIndex: Int) {
         val p = mutable.value.playback ?: return; val a = mutable.value.account ?: return
         val current = viewing ?: return
-        if (current.closing || current.stopped) return
+        if (current.closing || current.stopped || current.local != null) return
         page(DesktopRoute.Player) { g ->
             finishViewing()
             prepareViewing(g, a, p.item, p.positionSeconds, audioIndex.takeIf { it >= 0 } ?: p.audioIndex, subtitleIndex, p.decision.mediaSourceId,
@@ -1081,7 +1122,7 @@ class DesktopController(
         val next = p.end?.next ?: p.nextEpisode
         if (next == null) { stopPlayback(); return }
         val a = mutable.value.account ?: return
-        page(DesktopRoute.Player) { g -> finishViewing(); prepareViewing(g, a, next, 0.0) }
+        page(DesktopRoute.Player) { g -> finishViewing(); if (!playLocalCopy(g, a, next, true)) prepareViewing(g, a, next, 0.0) }
     }
     /** End card Cancel: the countdown stops and the card stays, offering Play now and Back to title. */
     fun cancelEndCountdown() {
@@ -1093,7 +1134,7 @@ class DesktopController(
     fun replay() {
         val item = mutable.value.playback?.item ?: return
         val a = mutable.value.account ?: return
-        page(DesktopRoute.Player) { g -> finishViewing(); prepareViewing(g, a, item, 0.0) }
+        page(DesktopRoute.Player) { g -> finishViewing(); if (!playLocalCopy(g, a, item, true)) prepareViewing(g, a, item, 0.0) }
     }
     fun stopPlayback() {
         if (mutable.value.playback?.let { it.liveChannel != null || it.decision.isLive } == true) {
@@ -1102,6 +1143,11 @@ class DesktopController(
                 finishViewing()
                 publish(g) { it.copy(playback = null, detail = null) }
             }
+            return
+        }
+        if (viewing?.local != null && synchronized(history) { history.lastOrNull()?.route == DesktopRoute.Downloads }) {
+            synchronized(history) { history.removeAt(history.lastIndex) }
+            page(DesktopRoute.Downloads) { g -> finishViewing(); publish(g) { it.copy(playback = null, root = DESKTOP_ROOT_DOWNLOADS) } }
             return
         }
         val playback = mutable.value.playback
@@ -1211,21 +1257,31 @@ class DesktopController(
                         val position = if (v.ended) maxOf(seen, v.endPosition) else seen
                         patchPlaybackData(v.item, position, v.ended)
                         val failed = v.playbackFailed && !v.ended
-                        runCatching {
+                        val local = v.local
+                        if (local != null) {
+                            // OFF-07: durable here first; settled with the server when it answers (OFF-08).
+                            offline.localProgress(local, position)
+                            if (v.ended) offline.localCompleted(local)
+                            offline.localEnded(local)
+                            events.log("playback stop item=${v.item.id} position=${position.toLong()} ended=${v.ended} local=outbox")
+                        } else runCatching {
                             playbackClient.reportStopped(v.account, PlaybackReports(v.decision).stopped(position.seconds, failed = failed))
                         }.onSuccess { stopped ->
                             if (stopped is ClientResult.Failure) {
                                 events.log("playback stop item=${v.item.id} position=${position.toLong()} failed=$failed ended=${v.ended} report=failed:${stopped.error.kind}")
                                 carriedReportError = "Playback ended, but progress could not be saved. ${stopped.error.message}"
                                 updateState { it.copy(error = carriedReportError) }
-                            } else events.log("playback stop item=${v.item.id} position=${position.toLong()} failed=$failed ended=${v.ended} report=ok")
+                            } else {
+                                events.log("playback stop item=${v.item.id} position=${position.toLong()} failed=$failed ended=${v.ended} report=ok")
+                                offline.onlineViewingEnded(v.account, v.item.id)
+                            }
                         }.onFailure { e ->
                             events.log("playback stop item=${v.item.id} report=failed:${e.javaClass.simpleName}")
                             carriedReportError = "Playback ended, but progress could not be saved. Check the connection."
                             updateState { it.copy(error = carriedReportError) }
                         }
                     }
-                    if (v.ended) completeWatched(v)
+                    if (v.ended && v.local == null) completeWatched(v)
                 }
             } finally {
                 // The encoder may already exist even if native startup or Start failed.
