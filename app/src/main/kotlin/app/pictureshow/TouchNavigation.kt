@@ -85,13 +85,35 @@ internal fun selectTouchTab(nav: NavHostController, tab: String) {
     // The tab already showing, from a screen opened inside it: its root. Saving and restoring that stack would land right back here.
     val root = if (tab == "search") "search?query={query}&keyboard={keyboard}" else tab
     if (tab != "home" && nav.popBackStack(root, inclusive = false)) return
+    val home = runCatching { nav.getBackStackEntry("home") }.getOrNull()
+    val inHome = touchPageOwner(nav.currentBackStackEntry) == "home"
+    // TOUCH-02a for Home too: its pages sit right above the Home root, and Navigation saves them under the first of
+    // them, so that page's route is what brings them back. Leaving from the root, or reselecting Home, forgets it.
+    val homePlace = home?.let { runCatching { it.savedStateHandle.get<String>(TOUCH_HOME_PLACE_KEY) }.getOrNull() }
+    if (inHome) {
+        val stack = nav.currentBackStack.value
+        val above = stack.getOrNull(stack.indexOfFirst { it.destination.route == "home" } + 1)
+        home?.savedStateHandle?.set(TOUCH_HOME_PLACE_KEY, if (tab == "home") null else above?.destination?.route)
+    }
     nav.navigate(destination) {
         popUpTo("home") { saveState = true }
         launchSingleTop = true
         // Home is the root. Restoring its saved stack can restore the startup Libraries
-        // destination above it, so an explicit Home selection must reveal the root itself.
+        // destination above it, so an explicit Home selection reveals the root, then Home's own place on top of it.
         restoreState = tab != "home"
     }
+    if (tab == "home" && !inHome && homePlace != null) {
+        home.savedStateHandle[TOUCH_HOME_PLACE_KEY] = null
+        nav.navigate(homePlace) { restoreState = true }
+    }
+}
+
+/** The first page opened above Home when the viewer left it; see [selectTouchTab]. */
+private const val TOUCH_HOME_PLACE_KEY = "touch.homePlace"
+
+/** The root a page belongs to: a root itself, else the one recorded when it opened (TOUCH-02). */
+private fun touchPageOwner(entry: NavBackStackEntry?): String? = entry?.let {
+    touchTabFor(it.destination.route) ?: runCatching { it.savedStateHandle.get<String>(TOUCH_OWNER_KEY) }.getOrNull()
 }
 
 /**

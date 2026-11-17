@@ -230,6 +230,123 @@ class TouchPhoneHomeTest {
         lit("Libraries")
     }
 
+    // TOUCH-02a: Search keeps its own place, whatever Home opened in between, and Back from it stays inside Search.
+    @Test fun theSearchTabReturnsToItsOwnPlaceAndNeverToAPageAnotherTabOpened() {
+        lateinit var open: (String) -> Unit
+        lateinit var back: () -> Unit
+        compose.setContent {
+            MaterialTheme {
+                val nav = rememberNavController()
+                val entry by nav.currentBackStackEntryAsState()
+                open = { nav.navigate(it) }
+                back = { nav.popBackStack() }
+                TouchShell(showNavigation = true, selected = rememberTouchLitTab(entry), onTab = { selectTouchTab(nav, it) }) {
+                    NavHost(navController = nav, startDestination = "home") {
+                        composable("home") { Text("Home page") }
+                        composable("libraries") { Text("Libraries page") }
+                        composable("settings") { Text("Settings page") }
+                        composable("search?query={query}&keyboard={keyboard}") { Text("Search page") }
+                        composable("item/{id}") { Column { Text("Item ${it.arguments?.getString("id")}") } }
+                    }
+                }
+            }
+        }
+        fun tab(label: String) = compose.onNode(hasText(label) and isSelectable()).performClick()
+        // A title opened from Home, then Search: the search page, not Home's title.
+        compose.runOnIdle { open("item/from-home") }
+        tab("Search")
+        compose.onNodeWithText("Search page").assertIsDisplayed()
+        // A result, then Home (its own title again) and another title there, then Search: the result, and Back reaches
+        // the search page.
+        compose.runOnIdle { open("item/result") }
+        tab("Home")
+        compose.onNodeWithText("Item from-home").assertIsDisplayed()
+        compose.runOnIdle { open("item/home-title") }
+        tab("Search")
+        compose.onNodeWithText("Item result").assertIsDisplayed()
+        compose.runOnIdle { back() }
+        compose.onNodeWithText("Search page").assertIsDisplayed()
+        // Search's root, then Home, a title there and Home again, then Search: the search page.
+        tab("Home")
+        compose.runOnIdle { open("item/second") }
+        tab("Home")
+        compose.onNodeWithText("Home page").assertIsDisplayed()
+        tab("Search")
+        compose.onNodeWithText("Search page").assertIsDisplayed()
+        // Reselecting Search from inside it reaches its root; Home then Search returns there, not to the result.
+        compose.runOnIdle { open("item/again") }
+        tab("Search")
+        compose.onNodeWithText("Search page").assertIsDisplayed()
+        tab("Home")
+        tab("Search")
+        compose.onNodeWithText("Search page").assertIsDisplayed()
+        compose.runOnIdle { back() }
+        compose.onNodeWithText("Home page").assertIsDisplayed()
+        // Home's own title closed by reselecting Home, a result, Libraries and its title, then Search: the result.
+        compose.runOnIdle { open("item/home-again") }
+        tab("Home")
+        tab("Search")
+        compose.runOnIdle { open("item/kept") }
+        tab("Libraries")
+        compose.runOnIdle { open("item/library-title") }
+        tab("Home")
+        compose.runOnIdle { open("item/home-third") }
+        tab("Search")
+        compose.onNodeWithText("Item kept").assertIsDisplayed()
+        compose.runOnIdle { back() }
+        compose.onNodeWithText("Search page").assertIsDisplayed()
+        tab("Libraries")
+        compose.onNodeWithText("Item library-title").assertIsDisplayed()
+    }
+
+    // TOUCH-02a: Home keeps its place like every other tab, and reselecting it, or leaving from its root, forgets it.
+    @Test fun theHomeTabReturnsToTheTitleItWasShowing() {
+        lateinit var open: (String) -> Unit
+        lateinit var back: () -> Unit
+        compose.setContent {
+            MaterialTheme {
+                val nav = rememberNavController()
+                val entry by nav.currentBackStackEntryAsState()
+                open = { nav.navigate(it) }
+                back = { nav.popBackStack() }
+                TouchShell(showNavigation = true, selected = rememberTouchLitTab(entry), onTab = { selectTouchTab(nav, it) }) {
+                    NavHost(navController = nav, startDestination = "home") {
+                        composable("home") { Text("Home page") }
+                        composable("libraries") { Text("Libraries page") }
+                        composable("settings") { Text("Settings page") }
+                        composable("search?query={query}&keyboard={keyboard}") { Text("Search page") }
+                        composable("item/{id}") { Column { Text("Item ${it.arguments?.getString("id")}") } }
+                    }
+                }
+            }
+        }
+        fun tab(label: String) = compose.onNode(hasText(label) and isSelectable()).performClick()
+        compose.runOnIdle { open("item/film") }
+        compose.runOnIdle { open("item/extra") }
+        tab("Libraries")
+        compose.onNodeWithText("Libraries page").assertIsDisplayed()
+        tab("Home")
+        compose.onNodeWithText("Item extra").assertIsDisplayed()
+        compose.onNode(hasText("Home") and isSelectable()).assertIsSelected()
+        compose.runOnIdle { back() }
+        compose.onNodeWithText("Item film").assertIsDisplayed()
+        // A result opened in Search in between still comes back with Search, and Home with Home.
+        tab("Search")
+        compose.runOnIdle { open("item/result") }
+        tab("Home")
+        compose.onNodeWithText("Item film").assertIsDisplayed()
+        tab("Search")
+        compose.onNodeWithText("Item result").assertIsDisplayed()
+        tab("Home")
+        compose.onNodeWithText("Item film").assertIsDisplayed()
+        // Reselecting Home reaches its root; Settings and back then shows the root, not the old title.
+        tab("Home")
+        compose.onNodeWithText("Home page").assertIsDisplayed()
+        tab("Settings")
+        tab("Home")
+        compose.onNodeWithText("Home page").assertIsDisplayed()
+    }
+
     @Test fun ownerIsTheRootItselfElseWhatWasStoredElseWhatWasLitBefore() {
         assertEquals("home" to false, touchOwner("home", "settings", "libraries"))
         assertEquals("settings" to false, touchOwner("license/3", null, "home"))
