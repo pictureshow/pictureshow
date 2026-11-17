@@ -103,7 +103,9 @@ been open 20 s whatever the buffer, without a first frame is stalled; time with 
 A stalled mpv viewing that passes audio through reopens once on mpv at its position with the audio decoded; a stalled
 viewing with decoded audio reopens at its position on the built-in player, which plays the rest of that viewing, and the
 player shows "MPV couldn't decode this video on this device; playing with the built-in player" for 8 s once it has a
-picture (never focusable; the player's engine choice then offers MPV again). The next viewing starts on mpv as usual.
+picture (never focusable; the player's engine choice then offers MPV again). The next viewing starts on mpv as usual,
+except that a passthrough format that stalled is decoded for the rest of the app's run (on the projector AC-3 passes
+through, E-AC-3 stalls).
 `playback-engine` vectors (operation `first-frame`, and `mpvFailed` on `engine`) freeze the rule.
 
 

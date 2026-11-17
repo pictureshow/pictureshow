@@ -691,9 +691,10 @@ internal class Media3PlaybackOutput(
             val delivery = app.pictureshow.core.playback.PlayDecisions.resolve(server, requireNotNull(stream.deliveryUrl))
             proxy.local(delivery)?.let { stream to it }
         }
-        // PLAY-61: after passthrough showed no picture, the rest of this viewing decodes its audio.
+        // PLAY-61: after passthrough showed no picture, the rest of this viewing decodes its audio, and later viewings
+        // decode the format that stalled.
         val spdif = if (passthroughEnabled && decodedAudioFor != decision.itemId) {
-            mpvPassthrough(context, disabledPassthrough)
+            mpvPassthrough(context, disabledPassthrough) - MpvPassthroughStalls.formats
         } else {
             emptyList()
         }
@@ -733,8 +734,10 @@ internal class Media3PlaybackOutput(
                     "engine-watchdog",
                     "action=$action hwdec=${next.hwdec} codec=${next.videoCodec} positionMs=${at.milliseconds}"
                 )
-                // Only this title's reopen decodes its audio: the next viewing tries passthrough again.
-                if (action == FirstFrameAction.WithoutPassthrough) decodedAudioFor = decision.itemId
+                if (action == FirstFrameAction.WithoutPassthrough) {
+                    decodedAudioFor = decision.itemId
+                    MpvPassthroughStalls.stalled(next.audioCodec)
+                }
                 onEngineStalled(action)
             }
         }
@@ -981,6 +984,32 @@ internal class PlaybackEndSignal(private val currentPlayer: () -> Player?, priva
         if (!canEnd()) return
         sent = true
         onEnd(reason)
+    }
+}
+
+/**
+ * PLAY-61: passthrough formats that left mpv without a picture in this app run, in mpv's `audio-spdif` names. On the
+ * household projector AC-3 passes through but E-AC-3 (a 192 kHz IEC 61937 stream) never starts (OBSERVED), so only the
+ * format that stalled is decoded from then on. Kept for the process: the receiver can change between runs.
+ */
+internal object MpvPassthroughStalls {
+    @Volatile var formats: Set<String> = emptySet()
+        private set
+
+    /** [codec] is mpv's name for the audio track that stalled; DTS covers DTS-HD, which mpv sends as the same codec. */
+    fun stalled(codec: String?) {
+        val added = when (codec?.lowercase()) {
+            "ac3" -> setOf("ac3")
+            "eac3" -> setOf("eac3")
+            "dts" -> setOf("dts", "dts-hd")
+            "truehd" -> setOf("truehd")
+            else -> emptySet()
+        }
+        formats = formats + added
+    }
+
+    fun clear() {
+        formats = emptySet()
     }
 }
 
