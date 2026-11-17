@@ -188,6 +188,17 @@ struct DownloadOptions {
         let sequence = outbox.values.map(\.sequence).max() ?? 0
         viewers[account.key] = Viewer(account: account, files: files, manifest: manifest, outbox: outbox, lastKnown: lastKnown, sequence: sequence)
         reconcileFiles(account.key)
+        // What was waiting for room when the app last ran gets one fresh try: the wait's own recheck lived in memory, and
+        // room (or a limit that couldn't be read then) may be there now. Still no room puts it back to waiting.
+        let key = account.key
+        let waiting = manifest.entries.filter { $0.job.phase == .waitingStorage }.map(\.id)
+        if !waiting.isEmpty {
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                for id in waiting { self.apply(key, id, OfflineJobEvent(op: "storage-available")) }
+                self.pump(key)
+            }
+        }
         return viewers[account.key]
     }
 
@@ -413,7 +424,7 @@ struct DownloadOptions {
     nonisolated static func trackEntry(_ track: OfflineAPI.TrackFacts, preset: OfflinePreset, cellular: Bool, sequence: Int64) -> OfflineEntry {
         let item = track.item, source = item.mediaSources.first
         let resources = [
-            OfflineResource(id: "media", role: .media, path: "media.\(OriginalSupport.fileExtension(source?.container))", required: true, mimeType: nil),
+            OfflineResource(id: "media", role: .media, path: "media.\(OriginalSupport.audioExtension(source?.container) ?? "m4a")", required: true, mimeType: nil),
             OfflineResource(id: "art", role: .artwork, path: "art.jpg", required: false, mimeType: "image/jpeg"),
         ]
         let tracks = (source?.mediaStreams ?? []).filter { $0.type == "Audio" }.map {
@@ -722,6 +733,8 @@ struct DownloadOptions {
         let want = max(estimates[key + "|" + entryID] ?? Int64(Double(entry.runtimeTicks ?? 0) / 10_000_000 * 8_128_000 / 8), 64 << 20)
         let have = v.manifest.budget.reservations[entryID] ?? 0
         guard want > have else { return true }
+        // A limit that couldn't be read when the download was queued is filled in now (OFF-06's default).
+        if v.manifest.budget.capBytes == nil { v.manifest.budget.capBytes = offlineDefaultCap(quotaBytes: OfflineFiles.totalBytes()) }
         do {
             let result = try v.manifest.budget.reserve(job: entryID, bytes: want - have, freeBytes: OfflineFiles.freeBytes())
             guard result.granted else {
@@ -1235,6 +1248,19 @@ enum OriginalSupport {
         let videoOK = video == nil || ["h264", "hevc", "h265", "mpeg4"].contains(video!)
         let audioOK = audio.isEmpty || audio.contains { ["aac", "ac3", "eac3", "mp3", "alac", "flac", "opus"].contains($0) }
         return videoOK && audioOK
+    }
+
+    /// An original audio file's name ending, so AVFoundation reads it as what it is (a FLAC named .mp4 doesn't play), or nil
+    /// when AVFoundation can't play that container as it is (MUS-PD02: Ogg, Matroska, WMA and the like are converted when
+    /// streamed, so their originals aren't downloaded on Apple).
+    static func audioExtension(_ container: String?) -> String? {
+        guard let first = container?.lowercased().split(separator: ",").first.map(String.init),
+              AppleMusicProfile.direct.contains(where: { $0.container.split(separator: ",").contains(Substring(first)) }) else { return nil }
+        switch first {
+        case "mp4", "mov", "m4b": return "m4a"
+        case "aif": return "aiff"
+        default: return first
+        }
     }
 
     static func fileExtension(_ container: String?) -> String {

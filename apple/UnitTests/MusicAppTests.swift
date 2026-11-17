@@ -579,9 +579,15 @@ extension MusicAppTests {
         XCTAssertNil(MusicDownloadWords.status(sharedManifest, collectionID: "artist"))
     }
 
+    private func audio(_ id: String, container: String = "flac") -> MediaItem {
+        var item = MediaItem(id: id, name: id, type: "Audio")
+        item.mediaSources = [MediaSource(id: id, container: container, supportsDirectPlay: true)]
+        return item
+    }
+
     func testDownloadAsksWithTheCountAndSizeInOriginalQuality() {
         func facts(_ id: String, _ size: Int64) -> OfflineAPI.TrackFacts {
-            OfflineAPI.TrackFacts(item: MediaItem(id: id, name: id, type: "Audio"), size: size, canDownload: true)
+            OfflineAPI.TrackFacts(item: audio(id), size: size, canDownload: true)
         }
         let ask = MusicDownloadWords.question(allowed: true, tracks: [facts("x1", 1_000_000), facts("x2", 2_000_000)], manifest: OfflineManifest(), name: "Album")
         XCTAssertEqual(ask, .confirm("Download 2 tracks (\(DownloadWords.bytes(3_000_000))) in their original quality?", ["x1", "x2"]))
@@ -594,11 +600,23 @@ extension MusicAppTests {
         XCTAssertFalse(MusicDownloadWords.listenFinished(ticks: 5, runtimeTicks: nil))
     }
 
-    func testATracksDownloadKeepsItsAlbumCover() {
-        let facts = OfflineAPI.TrackFacts(item: MediaItem(id: "x1", name: "One", type: "Audio"), album: "Album", albumId: "alb", artist: "Artist", size: 10, canDownload: true)
+    func testATracksDownloadKeepsItsAlbumCoverAndItsOwnKindOfFile() {
+        let facts = OfflineAPI.TrackFacts(item: audio("x1"), album: "Album", albumId: "alb", artist: "Artist", size: 10, canDownload: true)
         let entry = Downloads.trackEntry(facts, preset: .original, cellular: false, sequence: 1)
         XCTAssertEqual(entry.kind, .audio)
         XCTAssertEqual(entry.labels.albumId, "alb")
         XCTAssertTrue(entry.resources.contains { $0.role == .artwork })
+        // AVFoundation goes by the name: a FLAC saved as .mp4 failed to play ("None of the tracks left in this queue could play").
+        XCTAssertEqual(entry.resources.first { $0.role == .media }?.path, "media.flac")
+        XCTAssertEqual(OriginalSupport.audioExtension("mp3"), "mp3")
+        XCTAssertEqual(OriginalSupport.audioExtension("m4a,m4b,mp4,mov"), "m4a")
+        XCTAssertNil(OriginalSupport.audioExtension("ogg"))
+    }
+
+    func testAnOriginalThisDeviceCantPlayIsLeftOutAndStreams() {
+        let tracks = [OfflineAPI.TrackFacts(item: audio("x1"), size: 1_000_000, canDownload: true),
+                      OfflineAPI.TrackFacts(item: audio("x2", container: "ogg"), size: 1_000_000, canDownload: true)]
+        XCTAssertEqual(MusicDownloadWords.question(allowed: true, tracks: tracks, manifest: OfflineManifest(), name: "Album"),
+                       .confirm("Download 1 track (\(DownloadWords.bytes(1_000_000))) in their original quality? 1 track can't be downloaded and will stream as usual.", ["x1"]))
     }
 }

@@ -216,3 +216,19 @@ final class OfflineOwnershipTests: XCTestCase {
         XCTAssertEqual(OfflineOrphans.tokens(present: ["d1", "d2", "d3"], known: ["d1"], owed: ["d3"]), ["d2"])
     }
 }
+
+/// The download limit's default comes from the volume's size, read through a folder that exists even before the app has
+/// written anything (a first download on a fresh install sat at "Waiting for storage space" when it didn't).
+final class OfflineVolumeProbeTests: XCTestCase {
+    func testAVolumeIsReadThroughTheNearestFolderThatExists() throws {
+        let tmp = FileManager.default.temporaryDirectory
+        let missing = tmp.appendingPathComponent(UUID().uuidString).appendingPathComponent("Application Support/Offline", isDirectory: true)
+        XCTAssertNil(try? missing.deletingLastPathComponent().resourceValues(forKeys: [.volumeTotalCapacityKey]).volumeTotalCapacity,
+                     "a path that isn't there has no volume to ask about")
+        let probe = OfflineFiles.existingAncestor(of: missing)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: probe.path))
+        XCTAssertEqual(probe.standardizedFileURL.path, tmp.standardizedFileURL.path)
+        let total = try XCTUnwrap(probe.resourceValues(forKeys: [.volumeTotalCapacityKey]).volumeTotalCapacity)
+        XCTAssertNotNil(offlineDefaultCap(quotaBytes: Int64(total)))
+    }
+}

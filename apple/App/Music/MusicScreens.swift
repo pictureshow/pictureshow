@@ -537,6 +537,16 @@ struct MusicDetailView: View {
                 if let kind = model.downloadKind { MusicDownloadStatusLine(downloads: app.downloads, collectionID: model.route.id, kind: kind) }
                 #endif
                 actions
+                #if os(iOS)
+                // Its own row, so it's in view on a phone rather than at the far end of the scrolling actions.
+                if model.downloadKind != nil {
+                    // Side by side when both fit on one line each, else one above the other (a phone's "Remove download").
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 10) { MusicDownloadButtons(downloads: app.downloads, model: model, controller: download).fixedSize() }
+                        VStack(alignment: .leading, spacing: 10) { MusicDownloadButtons(downloads: app.downloads, model: model, controller: download).fixedSize() }
+                    }
+                }
+                #endif
                 if let notice = model.notice {
                     Text(notice).font(.callout).foregroundStyle(Theme.muted).accessibilityIdentifier("music:notice")
                 }
@@ -617,9 +627,6 @@ struct MusicDetailView: View {
                 if model.isPlaylist, model.editPhase == "unknown" {
                     Button { Task { await model.readBack(app: app) } } label: { Text("Check the playlist") }.secondaryAction()
                 }
-                #if os(iOS)
-                if model.downloadKind != nil { MusicDownloadButtons(downloads: app.downloads, model: model, controller: download) }
-                #endif
             }
             .padding(.vertical, platformValue(tv: 24, touch: 2))
         }

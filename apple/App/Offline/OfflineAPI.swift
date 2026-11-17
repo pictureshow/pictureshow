@@ -78,10 +78,13 @@ struct OfflineAPI {
         var artist: String?
         var size: Int64?
         var canDownload: Bool?
+        /// Whether this device plays the original as it is; one it doesn't is left out and streams as usual.
+        var playsHere: Bool { OriginalSupport.audioExtension(item.mediaSources.first?.container) != nil }
         var candidate: OfflineCandidate {
             let source = item.mediaSources.first
             return OfflineCandidate(itemId: item.id, type: item.type, isInfinite: source?.isInfiniteStream ?? false, sizeBytes: size,
-                                    bitrate: source?.bitrate.map { Int(clamping: $0) }, runtimeTicks: item.runTimeTicks ?? source?.runTimeTicks, canDownload: canDownload)
+                                    bitrate: source?.bitrate.map { Int(clamping: $0) }, runtimeTicks: item.runTimeTicks ?? source?.runTimeTicks,
+                                    canDownload: playsHere ? canDownload : false)
         }
     }
 

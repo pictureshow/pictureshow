@@ -159,6 +159,7 @@ private struct DownloadsList: View {
     @ViewBuilder private func collectionRow(_ group: DownloadGroup, _ collection: OfflineCollection, _ progress: OfflineCollectionProgress) -> some View {
         let status = account.flatMap { a in MusicDownloadWords.status(downloads.manifest(a), collectionID: collection.id, progress: { downloads.progress(a, $0) }, networkUp: downloads.networkUp) }
         let isOpen = open.contains(collection.id)
+        VStack(alignment: .leading, spacing: 8) {
         HStack(alignment: .top, spacing: 12) {
             LocalArtwork(url: account.flatMap { downloads.savedArt($0.key, group.entry) }, symbol: "square.stack")
                 .frame(width: 72, height: 72).clipShape(RoundedRectangle(cornerRadius: 6))
@@ -176,25 +177,41 @@ private struct DownloadsList: View {
                 }
                 .font(.caption).foregroundStyle(progress.phase == "failed" ? Color.red : Theme.muted)
                 if let fraction = status?.fraction, group.section != .ready { ProgressView(value: fraction) }
-                if let account {
-                    HStack(spacing: 10) {
-                        if progress.ready > 0 {
-                            Button { play(group.entry, account: account, collection: collection.id) } label: { Label("Play", systemImage: "play.fill") }
-                                .accessibilityIdentifier("downloads:play:\(collection.id)")
-                        }
-                        Button { if isOpen { open.remove(collection.id) } else { open.insert(collection.id) } } label: {
-                            Label(isOpen ? "Hide tracks" : "Show tracks", systemImage: isOpen ? "chevron.up" : "chevron.down")
-                        }
-                        Button(role: .destructive) { askingCollection = group } label: { Label("Delete", systemImage: "trash") }
-                    }
-                    .buttonStyle(.bordered).controlSize(.small).font(.caption).padding(.top, 2)
-                }
             }
+        }
+        // The row's actions get the row's whole width, each on one line (beside the art they broke mid-word on a phone).
+        if let account {
+            ViewThatFits(in: .horizontal) {
+                collectionActions(group, collection, progress, account: account, isOpen: isOpen, style: .titleAndIcon)
+                collectionActions(group, collection, progress, account: account, isOpen: isOpen, style: .iconOnly)
+            }
+        }
         }
         .padding(.vertical, 4)
         .contentShape(Rectangle())
         .onTapGesture { if progress.ready > 0, let account { play(group.entry, account: account, collection: collection.id) } }
         .swipeActions { Button("Delete", role: .destructive) { askingCollection = group } }
+    }
+
+    private enum ActionStyle { case titleAndIcon, iconOnly }
+
+    @ViewBuilder private func collectionActions(_ group: DownloadGroup, _ collection: OfflineCollection, _ progress: OfflineCollectionProgress,
+                                                account: Account, isOpen: Bool, style: ActionStyle) -> some View {
+        let content = HStack(spacing: 10) {
+            if progress.ready > 0 {
+                Button { play(group.entry, account: account, collection: collection.id) } label: { Label("Play", systemImage: "play.fill") }
+                    .accessibilityIdentifier("downloads:play:\(collection.id)")
+            }
+            Button { if isOpen { open.remove(collection.id) } else { open.insert(collection.id) } } label: {
+                Label(isOpen ? "Hide tracks" : "Show tracks", systemImage: isOpen ? "chevron.up" : "chevron.down")
+            }
+            Button(role: .destructive) { askingCollection = group } label: { Label("Delete", systemImage: "trash") }
+        }
+        .buttonStyle(.bordered).controlSize(.small).font(.caption).lineLimit(1).fixedSize()
+        switch style {
+        case .titleAndIcon: content.labelStyle(.titleAndIcon)
+        case .iconOnly: content.labelStyle(.iconOnly)
+        }
     }
 
     /// Music goes to the music player, in the album or playlist it was downloaded with; a film or episode to the video player.
