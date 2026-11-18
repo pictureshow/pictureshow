@@ -29,4 +29,11 @@ class DesktopPilotFixesTest {
         assertEquals(480.dp / 27, letterEntryHeight(480.dp, 27))
         assertEquals(14.dp, letterEntryHeight(200.dp, 27), "below the minimum the rail scrolls instead")
     }
+
+    /** D6: the mini bar's spoken name carries a failure, so a reader hears it without opening Now playing. */
+    @Test fun musicMiniBarSaysWhyNothingPlays() {
+        assertEquals("Now playing: Tone A4, Leg Band. None of the tracks left in this queue could play.",
+            musicMiniDescription("Tone A4", "Leg Band", "None of the tracks left in this queue could play."))
+        assertEquals("Now playing: Tone A4", musicMiniDescription("Tone A4", null, null))
+    }
 }

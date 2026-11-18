@@ -385,12 +385,17 @@ internal fun DesktopMusicMiniBar(c: DesktopController) {
             Row(Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Surface(onClick = c::nowPlaying, shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.surfaceContainer,
                     modifier = Modifier.weight(1f).controlFocus(RoundedCornerShape(8.dp), insetRing = true).probe("music:mini:open")
-                        .semantics { contentDescription = "Now playing: ${row.track.title}" + (row.track.artist?.let { ", $it" } ?: "") }) {
+                        .semantics { contentDescription = musicMiniDescription(row.track.title, row.track.artist, ui.message) }) {
                     Row(Modifier.padding(4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         MusicArt(row.track.artUrl, Modifier.size(48.dp))
                         Column(Modifier.weight(1f)) {
                             Text(row.track.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
-                            Text(listOfNotNull(row.track.artist, ui.message).joinToString(" · ").ifBlank { ui.contextName.orEmpty() },
+                            // Pilot 172 D6: a failure ("None of the tracks left…") gets the line to itself, in the accent colour and
+                            // announced, as on Now playing; it no longer trails the artist in grey where it was easy to miss.
+                            val message = ui.message
+                            if (message != null) Text(message, Modifier.semantics { liveRegion = LiveRegionMode.Polite }.probe("music:mini:message"),
+                                maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                            else Text(row.track.artist ?: ui.contextName.orEmpty(),
                                 maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
@@ -533,3 +538,7 @@ private fun QueueRow(c: DesktopController, row: DesktopMusicRow, index: Int, cou
         MusicIcon(DesktopGlyph.Remove, "Remove from queue", "$tag:remove") { c.music.remove(row.entry) }
     }
 }
+
+/** The mini bar's spoken name: the track, then any message, so a reader hears a failure without opening Now playing. */
+internal fun musicMiniDescription(title: String, artist: String?, message: String?): String =
+    "Now playing: $title" + (artist?.let { ", $it" } ?: "") + (message?.let { ". $it" } ?: "")
