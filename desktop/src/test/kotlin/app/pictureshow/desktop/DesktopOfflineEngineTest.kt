@@ -992,6 +992,8 @@ class DesktopOfflineEngineTest {
         val engine = started()
         engine.enqueue(viewerA, item("1"), choice("1"))
         val store = engine.progressStore(viewerA)
+        // The engine syncs this outbox to the server on its own; only this test's sync may write here.
+        serverOff = true
         val server = ServerAt(OfflineUserData(positionTicks = 900))
         store.remember("1", OfflineUserData(positionTicks = 100))
         store.viewing("1", store.newSequence(), 500)
@@ -1012,6 +1014,8 @@ class DesktopOfflineEngineTest {
         val engine = started()
         engine.enqueue(viewerA, item("1"), choice("1"))
         val store = engine.progressStore(viewerA)
+        // The engine syncs this outbox to the server on its own; only this test's sync may write here.
+        serverOff = true
         val server = ServerAt(OfflineUserData(positionTicks = 30_000))
         store.remember("1", OfflineUserData(positionTicks = 100))
         store.viewing("1", store.newSequence(), 500)
@@ -1028,6 +1032,8 @@ class DesktopOfflineEngineTest {
         val engine = started()
         engine.enqueue(viewerA, item("1"), choice("1"))
         val store = engine.progressStore(viewerA)
+        // The engine syncs this outbox to the server on its own; only this test's sync may write here.
+        serverOff = true
         val server = ServerAt(OfflineUserData(positionTicks = 100))
         store.remember("1", server.data)
         store.viewing("1", store.newSequence(), 500)
@@ -1043,6 +1049,8 @@ class DesktopOfflineEngineTest {
         val engine = started()
         engine.enqueue(viewerA, item("1"), choice("1"))
         val store = engine.progressStore(viewerA)
+        // The engine syncs this outbox to the server on its own; only this test's sync may write here.
+        serverOff = true
         val server = ServerAt(OfflineUserData(positionTicks = 900))
         store.remember("1", OfflineUserData(positionTicks = 100))
         store.viewing("1", store.newSequence(), 500)
