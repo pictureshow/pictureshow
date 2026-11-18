@@ -214,3 +214,69 @@ fun fmp4IndexBoxes(track: Fmp4Track, fragments: List<Fmp4Fragment>, maxBytes: In
     }
     return out
 }
+
+/**
+ * The placeholder moves every byte after it by [shift], but a conversion may address its samples by file position: ffmpeg's fragmented
+ * mp4 sets tfhd base-data-offset (flag 0x000001) to the moof's own position, and its mfra lists each moof by position in tfra. Returns a
+ * copy of a whole moof or mfra box with those positions moved by [shift]; any other box comes back unchanged. Null when the box is
+ * malformed, or when a moved position no longer fits a 32-bit tfra field.
+ */
+fun fmp4ShiftOffsets(box: ByteArray, shift: Long): ByteArray? = try {
+    val out = box.copyOf()
+    val header = headerAt(out, 0, out.size) ?: throw IndexOutOfBoundsException()
+    when (header.type) {
+        "moof" -> for (traf in children(out, header.headerBytes, out.size).filter { it.type == "traf" }) {
+            val tfhd = children(out, traf.start, traf.end).firstOrNull { it.type == "tfhd" } ?: continue
+            if (u32(out, tfhd.start) and 0x1 == 0L) continue
+            if (tfhd.start + 16 > tfhd.end) throw IndexOutOfBoundsException()
+            out.putU64(tfhd.start + 8, u64(out, tfhd.start + 8) + shift)
+        }
+        "mfra" -> for (tfra in children(out, header.headerBytes, out.size).filter { it.type == "tfra" }) {
+            val wide = out[tfra.start].toInt() == 1
+            val lengths = u32(out, tfra.start + 8)
+            val tail = ((lengths shr 4 and 3) + (lengths shr 2 and 3) + (lengths and 3) + 3).toInt()
+            val count = u32(out, tfra.start + 12)
+            val field = if (wide) 8 else 4
+            val entry = field * 2 + tail
+            if (tfra.start + 16 + count * entry > tfra.end) throw IndexOutOfBoundsException()
+            for (i in 0 until count.toInt()) {
+                val at = tfra.start + 16 + i * entry + field
+                if (wide) {
+                    out.putU64(at, u64(out, at) + shift)
+                } else {
+                    val moved = u32(out, at) + shift
+                    if (moved !in 0..MAX_U32) return null
+                    out.putU32(at, moved)
+                }
+            }
+        }
+    }
+    out
+} catch (_: IndexOutOfBoundsException) {
+    null
+}
+
+/**
+ * Where a whole moof says its sample data starts, for every trun that has a data-offset inside a traf with an explicit tfhd
+ * base-data-offset: base + data-offset, a file position. Relative addressing (default-base-is-moof, or no base) moves with the moof, so it
+ * isn't listed. Null when the box is malformed.
+ */
+fun fmp4ExplicitDataStarts(moof: ByteArray): List<Long>? = try {
+    val header = headerAt(moof, 0, moof.size)
+    if (header?.type != "moof") throw IndexOutOfBoundsException()
+    buildList {
+        for (traf in children(moof, header.headerBytes, moof.size).filter { it.type == "traf" }) {
+            val boxes = children(moof, traf.start, traf.end)
+            val tfhd = boxes.firstOrNull { it.type == "tfhd" } ?: continue
+            if (u32(moof, tfhd.start) and 0x1 == 0L) continue
+            val base = u64(moof, tfhd.start + 8)
+            for (trun in boxes.filter { it.type == "trun" }) {
+                if (u32(moof, trun.start) and 0x1 == 0L) continue
+                // data_offset is a signed 32-bit field.
+                add(base + u32(moof, trun.start + 8).toInt())
+            }
+        }
+    }
+} catch (_: IndexOutOfBoundsException) {
+    null
+}

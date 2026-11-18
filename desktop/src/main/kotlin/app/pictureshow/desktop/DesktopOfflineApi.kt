@@ -247,6 +247,20 @@ internal open class DesktopOfflineApi(private val identity: ClientIdentity, priv
         }
     }
 
+    /**
+     * Tracks by id with what a download needs, in the order asked (the server answers in its own). At most 100 ids a request, so the
+     * request line stays well inside what a server accepts; an id the server doesn't return is left out (MUS-10).
+     */
+    open suspend fun items(account: Account, ids: List<String>): List<DesktopOfflineItem> {
+        val found = mutableMapOf<String, DesktopOfflineItem>()
+        ids.distinct().chunked(100).forEach { batch ->
+            val query = listOf("ids" to batch.joinToString(","), "fields" to "MediaSources,MediaStreams,CanDownload", "limit" to batch.size.toString())
+            json.decodeFromString<DesktopOfflineItems>(call(url(account.server.url, OfflineRequest("/Users/${account.user.id}/Items", query)), interactive(account)))
+                .items.forEach { found[it.id] = it }
+        }
+        return ids.distinct().mapNotNull(found::get)
+    }
+
     open suspend fun policy(account: Account): OfflinePolicy {
         val user = json.decodeFromString<DesktopOfflineUser>(call("${server(account)}/Users/Me", interactive(account)))
         return OfflinePolicy(user.policy.downloads, user.policy.playback, user.policy.video, user.policy.audio)

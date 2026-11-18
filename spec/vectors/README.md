@@ -452,14 +452,16 @@ decimal strings; byte counts in these fixtures fit the safe integer range and ar
 Operations: `job`, `admit`, `budget`, `default-cap`, `range-header`, `decision`, `body-end`, `verify`, `blockers`, `commit`,
 `reconcile`, `decode`, `roundtrip`, `track-switch`, `entry-id`, `entry-dir`, `safe-path`, `preview`, `outbox`, `download-set`
 (`reduceTemporary` under a download-set identity), `sha256`, `device`, `presets`, `select`, the `*-request` builders,
-`box-header`, `parse-moof`, `parse-moov`, `index-boxes`, `reconnect-tracks`, `reconnect-decision`, `reconnect-track-on-server`,
+`box-header`, `parse-moof`, `parse-moov`, `index-boxes`, `shift-offsets`, `explicit-data-starts`, `reconnect-tracks`, `reconnect-decision`, `reconnect-track-on-server`,
 `handoff-selection`, `detail-source` and `detail-start` (a title page's Play source and start position, OFF-04a). `{"error": true}` means the call refuses its input.
 
 Fixed behaviour worth reading before porting: Ready is reachable only through `committed`, and `commit` checks blockers first.
 Reconcile lists only safe paths under no entry's directory, never touches a file directly in the root, and recomputes used bytes
 from what it kept. A cap below used bytes evicts nothing and answers `used-over-cap`. The outbox checks `current == desired`
 before `current == base`, so a replay never writes, and a read always precedes a retry. An index placeholder is `free` then
-`sidx`, because `first_offset` counts from the end of the sidx and 0 must land on the first moof.
+`sidx`, because `first_offset` counts from the end of the sidx and 0 must land on the first moof. The placeholder moves every later byte, so file positions the server wrote move with it (`shift-offsets`: tfhd
+base-data-offset in each moof, tfra moof offsets in the mfra; ffmpeg's default output uses both), and a file whose samples
+would then lie outside the mdat after their moof (`explicit-data-starts`) is refused rather than marked Ready.
 ### music-catalog, music-queue, music-session, music-reports, music-quality, music-playlists
 
 Frozen by the Android reference for MUS-01 to MUS-09, run on Kotlin by `MusicVectorsTest`, and owed by the web and Apple

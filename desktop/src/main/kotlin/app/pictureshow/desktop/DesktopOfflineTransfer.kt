@@ -9,9 +9,11 @@ import app.pictureshow.core.offline.OFFLINE_INDEX_PLACEHOLDER_BYTES
 import app.pictureshow.core.offline.OFFLINE_SYNC_BYTES
 import app.pictureshow.core.offline.OfflineResponse
 import app.pictureshow.core.offline.OfflineValidator
+import app.pictureshow.core.offline.fmp4ExplicitDataStarts
 import app.pictureshow.core.offline.fmp4IndexBoxes
 import app.pictureshow.core.offline.fmp4ParseMoof
 import app.pictureshow.core.offline.fmp4ParseMoov
+import app.pictureshow.core.offline.fmp4ShiftOffsets
 import app.pictureshow.core.offline.offlineBodyEnd
 import app.pictureshow.core.offline.offlineRangeHeader
 import app.pictureshow.core.offline.offlineResumeDecision
@@ -310,13 +312,35 @@ private fun ByteArray.be32(at: Int): Long = ((this[at].toLong() and 0xff) shl 24
 
 private fun ByteArray.be64(at: Int): Long = (be32(at) shl 32) or be32(at + 4)
 
-private class Fmp4Walk(val track: Fmp4Track?, val placeholder: Long, val fragments: List<Fmp4Fragment>)
+private class Fmp4At(val type: String, val offset: Long, val size: Long, val headerSize: Int)
 
-/** Walks a finished file and turns its placeholder into `sidx`. False when the file isn't what a conversion should be. */
+private class Fmp4Walk(val track: Fmp4Track?, val placeholder: Long, val fragments: List<Fmp4Fragment>, val boxes: List<Fmp4At>)
+
+/**
+ * Walks a finished file and turns its placeholder into `sidx`. False when the file isn't what a conversion should be, including when its
+ * fragments would read their samples from anywhere but the mdat that follows them.
+ */
 internal fun writeFmp4Index(file: File): Boolean = RandomAccessFile(file, "rw").use { raf ->
     val walk = raf.walkFmp4() ?: return@use false
     val active = walk.track
     if (active == null || walk.placeholder < 0 || walk.fragments.isEmpty()) return@use false
+    // Everything after the placeholder sits that much later than the server wrote it. Positions the server wrote into the boxes must move
+    // with it, or every sample is read from the wrong place (ffmpeg's default: tfhd base-data-offset is the moof's own position).
+    val shift = OFFLINE_INDEX_PLACEHOLDER_BYTES.toLong()
+    val moved = walk.boxes.filter { it.offset > walk.placeholder && (it.type == "moof" || it.type == "mfra") }.map { box ->
+        box to (fmp4ShiftOffsets(raf.readBox(box.offset, box.size) ?: return@use false, shift) ?: return@use false)
+    }
+    for ((box, bytes) in moved) {
+        if (box.type != "moof") continue
+        val starts = fmp4ExplicitDataStarts(bytes) ?: return@use false
+        if (starts.isEmpty()) continue
+        val mdat = walk.boxes.firstOrNull { it.offset > box.offset && it.type == "mdat" } ?: return@use false
+        if (starts.any { it < mdat.offset + mdat.headerSize || it >= mdat.offset + mdat.size }) return@use false
+    }
+    for ((box, bytes) in moved) {
+        raf.seek(box.offset)
+        raf.write(bytes)
+    }
     raf.seek(walk.placeholder)
     raf.write(fmp4IndexBoxes(active, walk.fragments, OFFLINE_INDEX_PLACEHOLDER_BYTES))
     raf.fd.sync()
@@ -337,6 +361,7 @@ private fun RandomAccessFile.walkFmp4(): Fmp4Walk? {
     var track: Fmp4Track? = null
     var placeholder = -1L
     val fragments = mutableListOf<Fmp4Fragment>()
+    val boxes = mutableListOf<Fmp4At>()
     val head = ByteArray(16)
     while (offset + 8 <= raf.length()) {
         raf.seek(offset)
@@ -351,6 +376,7 @@ private fun RandomAccessFile.walkFmp4(): Fmp4Walk? {
             size = raf.length() - offset
         }
         if (size < headerSize || offset + size > raf.length()) return null
+        boxes += Fmp4At(String(head, 4, 4, Charsets.ISO_8859_1), offset, size, headerSize)
         when (String(head, 4, 4, Charsets.ISO_8859_1)) {
             "moov" -> track = fmp4ParseMoov(raf.readBox(offset, size) ?: return null)
             "free" -> {
@@ -377,7 +403,7 @@ private fun RandomAccessFile.walkFmp4(): Fmp4Walk? {
         }
         offset += size
     }
-    return Fmp4Walk(track, placeholder, fragments)
+    return Fmp4Walk(track, placeholder, fragments, boxes)
 }
 
 /** A moov or moof past this is not a conversion we produced. */

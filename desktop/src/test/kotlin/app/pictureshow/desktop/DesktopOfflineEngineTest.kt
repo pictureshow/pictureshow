@@ -992,6 +992,8 @@ class DesktopOfflineEngineTest {
         val engine = started()
         engine.enqueue(viewerA, item("1"), choice("1"))
         val store = engine.progressStore(viewerA)
+        // The engine syncs this outbox to the server on its own; only this test's sync may write here.
+        serverOff = true
         val server = ServerAt(OfflineUserData(positionTicks = 900))
         store.remember("1", OfflineUserData(positionTicks = 100))
         store.viewing("1", store.newSequence(), 500)
@@ -1012,6 +1014,8 @@ class DesktopOfflineEngineTest {
         val engine = started()
         engine.enqueue(viewerA, item("1"), choice("1"))
         val store = engine.progressStore(viewerA)
+        // The engine syncs this outbox to the server on its own; only this test's sync may write here.
+        serverOff = true
         val server = ServerAt(OfflineUserData(positionTicks = 30_000))
         store.remember("1", OfflineUserData(positionTicks = 100))
         store.viewing("1", store.newSequence(), 500)
@@ -1028,6 +1032,8 @@ class DesktopOfflineEngineTest {
         val engine = started()
         engine.enqueue(viewerA, item("1"), choice("1"))
         val store = engine.progressStore(viewerA)
+        // The engine syncs this outbox to the server on its own; only this test's sync may write here.
+        serverOff = true
         val server = ServerAt(OfflineUserData(positionTicks = 100))
         store.remember("1", server.data)
         store.viewing("1", store.newSequence(), 500)
@@ -1043,6 +1049,8 @@ class DesktopOfflineEngineTest {
         val engine = started()
         engine.enqueue(viewerA, item("1"), choice("1"))
         val store = engine.progressStore(viewerA)
+        // The engine syncs this outbox to the server on its own; only this test's sync may write here.
+        serverOff = true
         val server = ServerAt(OfflineUserData(positionTicks = 900))
         store.remember("1", OfflineUserData(positionTicks = 100))
         store.viewing("1", store.newSequence(), 500)
@@ -1406,5 +1414,60 @@ class DesktopOfflineEngineTest {
         // The last track gone takes its snapshot with it.
         engine.delete(viewerA.key, entryId("2"))
         withTimeout(20_000) { engine.libraries.first { all -> all[viewerA.key]?.manifest?.collections?.isEmpty() == true } }
+    }
+
+    private fun song(id: String) = DesktopOfflineItem(
+        id, "Song $id", "Audio", userData = DesktopOfflineUserData(),
+        sources = listOf(DesktopOfflineSource("s$id", "etag", "flac", media.size.toLong(), streams = listOf(DesktopOfflineStream(0, "Audio"))))
+    )
+
+    /** MUS-10: the music player's hook reads the same downloads; files play with no server, in the saved order, for their viewer only. */
+    @Test
+    fun `a downloaded album plays from its files through the music hook in its saved order, for its viewer only`() = runBlocking<Unit> {
+        signIn(viewerA, viewerB)
+        val engine = started()
+        val album = OfflineCollection("album", OfflineCollectionKind.album, "Album", itemIds = listOf("a1", "a2"))
+        assertTrue(engine.enqueueCollection(viewerA, album, listOf(song("a1"), song("a2")), cellular = false))
+        engine.awaitPhase(viewerA, "a1", OfflinePhase.ready)
+        engine.awaitPhase(viewerA, "a2", OfflinePhase.ready)
+        val local = DesktopEngineMusicLocal(engine)
+        assertEquals(setOf("a1", "a2"), local.downloaded(viewerA))
+        assertEquals(emptySet<String>(), local.downloaded(viewerB))
+        assertEquals(null, local.decision(viewerB, "a1"))
+        val decision = local.decision(viewerA, "a1")!!
+        assertTrue(decision.url, decision.url.startsWith("file:"))
+        assertTrue(decision.headers.isEmpty())
+        assertEquals(null, decision.playSessionId)
+        assertArrayEquals(media, decision.localFile()!!.readBytes())
+        // Downloads' Play on the second track plays the album from there.
+        val library = engine.libraries.value[viewerA.key]
+        val play = desktopOfflineMusicPlay(viewerA, library, engine.entry(viewerA, "a2")!!, "album")!!
+        assertEquals(listOf("a1", "a2"), play.tracks.map { it.id })
+        assertEquals(1, play.start)
+        assertEquals("MusicAlbum:album", play.context)
+        assertEquals(viewerA.key, play.owner)
+        // A file that went is not offered, so the player streams it instead of failing on a missing file.
+        mediaFile(engine, viewerA, "a1").delete()
+        assertEquals(null, local.decision(viewerA, "a1"))
+    }
+
+    /** MUS-10: a downloaded track's listening is kept on disk for later, finished or not, and never sent live. */
+    @Test
+    fun `listening to a downloaded track goes to the outbox, played when it reached the end`() = runBlocking<Unit> {
+        signIn(viewerA)
+        serverOff = true
+        val engine = started()
+        val local = DesktopEngineMusicLocal(engine)
+        val runtime = 2_000_000_000L
+        local.report(viewerA, "t1", 1, "start", 0, runtime)
+        local.report(viewerA, "t1", 1, "progress", 300_000_000, runtime)
+        assertEquals(300_000_000L, engine.progressStore(viewerA).place("t1").first!!.positionTicks)
+        local.report(viewerA, "t1", 1, "stopped", runtime, runtime)
+        assertEquals(true, engine.progressStore(viewerA).place("t1").first!!.played)
+        local.report(viewerA, "t2", 2, "stopped", 500_000_000, runtime)
+        val cut = engine.progressStore(viewerA).place("t2").first!!
+        assertNotEquals(true, cut.played)
+        assertEquals(500_000_000L, cut.positionTicks)
+        assertFalse(requests.any { it.path.orEmpty().startsWith("/Sessions/Playing") })
     }
 }

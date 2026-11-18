@@ -21,7 +21,7 @@ internal object Fmp4Builder {
         return ByteBuffer.allocate(8 + body.size).putInt(8 + body.size).put(type.encodeToByteArray()).put(body).array()
     }
 
-    private fun full(version: Int, flags: Int, vararg ints: Int): ByteArray {
+    fun full(version: Int, flags: Int, vararg ints: Int): ByteArray {
         val buffer = ByteBuffer.allocate(4 + ints.size * 4).putInt((version shl 24) or flags)
         ints.forEach(buffer::putInt)
         return buffer.array()
@@ -50,6 +50,50 @@ internal object Fmp4Builder {
         var all = ftyp() + moov()
         repeat(fragments) { all += fragment(it * 2000, 2000) }
         return all
+    }
+
+    /**
+     * ffmpeg's default fragmented mp4: tfhd carries base-data-offset (flag 0x000001) set to the moof's own position, trun a data-offset
+     * from it, and an mfra at the end lists each moof by position. Fragment i's one sample is filled with i + 1.
+     */
+    fun absoluteFile(fragments: Int = 3): ByteArray {
+        var all = ftyp() + moov()
+        val moofs = mutableListOf<Long>()
+        repeat(fragments) {
+            moofs += all.size.toLong()
+            all += absoluteFragment(all.size.toLong(), it * 2000, 2000, (it + 1).toByte())
+        }
+        val entries = moofs.mapIndexed { i, at -> ByteBuffer.allocate(19).putLong(i * 2000L).putLong(at).put(1).put(1).put(1).array() }
+        val tfra = box("tfra", full(1, 0, 1, 0, fragments), *entries.toTypedArray())
+        return all + box("mfra", tfra, box("mfro", full(0, 0, 8 + tfra.size + 16)))
+    }
+
+    /** moof is 80 bytes, so the sample starts 88 bytes in: past the moof and the mdat header. */
+    fun absoluteFragment(at: Long, baseTime: Int, duration: Int, fill: Byte, payload: Int = 64): ByteArray {
+        val tfhd = box("tfhd", full(0, 0x000001, 1), ByteBuffer.allocate(8).putLong(at).array())
+        val tfdt = box("tfdt", full(0, 0, baseTime))
+        val trun = box("trun", full(0, 0x101, 1, 88, duration))
+        return box("moof", box("traf", tfhd, tfdt, trun)) + box("mdat", ByteArray(payload) { fill })
+    }
+
+    /** Each moof's tfhd base-data-offset, by the moof's position. */
+    fun bases(bytes: ByteArray): Map<Int, Long> = moofs(bytes).associateWith { ByteBuffer.wrap(bytes, it + 32, 8).long }
+
+    fun moofs(bytes: ByteArray): List<Int> {
+        val out = mutableListOf<Int>()
+        var at = 0
+        while (at + 8 <= bytes.size) {
+            if (String(bytes, at + 4, 4) == "moof") out += at
+            at += ByteBuffer.wrap(bytes, at, 4).int
+        }
+        return out
+    }
+
+    /** The moof positions the mfra lists. */
+    fun mfraMoofs(bytes: ByteArray): List<Long> {
+        val tfra = String(bytes, Charsets.ISO_8859_1).lastIndexOf("tfra") - 4
+        val count = ByteBuffer.wrap(bytes, tfra + 20, 4).int
+        return List(count) { ByteBuffer.wrap(bytes, tfra + 24 + it * 19 + 8, 8).long }
     }
 
     fun topLevel(bytes: ByteArray): List<String> {
@@ -139,6 +183,33 @@ class OfflineFmp4Test {
         assertEquals(60_000_000L, fmp4MeasureTicks(file))
         assertTrue(writeFmp4Index(file))
         assertEquals(60_000_000L, fmp4MeasureTicks(file))
+    }
+
+    @Test
+    fun `a conversion that addresses its samples by file position still finds them after the index`() {
+        val file = folder.newFile()
+        file.writeBytes(spaced(Fmp4Builder.absoluteFile(), 4096))
+        assertTrue(writeFmp4Index(file))
+        val bytes = file.readBytes()
+        val bases = Fmp4Builder.bases(bytes)
+        assertEquals(3, bases.size)
+        bases.entries.forEachIndexed { i, (moof, base) ->
+            assertEquals("fragment $i base", moof.toLong(), base)
+            assertEquals("fragment $i sample", (i + 1).toByte(), bytes[(base + 88).toInt()])
+        }
+        assertEquals(Fmp4Builder.moofs(bytes).map { it.toLong() }, Fmp4Builder.mfraMoofs(bytes))
+    }
+
+    @Test
+    fun `a fragment whose samples lie outside its mdat is refused, not indexed`() {
+        val source = Fmp4Builder.absoluteFile()
+        val second = Fmp4Builder.moofs(source)[1]
+        ByteBuffer.wrap(source, second + 32, 8).putLong(0)
+        val file = folder.newFile()
+        file.writeBytes(spaced(source, 4096))
+        val before = file.readBytes()
+        assertFalse(writeFmp4Index(file))
+        assertTrue(before.contentEquals(file.readBytes()))
     }
 
     @Test
