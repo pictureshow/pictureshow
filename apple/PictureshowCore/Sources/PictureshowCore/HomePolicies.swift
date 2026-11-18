@@ -65,9 +65,24 @@ extension Catalog {
             prepared = rows.map { $0.id == "nextup" ? HomeRow(id: $0.id, title: $0.title, items: next, library: $0.library, wide: $0.wide, captions: $0.captions, libraryNames: $0.libraryNames) : $0 }
         }
         return prepared.enumerated().filter { !p.hidden.contains($0.element.id) && !$0.element.items.isEmpty }.sorted {
-            let a = p.order.firstIndex(of: $0.element.id) ?? Int.max, b = p.order.firstIndex(of: $1.element.id) ?? Int.max
-            return a == b ? $0.offset < $1.offset : a < b
+            let a = homeRowSlot($0.element.id, p.order), b = homeRowSlot($1.element.id, p.order)
+            return a == b ? $0.offset < $1.offset : (a.0, a.1) < (b.0, b.1)
         }.map(\.element)
+    }
+    /// A layout saved in one watching mode lacks the other mode's rows: they take the place of their counterpart
+    /// (resume then nextup where "watching" was; "watching" where the first of them was), not the end (HOME-12).
+    static func homeRowSlot(_ key: String, _ order: [String]) -> (Int, Int) {
+        var saved: [String] = []
+        for k in order where !saved.contains(k) { saved.append(k) }
+        func at(_ k: String) -> Int? { saved.firstIndex(of: k) }
+        if let i = at(key) { return (i, 0) }
+        switch key {
+        case "resume": if let w = at("watching") { return (w, 0) }
+        case "nextup": if let w = at("watching") { return (w, 1) }
+        case "watching": if let first = [at("resume"), at("nextup")].compactMap({ $0 }).min() { return (first, 0) }
+        default: break
+        }
+        return (Int.max, 0)
     }
     public static func homeDuplicateIds(rows: [HomeRow]) -> Set<String> {
         func key(_ value: String?) -> String { (value ?? "").split(whereSeparator: { $0.isWhitespace }).joined(separator: " ").lowercased() }

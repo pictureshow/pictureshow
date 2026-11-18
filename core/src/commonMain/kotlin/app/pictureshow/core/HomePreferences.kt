@@ -95,9 +95,26 @@ fun customizedHome(rows: List<HomeRow>, preferences: HomePreferences): List<Home
     } else {
         rows.map { if (it.key == "nextup") it.copy(items = next) else it }
     }
-    val priority = preferences.order.distinct().withIndex().associate { it.value to it.index }
     return prepared.filter { it.key !in preferences.hidden && it.items.isNotEmpty() }
-        .sortedBy { priority[it.key] ?: Int.MAX_VALUE }
+        .sortedWith(compareBy({ homeRowSlot(it.key, preferences.order).first }, { homeRowSlot(it.key, preferences.order).second }))
+}
+
+/**
+ * Where a row sits in the saved order. A layout saved in one watching mode lacks the other mode's rows, so turning
+ * Combine off puts Continue watching then Next up where the combined row was, and turning it on puts the combined
+ * row where the first of them was, instead of below every Latest row. Unknown rows keep their order at the end.
+ */
+private fun homeRowSlot(key: String, order: List<String>): Pair<Int, Int> {
+    val saved = order.distinct()
+    fun at(k: String) = saved.indexOf(k).takeIf { it >= 0 }
+    at(key)?.let { return it to 0 }
+    val borrowed = when (key) {
+        "resume" -> at("watching")?.let { it to 0 }
+        "nextup" -> at("watching")?.let { it to 1 }
+        "watching" -> listOfNotNull(at("resume"), at("nextup")).minOrNull()?.let { it to 0 }
+        else -> null
+    }
+    return borrowed ?: (Int.MAX_VALUE to 0)
 }
 
 @Serializable
