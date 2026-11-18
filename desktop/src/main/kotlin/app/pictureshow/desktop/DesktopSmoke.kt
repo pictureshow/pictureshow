@@ -571,7 +571,7 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
         val ratio=((duration-12)/duration).coerceIn(0.0,1.0)
         robot.mouseMove(origin.x+((slider.left+slider.width*ratio)/pixelScale).roundToInt(),origin.y+(slider.center.y/pixelScale).roundToInt());robot.mousePress(InputEvent.BUTTON1_DOWN_MASK);robot.mouseRelease(InputEvent.BUTTON1_DOWN_MASK)
         waitFor("natural EOF autoplay",35){c.state.value.playback?.let{it.ready&&it.item.id!=episode.id}==true};checks["autoplayNext"]=true
-        click("stop");ready(DesktopRoute.Detail);click("nav:settings");ready(DesktopRoute.Settings);waitFor("Settings entry focuses Video quality") { DesktopUiProbe.focus["quality"]==true };screenshot("11-settings");screenshot("11b-settings-minimum",listOf(800 to 600));if(System.getenv("PICTURESHOW_SMOKE_4K")=="1") screenshot("11c-settings-4k",listOf(3840 to 2160))
+        click("stop");ready(DesktopRoute.Detail);click("nav:settings");ready(DesktopRoute.Settings);waitFor("Settings entry focuses its first jump chip, at the top") { DesktopUiProbe.focus["jump:Account"]==true };screenshot("11-settings");screenshot("11b-settings-minimum",listOf(800 to 600));if(System.getenv("PICTURESHOW_SMOKE_4K")=="1") screenshot("11c-settings-4k",listOf(3840 to 2160))
         click("conversion");ready(DesktopRoute.Settings);check(!c.state.value.settings.conversionNotice);click("conversion");ready(DesktopRoute.Settings);checks["settings"]=true
         // D-1: every sidebar destination stays inside the minimum window with Living-room size on.
         click("large-interface");waitFor("Living-room size on"){c.state.value.settings.largeInterface&&!c.state.value.busy}
