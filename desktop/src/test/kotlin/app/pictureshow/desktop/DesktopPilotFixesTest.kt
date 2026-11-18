@@ -22,4 +22,11 @@ class DesktopPilotFixesTest {
         assertEquals(100 + 1000 - 192, trickplayFramePosition(track, window, 1000f, 1000, 192, 108, 30).x, "clamped to the track's right")
         assertEquals(0, trickplayFramePosition(IntRect(0, 50, 1000, 70), window, 500f, 1000, 192, 108, 30).y, "never above the window")
     }
+
+    /** D5: entries share the rail's height between 14 and 22 dp. */
+    @Test fun letterEntriesShareTheRailHeight() {
+        assertEquals(22.dp, letterEntryHeight(800.dp, 27))
+        assertEquals(480.dp / 27, letterEntryHeight(480.dp, 27))
+        assertEquals(14.dp, letterEntryHeight(200.dp, 27), "below the minimum the rail scrolls instead")
+    }
 }

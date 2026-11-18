@@ -32,4 +32,22 @@ class DesktopPilotFixesUiTest {
         onNodeWithContentDescription("Preview at 0:33").assertExists()
         assertEquals(2, onAllNodes(isRoot()).fetchSemanticsNodes().size, "the frame must be in a popup, outside the band's clip")
     }
+
+    private fun railState() = DesktopState(sortBy = "SortName",
+        catalog = DesktopCatalogState(railIds = listOf("a", "z"), railNames = listOf("alpha", "zulu")))
+
+    /** D5: at the height a 1280x800 window gives the rail (about 480 dp), every letter through Z is on screen. */
+    @Test fun letterRailFitsItsHeightThroughZ() = runComposeUiTest {
+        val c = DesktopController(java.nio.file.Files.createTempDirectory("pictureshow-rail-").toFile())
+        setContent { PictureshowTheme { Box(Modifier.size(200.dp, 480.dp)) { LetterRail(railState(), c) } } }
+        val z = onNodeWithTag("letter:Z").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        assertTrue(z.bottom <= with(density) { 480.dp.toPx() } + 0.5f, "Z must sit inside the rail's height")
+    }
+
+    /** D5: at 800x600 the rail is shorter than its smallest entries, so it scrolls and Z is reachable. */
+    @Test fun letterRailScrollsToZWhenTooShort() = runComposeUiTest {
+        val c = DesktopController(java.nio.file.Files.createTempDirectory("pictureshow-rail-").toFile())
+        setContent { PictureshowTheme { Box(Modifier.size(200.dp, 240.dp)) { LetterRail(railState(), c) } } }
+        onNodeWithTag("letter:Z").performScrollTo().assertIsDisplayed()
+    }
 }

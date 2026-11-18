@@ -275,16 +275,32 @@ private fun PersonFilter(state: DesktopState, c: DesktopController) {
 internal fun LetterRail(state: DesktopState, c: DesktopController, modifier: Modifier = Modifier) {
     if (state.sortBy != "SortName" || state.catalog.railIds.isNullOrEmpty()) return
     val available = remember(state.catalog.railNames) { state.catalog.railNames.map(::jumpLetter).toSet() }
-    Column(modifier.width(32.dp).verticalScroll(rememberScrollState()).probe("letter-rail"), horizontalAlignment = Alignment.CenterHorizontally) {
-        JUMP_LETTERS.forEach { letter ->
-            val on = letter in available
-            Box(Modifier.size(28.dp, 22.dp).clip(RoundedCornerShape(4.dp)).then(if (on) Modifier.clickable { c.jumpToLetter(letter) }.controlFocus(RoundedCornerShape(4.dp)) else Modifier)
-                .probe("letter:$letter").semantics { contentDescription = if (on) "Jump to $letter" else "$letter, no titles" }, contentAlignment = Alignment.Center) {
-                Text(letter, style = MaterialTheme.typography.labelMedium, color = if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
+    // Pilot 172 D5: 27 entries at 22 dp ran past the window at 1280x800. Entries shrink to share the height the page
+    // gives the rail, down to [LETTER_MIN] (still a pointer target); below that the rail scrolls, with a visible bar.
+    BoxWithConstraints(modifier.width(36.dp).fillMaxHeight()) {
+        val entry = letterEntryHeight(maxHeight, JUMP_LETTERS.size)
+        val scroll = rememberScrollState()
+        val small = entry < 18.dp
+        Column(Modifier.width(32.dp).verticalScroll(scroll).probe("letter-rail"), horizontalAlignment = Alignment.CenterHorizontally) {
+            JUMP_LETTERS.forEach { letter ->
+                val on = letter in available
+                Box(Modifier.size(28.dp, entry).clip(RoundedCornerShape(4.dp)).then(if (on) Modifier.clickable { c.jumpToLetter(letter) }.controlFocus(RoundedCornerShape(4.dp)) else Modifier)
+                    .probe("letter:$letter").semantics { contentDescription = if (on) "Jump to $letter" else "$letter, no titles" }, contentAlignment = Alignment.Center) {
+                    Text(letter, style = if (small) MaterialTheme.typography.labelSmall.copy(lineHeight = 12.sp) else MaterialTheme.typography.labelMedium,
+                        color = if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
+                }
             }
         }
+        if (scroll.maxValue > 0) VerticalScrollbar(rememberScrollbarAdapter(scroll), Modifier.align(Alignment.CenterEnd).fillMaxHeight())
     }
 }
+
+internal val LETTER_MIN = 14.dp
+internal val LETTER_MAX = 22.dp
+
+/** Each rail entry's height: an equal share of [available], between [LETTER_MIN] and [LETTER_MAX]. */
+internal fun letterEntryHeight(available: Dp, count: Int): Dp =
+    if (available == Dp.Infinity || count <= 0) LETTER_MAX else (available / count).coerceIn(LETTER_MIN, LETTER_MAX)
 
 /** BROWSE-05: after a letter jump, the grid scrolls to the letter's first title and focuses it. */
 @Composable
