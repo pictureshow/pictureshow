@@ -21,6 +21,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupPositionProvider
+import androidx.compose.ui.window.PopupProperties
 import androidx.compose.ui.unit.dp
 import app.pictureshow.core.*
 import app.pictureshow.core.playback.*
@@ -136,19 +141,43 @@ internal fun TrickplayPreview(p: DesktopPlaybackState, c: DesktopController, fra
     }
     val image = sheets[tile.sheet] ?: return
     if (!visible) return
+    TrickplayFrame(image, info, tile, "Preview at ${clock(positionMs / 1000.0)}", x, trackWidth)
+}
+
+/**
+ * The frame itself. It draws in a [Popup], the same layer as the player's menus: the controls band is a Material
+ * Surface, which clips its content, so a frame offset above the seek row was cut off where the video begins (pilot
+ * 172 D2; on macOS and Windows that region of the transparent Compose window shows the native video beneath it).
+ */
+@Composable
+internal fun TrickplayFrame(image: ImageBitmap, info: TrickplayInfo, tile: TrickplayTile, label: String, x: Float, trackWidth: Int) {
     val width: Dp = 192.dp
     val height: Dp = width * info.height / info.width.coerceAtLeast(1)
     val density = androidx.compose.ui.platform.LocalDensity.current
     val w = with(density) { width.roundToPx() }
     val h = with(density) { height.roundToPx() }
-    Surface(shape = RoundedCornerShape(6.dp), tonalElevation = 3.dp, shadowElevation = 6.dp, modifier = Modifier
-        .offset { IntOffset((x - w / 2f).toInt().coerceIn(0, (trackWidth - w).coerceAtLeast(0)), -h - with(density) { 30.dp.roundToPx() }) }
-        .size(width, height).semantics { contentDescription = "Preview at ${clock(positionMs / 1000.0)}" }.probe("trickplay-preview")) {
-        Canvas(Modifier.fillMaxSize()) {
-            drawImage(image, srcOffset = IntOffset(tile.column * info.width, tile.row * info.height), srcSize = IntSize(info.width, info.height),
-                dstSize = IntSize(size.width.toInt(), size.height.toInt()))
+    val gap = with(density) { 30.dp.roundToPx() }
+    val position = remember(x, trackWidth, w, h, gap) {
+        object : PopupPositionProvider {
+            override fun calculatePosition(anchorBounds: IntRect, windowSize: IntSize, layoutDirection: LayoutDirection, popupContentSize: IntSize) =
+                trickplayFramePosition(anchorBounds, windowSize, x, trackWidth, w, h, gap)
         }
     }
+    Popup(popupPositionProvider = position, properties = PopupProperties(focusable = false)) {
+        Surface(shape = RoundedCornerShape(6.dp), tonalElevation = 3.dp, shadowElevation = 6.dp, modifier = Modifier
+            .size(width, height).semantics { contentDescription = label }.probe("trickplay-preview")) {
+            Canvas(Modifier.fillMaxSize()) {
+                drawImage(image, srcOffset = IntOffset(tile.column * info.width, tile.row * info.height), srcSize = IntSize(info.width, info.height),
+                    dstSize = IntSize(size.width.toInt(), size.height.toInt()))
+            }
+        }
+    }
+}
+
+/** Window position of the frame: centred on the pointer within the track, [gap] above the track, inside the window. */
+internal fun trickplayFramePosition(anchor: IntRect, window: IntSize, x: Float, trackWidth: Int, w: Int, h: Int, gap: Int): IntOffset {
+    val left = anchor.left + (x - w / 2f).toInt().coerceIn(0, (trackWidth - w).coerceAtLeast(0))
+    return IntOffset(left.coerceIn(0, (window.width - w).coerceAtLeast(0)), (anchor.top - h - gap).coerceAtLeast(0))
 }
 
 private fun extrasGlyph(name: String, body: androidx.compose.ui.graphics.vector.PathBuilder.() -> Unit) =
