@@ -92,6 +92,10 @@ def generateLicenseCatalog = tasks.register('generateLicenseCatalog') {
             [id: id, name: definition.name ?: module.module, version: module.version,
              license: identifiers.join(' / '), text: (texts + notices).join('\n\n'), notices: notices]
         }.unique { it.id }
+        // The AndroidX artifact and JetBrains' multiplatform one of a library share a display name and both ship
+        // (Compose Runtime, Saved State Compose, ...): name each by its artifact so the list has no look-alike rows.
+        def named = rows.countBy { it.name }
+        rows.each { if (named[it.name] > 1) it.name = "${it.name} (${it.id})".toString() }
         if (problems) throw new GradleException("Missing full license texts. Add a verified upstream override; do not ship an unknown license:\n" + problems.join('\n'))
         rows.add([id: 'mpv-system', name: 'mpv (libmpv) and FFmpeg', version: 'loaded from this computer', license: 'LGPL-2.1-or-later (when built without GPL parts)', notices: [],
             text: '''Pictureshow for computers does not include mpv or FFmpeg. It loads the libmpv on this computer when it plays video: the file named by MPV_LIBRARY, or the system's mpv library.

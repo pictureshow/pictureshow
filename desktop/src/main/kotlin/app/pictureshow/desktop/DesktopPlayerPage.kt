@@ -347,7 +347,7 @@ internal fun TrackMenu(label: String, tag: String, icon: androidx.compose.ui.gra
     LaunchedEffect(open, refocus) { if (!open && refocus) { withFrameNanos { }; runCatching { opener.requestFocus() }; refocus = false } }
     Box {
         OutlinedButton(onClick = { if (open) onDismiss() else onOpen() }, enabled = items.isNotEmpty(), contentPadding = PaddingValues(horizontal = 12.dp),
-            modifier = Modifier.focusRequester(opener).controlFocus(enabled = !open).width(chipWidth).probe(tag).semantics { contentDescription = "$label: $chipValue${note?.let { ". $it" } ?: ""}" }) {
+            modifier = Modifier.focusRequester(opener).controlFocus(enabled = !open).width(chipWidth).probe(tag).semantics { contentDescription = trackMenuDescription(label, chipValue, note) }) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp))
                 Text(chipValue, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = MaterialTheme.typography.labelLarge.fontWeight)

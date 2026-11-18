@@ -36,4 +36,39 @@ class DesktopPilotFixesTest {
             musicMiniDescription("Tone A4", "Leg Band", "None of the tracks left in this queue could play."))
         assertEquals("Now playing: Tone A4", musicMiniDescription("Tone A4", null, null))
     }
+
+    /** Low: the second PIN entry reads as a confirmation. */
+    @Test fun pinSetupSecondEntryIsLabelledConfirm() {
+        assertEquals("New PIN", desktopPinSetupLabel(DesktopPinSetup("k", "Viewer")))
+        assertEquals("Confirm PIN", desktopPinSetupLabel(DesktopPinSetup("k", "Viewer", first = "1234")))
+    }
+
+    /** Low: Jellyfin's "Home videos and photos" libraries get no title filters; movie libraries keep them. */
+    @Test fun photoLibrariesOfferNoTitleFilters() {
+        fun library(type: String?) = app.pictureshow.core.MediaItem("l", type = "CollectionFolder", collectionType = type)
+        assertFalse(libraryFiltersOffered(library("homevideos")))
+        assertFalse(libraryFiltersOffered(library("photos")))
+        assertTrue(libraryFiltersOffered(library("movies")))
+    }
+
+    /** Low: a pointer-opened sub-page returns to its opener, not the page's entry control. */
+    @Test fun pointerOpenerIsRememberedForBack() {
+        DesktopUiProbe.pageOfTag["settings:about"] = "Settings"
+        try {
+            rememberOpener("settings:about")
+            assertEquals("settings:about", DesktopUiProbe.lastFocus["Settings"])
+        } finally { DesktopUiProbe.pageOfTag.remove("settings:about"); DesktopUiProbe.lastFocus.remove("Settings") }
+    }
+
+    /** Low: the Chapters chip names itself once, and other chips still say label and value. */
+    @Test fun menuChipDescriptionsDoNotRepeatTheLabel() {
+        assertEquals("Chapters", trackMenuDescription("Chapters", "Chapters", null))
+        assertEquals("Audio: English. Converted", trackMenuDescription("Audio", "English", "Converted"))
+    }
+
+    /** Low: a photo card keeps the landscape shape instead of a portrait poster crop; films stay posters. */
+    @Test fun photoCardsAreNotPosterCropped() {
+        assertFalse(app.pictureshow.ui.catalogCardIsPoster(app.pictureshow.core.MediaItem("p", type = "Photo"), wide = false))
+        assertTrue(app.pictureshow.ui.catalogCardIsPoster(app.pictureshow.core.MediaItem("m", type = "Movie"), wide = false))
+    }
 }

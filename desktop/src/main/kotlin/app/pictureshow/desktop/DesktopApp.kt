@@ -519,7 +519,8 @@ internal fun destructiveEntryTarget(tag: String): Boolean = tag == "sign-out" ||
 internal fun desktopEntryTarget(state: DesktopState): String? = when(state.route) {
     DesktopRoute.Servers -> "server-address"
     DesktopRoute.SignIn -> "username"
-    DesktopRoute.Settings -> "quality"
+    // The page's first control, so Settings opens at its top (pilot 172), not scrolled to Video quality.
+    DesktopRoute.Settings -> "jump:Account"
     DesktopRoute.LiveTv -> "live:tab:Channels"
     DesktopRoute.Downloads -> "downloads:cap"
     DesktopRoute.Detail -> "play"

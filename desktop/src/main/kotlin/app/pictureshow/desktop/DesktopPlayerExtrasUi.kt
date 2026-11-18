@@ -81,6 +81,13 @@ internal fun SpeedMenu(p: DesktopPlaybackState, c: DesktopController, open: Bool
         open = open, onOpen = onOpen, onDismiss = onDismiss, ceiling = ceiling, chipWidth = 104.dp, refocusOnChoose = true) { c.setSpeed(choices[it]) }
 }
 
+/** Wide enough for the whole word "Chapters" beside its icon and chevron; 132 dp cut it to "Chapt…" (pilot 172). */
+internal val CHAPTERS_CHIP_WIDTH = 152.dp
+
+/** A menu chip's spoken name: "Audio: English", but a chip that shows its own name says it once ("Chapters"). */
+internal fun trackMenuDescription(label: String, chipValue: String, note: String?): String =
+    (if (chipValue == label) label else "$label: $chipValue") + (note?.let { ". $it" } ?: "")
+
 /** PLAY-13: chapters, focus on the one playing; choosing seeks once and returns focus to this button. */
 @Composable
 internal fun ChaptersMenu(p: DesktopPlaybackState, c: DesktopController, open: Boolean, onOpen: () -> Unit, onDismiss: () -> Unit, ceiling: Int) {
@@ -88,7 +95,7 @@ internal fun ChaptersMenu(p: DesktopPlaybackState, c: DesktopController, open: B
     if (chapters.isEmpty() || p.isLiveChannel) return
     TrackMenu("Chapters", "chapters", ExtrasGlyph.Chapters, chapters.mapIndexed { i, ch -> i to desktopChapterLabel(ch, i) },
         desktopCurrentChapter(chapters, (p.positionSeconds * 1000).toLong()), chipValue = "Chapters", note = null,
-        open = open, onOpen = onOpen, onDismiss = onDismiss, ceiling = ceiling, chipWidth = 132.dp, refocusOnChoose = true, onChoose = c::seekChapter)
+        open = open, onOpen = onOpen, onDismiss = onDismiss, ceiling = ceiling, chipWidth = CHAPTERS_CHIP_WIDTH, refocusOnChoose = true, onChoose = c::seekChapter)
 }
 
 /** PLAY-11 and SUB-DL inside the Subtitles menu: timing for the selected subtitle, then Download subtitles. */

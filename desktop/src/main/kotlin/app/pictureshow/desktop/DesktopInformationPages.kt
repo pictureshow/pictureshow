@@ -75,7 +75,7 @@ internal fun AccountsSettingsSections(state: DesktopState, c: DesktopController)
 internal fun InformationSettingsSection(c: DesktopController) {
     SettingsSection("About") {
         SettingRow("About Pictureshow", "Version ${c.appVersion}, license, source code and privacy") {
-            OutlinedButton(onClick = c::openAbout, modifier = Modifier.controlFocus().probe("settings:about")) { Text("About") }
+            OutlinedButton(onClick = { rememberOpener("settings:about"); c.openAbout() }, modifier = Modifier.controlFocus().probe("settings:about")) { Text("About") }
         }
         SettingRow("This computer", "What this computer can play without the server converting it") {
             OutlinedButton(onClick = c::openThisComputer, modifier = Modifier.controlFocus().probe("settings:this-computer")) { Text("Open") }
@@ -215,4 +215,12 @@ private fun InfoLine(label: String, value: String) {
         Text(label, Modifier.width(180.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
         SelectionContainer(Modifier.weight(1f)) { Text(value) }
     }
+}
+
+/**
+ * A pointer click doesn't move focus, so Back would restore the page's entry control and scroll to it. Recording
+ * the opener as the page's last focus brings Back to where the viewer was (pilot 172: Settings → About → Back).
+ */
+internal fun rememberOpener(tag: String) {
+    DesktopUiProbe.pageOfTag[tag]?.takeIf { it.isNotBlank() }?.let { DesktopUiProbe.lastFocus[it] = tag }
 }

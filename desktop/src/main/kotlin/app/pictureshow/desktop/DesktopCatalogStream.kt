@@ -86,10 +86,13 @@ internal fun libraryQuery(library: MediaItem, sortBy: String, descending: Boolea
         descending = descending, startIndex = startIndex, limit = limit, filters = filters)
 }
 
-/** Whether a library page offers filters: title libraries and plain folders of video, not music, photos or books. */
+/**
+ * Whether a library page offers filters: title libraries and plain folders of video, not music, photos or books.
+ * "homevideos" is Jellyfin's "Home videos and photos": genre, rating and person filters don't describe it (pilot 172).
+ */
 internal fun libraryFiltersOffered(library: MediaItem?): Boolean = library != null &&
     library.type in setOf("CollectionFolder", "UserView") &&
-    library.collectionType !in setOf("music", "photos", "books", "livetv", "playlists")
+    library.collectionType !in setOf("music", "photos", "homevideos", "books", "livetv", "playlists")
 
 private fun filterKey(account: Account, libraryId: String) = "${account.key}:$libraryId"
 

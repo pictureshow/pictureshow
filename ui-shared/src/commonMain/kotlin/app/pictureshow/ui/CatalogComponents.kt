@@ -48,6 +48,9 @@ import app.pictureshow.core.isWatched
 import app.pictureshow.core.progress
 import coil3.compose.AsyncImage
 
+/** Episodes and photos are landscape pictures: a 2:3 poster crop cut most of a landscape photo away (pilot 172). */
+fun catalogCardIsPoster(item: MediaItem, wide: Boolean): Boolean = !wide && item.type != "Episode" && item.type != "Photo"
+
 @Composable
 fun CatalogCard(
     item: MediaItem,
@@ -74,12 +77,12 @@ fun CatalogCard(
         },
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
     ) {
-        val poster = !wide && item.type != "Episode"
+        val poster = catalogCardIsPoster(item, wide)
         CatalogArtwork(
             item,
             account,
             wide,
-            // An episode in a poster grid keeps its own shape; everything else takes the grid's one height.
+            // An episode or photo in a poster grid keeps its own shape; everything else takes the grid's one height.
             if (artHeight != null && (poster || wide)) {
                 Modifier.fillMaxWidth().height(artHeight)
             } else {

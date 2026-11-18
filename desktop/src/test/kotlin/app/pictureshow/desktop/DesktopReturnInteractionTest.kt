@@ -77,7 +77,7 @@ class DesktopReturnInteractionTest {
     @Test fun mouseEntryStartsInsideEverySidebarDestination() = runComposeUiTest {
         val account = Account(Server("s", "Demo", "https://example.invalid", "12"), User("u", "Viewer"), "token")
         var state by mutableStateOf(DesktopState())
-        val destinations = listOf(DesktopRoute.Settings to "quality", DesktopRoute.Library to "grid:film", DesktopRoute.LiveTv to "live:tab:Channels",
+        val destinations = listOf(DesktopRoute.Settings to "jump:Account", DesktopRoute.Library to "grid:film", DesktopRoute.LiveTv to "live:tab:Channels",
             DesktopRoute.Detail to "play", DesktopRoute.Search to "search-field", DesktopRoute.Home to "card:latest:film")
         setContent {
             MaterialTheme {
