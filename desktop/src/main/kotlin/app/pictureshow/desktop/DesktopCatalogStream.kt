@@ -489,7 +489,10 @@ fun DesktopController.openPhoto(item: MediaItem) {
     page(DesktopRoute.Photo, remember = true) { g ->
         val a = mutable.value.account ?: return@page
         publish(g) { it.copy(catalog = it.catalog.copy(photos = listOf(item), photoIndex = 0)) }
-        val parent = item.parentId ?: return@page
+        // Jellyfin leaves ParentId out of list responses unless asked, so a grid's photo usually lacks it: read the item.
+        val parent = item.parentId
+            ?: (client.item(a, item.id) as? ClientResult.Success)?.value?.parentId
+            ?: return@page
         val fromGrid = before.route == DesktopRoute.Library && before.library?.id == parent
         val r = client.photos(a, parent, if (fromGrid) before.sortBy else "SortName", fromGrid && before.descending)
         val photos = (r as? ClientResult.Success)?.value?.items.orEmpty().filter { it.type == "Photo" }

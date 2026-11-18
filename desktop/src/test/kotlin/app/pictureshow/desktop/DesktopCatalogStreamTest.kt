@@ -374,6 +374,25 @@ class DesktopCatalogStreamTest {
         }
     }
 
+    /** Pilot 172 D1: a grid's photo arrives without ParentId (Jellyfin omits it from lists), yet opens among all of its album. */
+    @Test fun photoFromAListWithoutParentIdStillOpensAmongItsAlbum(): Unit = runBlocking {
+        Server().use { s ->
+            s.item("album", "Album", "Folder")
+            listOf("p1", "p2", "p3").forEach { s.item(it, it, "Photo", "ParentId" to JsonPrimitive("album"), "ImageTags" to buildJsonObject { put("Primary", "tag") }) }
+            s.children["album"] = listOf("p1", "p2", "p3")
+            DesktopController(directory(), playbackFactory = { Engine() }).use { c ->
+                c.login(s)
+                val listed = Json.decodeFromJsonElement<MediaItem>(JsonObject(s.items.getValue("p2") - "ParentId"))
+                assertNull(listed.parentId)
+                c.open(listed)
+                val open = c.await { it.route == DesktopRoute.Photo && !it.busy }
+                assertEquals(listOf("p1", "p2", "p3"), open.catalog.photos.map { it.id })
+                assertEquals(1, open.catalog.photoIndex)
+                assertTrue(c.stepPhoto(forward = true, slideshow = false))
+            }
+        }
+    }
+
     // ------------------------------------------------------------ pure helpers
 
     @Test fun queueNextAndPhotoPositionLines() {
