@@ -33,9 +33,11 @@ import app.pictureshow.core.offline.commit
 import app.pictureshow.core.offline.commitReady
 import app.pictureshow.core.offline.discard
 import app.pictureshow.core.offline.fmp4BoxHeader
+import app.pictureshow.core.offline.fmp4ExplicitDataStarts
 import app.pictureshow.core.offline.fmp4IndexBoxes
 import app.pictureshow.core.offline.fmp4ParseMoof
 import app.pictureshow.core.offline.fmp4ParseMoov
+import app.pictureshow.core.offline.fmp4ShiftOffsets
 import app.pictureshow.core.offline.offlineAdmit
 import app.pictureshow.core.offline.offlineAudioRequest
 import app.pictureshow.core.offline.offlineBodyEnd
@@ -617,6 +619,14 @@ class OfflineVectorsTest {
                 put("hex", out.toHex())
                 put("bytes", out.size)
             }
+        }
+        "shift-offsets" -> buildJsonObject {
+            val out = fmp4ShiftOffsets(hex(event.need("hex")), event.long("shift")!!)
+            put("hex", if (out == null) JsonNull else JsonPrimitive(out.toHex()))
+        }
+        "explicit-data-starts" -> buildJsonObject {
+            val starts = fmp4ExplicitDataStarts(hex(event.need("hex")))
+            put("starts", if (starts == null) JsonNull else JsonArray(starts.map { JsonPrimitive(it) }))
         }
         else -> error("Unknown offline vector operation: $operation")
     }
