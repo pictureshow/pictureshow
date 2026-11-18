@@ -84,7 +84,7 @@ internal fun DesktopPinDialogs(c: DesktopController) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(if (setup.first == null) "$PROFILE_PIN_MIN to $PROFILE_PIN_MAX digits. Pictureshow asks for it before anyone opens ${setup.name} on this computer."
                         else "Type the same PIN again to turn it on for ${setup.name}.")
-                    DesktopPinField(setup.tries, enabled = true, tag = "pin-setup-field", label = "New PIN", onSubmit = c.pins::setupEnter)
+                    DesktopPinField(setup.tries, enabled = true, tag = "pin-setup-field", label = desktopPinSetupLabel(setup), onSubmit = c.pins::setupEnter)
                     desktopPinSetupMessage(setup)?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) }
                 }
             },
@@ -142,3 +142,6 @@ internal fun QuickConnectApprovalSection(state: DesktopState, c: DesktopControll
         LaunchedEffect(Unit) { withFrameNanos { }; runCatching { field.requestFocus() } }
     }
 }
+
+/** The setup field's label: the second entry is a confirmation, not another new PIN (pilot 172). */
+internal fun desktopPinSetupLabel(setup: DesktopPinSetup): String = if (setup.first == null) "New PIN" else "Confirm PIN"

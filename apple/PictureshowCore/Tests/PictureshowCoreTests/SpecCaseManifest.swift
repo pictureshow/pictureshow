@@ -2286,6 +2286,8 @@ enum SpecCaseManifest {
         offline-detail-source.start-offline-unsent|offline-detail-source/detail-start
         offline-detail-source.start-nothing-known|offline-detail-source/detail-start
         home-order-hide-stable|home-browse/home-rows
+        home-order-separate-rows-take-the-combined-row-place|home-browse/home-rows
+        home-order-combined-row-takes-the-separate-rows-place|home-browse/home-rows
         home-merge-resume-wins|home-browse/home-rows
         home-remove-nextup-no-history-write|home-browse/home-rows
         home-merge-hide-combined|home-browse/home-rows

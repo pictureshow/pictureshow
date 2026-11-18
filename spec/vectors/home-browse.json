@@ -3457,6 +3457,192 @@
         "today": "2026-11-16"
       },
       "expected": null
+    },
+    {
+      "id": "home-order-separate-rows-take-the-combined-row-place",
+      "operation": "home-rows",
+      "note": "HOME-12: a layout saved while combined has no resume/nextup keys; turning Combine off shows them where the combined row was, not below every Latest row.",
+      "input": {
+        "rows": [
+          {
+            "key": "resume",
+            "title": "resume",
+            "items": [
+              {
+                "id": "r"
+              }
+            ]
+          },
+          {
+            "key": "nextup",
+            "title": "nextup",
+            "items": [
+              {
+                "id": "n"
+              }
+            ]
+          },
+          {
+            "key": "libraries",
+            "title": "libraries",
+            "items": [
+              {
+                "id": "l"
+              }
+            ]
+          },
+          {
+            "key": "latest:m",
+            "title": "latest:m",
+            "items": [
+              {
+                "id": "m"
+              }
+            ]
+          },
+          {
+            "key": "latest:t",
+            "title": "latest:t",
+            "items": [
+              {
+                "id": "t"
+              }
+            ]
+          }
+        ],
+        "preferences": {
+          "order": [
+            "latest:m",
+            "watching",
+            "libraries",
+            "latest:t"
+          ],
+          "mergeWatching": false
+        }
+      },
+      "expected": [
+        {
+          "key": "latest:m",
+          "ids": [
+            "m"
+          ]
+        },
+        {
+          "key": "resume",
+          "ids": [
+            "r"
+          ]
+        },
+        {
+          "key": "nextup",
+          "ids": [
+            "n"
+          ]
+        },
+        {
+          "key": "libraries",
+          "ids": [
+            "l"
+          ]
+        },
+        {
+          "key": "latest:t",
+          "ids": [
+            "t"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "home-order-combined-row-takes-the-separate-rows-place",
+      "operation": "home-rows",
+      "note": "HOME-12: a layout saved while separate has no watching key; turning Combine on shows the combined row where the first of Continue watching or Next up was.",
+      "input": {
+        "rows": [
+          {
+            "key": "resume",
+            "title": "resume",
+            "items": [
+              {
+                "id": "r"
+              }
+            ]
+          },
+          {
+            "key": "nextup",
+            "title": "nextup",
+            "items": [
+              {
+                "id": "n"
+              }
+            ]
+          },
+          {
+            "key": "libraries",
+            "title": "libraries",
+            "items": [
+              {
+                "id": "l"
+              }
+            ]
+          },
+          {
+            "key": "latest:m",
+            "title": "latest:m",
+            "items": [
+              {
+                "id": "m"
+              }
+            ]
+          },
+          {
+            "key": "latest:t",
+            "title": "latest:t",
+            "items": [
+              {
+                "id": "t"
+              }
+            ]
+          }
+        ],
+        "preferences": {
+          "order": [
+            "libraries",
+            "latest:m",
+            "nextup",
+            "resume",
+            "latest:t"
+          ],
+          "mergeWatching": true
+        }
+      },
+      "expected": [
+        {
+          "key": "libraries",
+          "ids": [
+            "l"
+          ]
+        },
+        {
+          "key": "latest:m",
+          "ids": [
+            "m"
+          ]
+        },
+        {
+          "key": "watching",
+          "ids": [
+            "r",
+            "n"
+          ]
+        },
+        {
+          "key": "latest:t",
+          "ids": [
+            "t"
+          ]
+        }
+      ]
     }
   ]
 }

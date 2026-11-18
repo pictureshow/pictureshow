@@ -21,6 +21,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupPositionProvider
+import androidx.compose.ui.window.PopupProperties
 import androidx.compose.ui.unit.dp
 import app.pictureshow.core.*
 import app.pictureshow.core.playback.*
@@ -76,6 +81,13 @@ internal fun SpeedMenu(p: DesktopPlaybackState, c: DesktopController, open: Bool
         open = open, onOpen = onOpen, onDismiss = onDismiss, ceiling = ceiling, chipWidth = 104.dp, refocusOnChoose = true) { c.setSpeed(choices[it]) }
 }
 
+/** Wide enough for the whole word "Chapters" beside its icon and chevron; 132 dp cut it to "Chapt…" (pilot 172). */
+internal val CHAPTERS_CHIP_WIDTH = 152.dp
+
+/** A menu chip's spoken name: "Audio: English", but a chip that shows its own name says it once ("Chapters"). */
+internal fun trackMenuDescription(label: String, chipValue: String, note: String?): String =
+    (if (chipValue == label) label else "$label: $chipValue") + (note?.let { ". $it" } ?: "")
+
 /** PLAY-13: chapters, focus on the one playing; choosing seeks once and returns focus to this button. */
 @Composable
 internal fun ChaptersMenu(p: DesktopPlaybackState, c: DesktopController, open: Boolean, onOpen: () -> Unit, onDismiss: () -> Unit, ceiling: Int) {
@@ -83,7 +95,7 @@ internal fun ChaptersMenu(p: DesktopPlaybackState, c: DesktopController, open: B
     if (chapters.isEmpty() || p.isLiveChannel) return
     TrackMenu("Chapters", "chapters", ExtrasGlyph.Chapters, chapters.mapIndexed { i, ch -> i to desktopChapterLabel(ch, i) },
         desktopCurrentChapter(chapters, (p.positionSeconds * 1000).toLong()), chipValue = "Chapters", note = null,
-        open = open, onOpen = onOpen, onDismiss = onDismiss, ceiling = ceiling, chipWidth = 132.dp, refocusOnChoose = true, onChoose = c::seekChapter)
+        open = open, onOpen = onOpen, onDismiss = onDismiss, ceiling = ceiling, chipWidth = CHAPTERS_CHIP_WIDTH, refocusOnChoose = true, onChoose = c::seekChapter)
 }
 
 /** PLAY-11 and SUB-DL inside the Subtitles menu: timing for the selected subtitle, then Download subtitles. */
@@ -136,19 +148,43 @@ internal fun TrickplayPreview(p: DesktopPlaybackState, c: DesktopController, fra
     }
     val image = sheets[tile.sheet] ?: return
     if (!visible) return
+    TrickplayFrame(image, info, tile, "Preview at ${clock(positionMs / 1000.0)}", x, trackWidth)
+}
+
+/**
+ * The frame itself. It draws in a [Popup], the same layer as the player's menus: the controls band is a Material
+ * Surface, which clips its content, so a frame offset above the seek row was cut off where the video begins (pilot
+ * 172 D2; on macOS and Windows that region of the transparent Compose window shows the native video beneath it).
+ */
+@Composable
+internal fun TrickplayFrame(image: ImageBitmap, info: TrickplayInfo, tile: TrickplayTile, label: String, x: Float, trackWidth: Int) {
     val width: Dp = 192.dp
     val height: Dp = width * info.height / info.width.coerceAtLeast(1)
     val density = androidx.compose.ui.platform.LocalDensity.current
     val w = with(density) { width.roundToPx() }
     val h = with(density) { height.roundToPx() }
-    Surface(shape = RoundedCornerShape(6.dp), tonalElevation = 3.dp, shadowElevation = 6.dp, modifier = Modifier
-        .offset { IntOffset((x - w / 2f).toInt().coerceIn(0, (trackWidth - w).coerceAtLeast(0)), -h - with(density) { 30.dp.roundToPx() }) }
-        .size(width, height).semantics { contentDescription = "Preview at ${clock(positionMs / 1000.0)}" }.probe("trickplay-preview")) {
-        Canvas(Modifier.fillMaxSize()) {
-            drawImage(image, srcOffset = IntOffset(tile.column * info.width, tile.row * info.height), srcSize = IntSize(info.width, info.height),
-                dstSize = IntSize(size.width.toInt(), size.height.toInt()))
+    val gap = with(density) { 30.dp.roundToPx() }
+    val position = remember(x, trackWidth, w, h, gap) {
+        object : PopupPositionProvider {
+            override fun calculatePosition(anchorBounds: IntRect, windowSize: IntSize, layoutDirection: LayoutDirection, popupContentSize: IntSize) =
+                trickplayFramePosition(anchorBounds, windowSize, x, trackWidth, w, h, gap)
         }
     }
+    Popup(popupPositionProvider = position, properties = PopupProperties(focusable = false)) {
+        Surface(shape = RoundedCornerShape(6.dp), tonalElevation = 3.dp, shadowElevation = 6.dp, modifier = Modifier
+            .size(width, height).semantics { contentDescription = label }.probe("trickplay-preview")) {
+            Canvas(Modifier.fillMaxSize()) {
+                drawImage(image, srcOffset = IntOffset(tile.column * info.width, tile.row * info.height), srcSize = IntSize(info.width, info.height),
+                    dstSize = IntSize(size.width.toInt(), size.height.toInt()))
+            }
+        }
+    }
+}
+
+/** Window position of the frame: centred on the pointer within the track, [gap] above the track, inside the window. */
+internal fun trickplayFramePosition(anchor: IntRect, window: IntSize, x: Float, trackWidth: Int, w: Int, h: Int, gap: Int): IntOffset {
+    val left = anchor.left + (x - w / 2f).toInt().coerceIn(0, (trackWidth - w).coerceAtLeast(0))
+    return IntOffset(left.coerceIn(0, (window.width - w).coerceAtLeast(0)), (anchor.top - h - gap).coerceAtLeast(0))
 }
 
 private fun extrasGlyph(name: String, body: androidx.compose.ui.graphics.vector.PathBuilder.() -> Unit) =

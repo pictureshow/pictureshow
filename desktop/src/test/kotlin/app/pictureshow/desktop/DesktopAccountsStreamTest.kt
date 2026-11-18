@@ -336,6 +336,8 @@ class DesktopAccountsStreamTest {
         assertTrue(rows.size > 20)
         assertTrue(rows.all { it.text.length > 200 && it.license.isNotBlank() }, "every row has a license and its full text")
         val ids = rows.map { it.id }.toSet()
+        // Pilot 172 read the AndroidX and JetBrains copies of Compose Runtime as duplicate rows.
+        assertEquals(rows.size, rows.map { it.name }.toSet().size, "every row has its own name: ${rows.groupBy { it.name }.filterValues { it.size > 1 }.keys}")
         assertTrue("org.jetbrains.kotlin:kotlin-stdlib" in ids)
         assertTrue(ids.any { it.startsWith("io.ktor:") })
         val mpv = rows.single { it.id == "mpv-system" }

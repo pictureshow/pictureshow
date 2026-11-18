@@ -114,7 +114,7 @@ class DesktopRoundThreeTest {
                 homeRows=listOf(HomeRow("latest", "Latest", listOf(MediaItem("film")))))
             assertFalse(desktopEntryTarget(state)?.let(::destructiveEntryTarget) ?: false, route.name)
         }
-        assertEquals("quality", desktopEntryTarget(DesktopState(route=DesktopRoute.Settings)))
+        assertEquals("jump:Account", desktopEntryTarget(DesktopState(route=DesktopRoute.Settings)), "Settings opens at its top")
         for (tag in listOf("sign-out", "accounts-sign-out", "remove:key", "remove-confirm", "account-menu:sign-out")) assertTrue(destructiveEntryTarget(tag), tag)
     }
 
