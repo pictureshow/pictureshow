@@ -201,11 +201,32 @@ internal class RemoteTargetHost(
         val usable = next?.takeUnless { it.expired }
         val changed = usable?.key != account?.key || usable?.accessToken != account?.accessToken
         account = usable
-        if (nextPolicy != policy) {
+        val policyChanged = nextPolicy != policy
+        if (policyChanged) {
             policy = nextPolicy
             state = state?.let { reduceRemoteReceive(it, RemoteReceiveEvent("policy", policy = policy, advertised = advertised())) }
         }
-        if (changed) restart() else reconcile()
+        if (changed) {
+            restart()
+            return
+        }
+        reconcile()
+        if (policyChanged) readvertise()
+    }
+
+    /**
+     * The policy changed while a socket stays open (Watch together keeps it): tell the server now, since capabilities
+     * are otherwise posted only when a socket opens. Off posts none, which withdraws the listing.
+     */
+    private fun readvertise() {
+        val target = account ?: return
+        if (!socketConnected || !admitted(target)) return
+        val prior = registration
+        registration = scope.launch {
+            prior?.join()
+            val status = register(target, advertised())
+            if (status !in 200..299) trace("remote capabilities status=$status")
+        }
     }
 
     fun setForeground(value: Boolean) {

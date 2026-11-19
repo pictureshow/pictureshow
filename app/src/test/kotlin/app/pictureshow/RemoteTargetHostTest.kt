@@ -277,6 +277,29 @@ class RemoteTargetHostTest {
         assertEquals(listOf("pause"), rig.player.calls)
     }
 
+    @Test fun withTheGroupSocketOpenOffAndOnApplyAtOnceWithoutARestart() = runTest {
+        // Watch together keeps the socket open while signed in, so a Settings change must re-advertise on it (macOS recheck).
+        val rig = Rig(this)
+        rig.host.requireSyncSocket(true)
+        rig.online(this)
+        rig.watching()
+        val socket = rig.sockets.single()
+        val commands = rig.registered.single()
+        assertTrue(commands.isNotEmpty())
+        rig.host.bind(account, "off")
+        runCurrent()
+        assertFalse(socket.closed, "the group still needs the socket")
+        assertEquals(listOf(emptyList()), rig.registered.drop(1), "Off withdraws at once, not at the next launch")
+        rig.message(this, state("off", "Pause"))
+        assertTrue(rig.player.calls.isEmpty())
+        rig.host.bind(account, "same-viewer")
+        runCurrent()
+        assertEquals(1, rig.sockets.size)
+        assertEquals(commands, rig.registered.last(), "Only you advertises again on the same socket")
+        rig.message(this, state("on", "Pause"))
+        assertEquals(listOf("pause"), rig.player.calls)
+    }
+
     @Test fun aWithdrawalAndARegistrationReachTheServerInThePressOrder() = runTest {
         val rig = Rig(this)
         val slow = CompletableDeferred<Unit>()
