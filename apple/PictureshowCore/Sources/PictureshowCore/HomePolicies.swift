@@ -127,9 +127,10 @@ extension Catalog {
     public static func editableHomeKeys(keys: [String], preferences p: HomePreferences) -> [String] {
         let inactive = p.mergeWatching ? ["resume", "nextup"] : ["watching"]
         var seen = Set<String>()
+        // The same slots Home sorts by (HOME-03), so the editor lists rows where Home shows them after Combine changes.
         return keys.filter { !inactive.contains($0) && seen.insert($0).inserted }.enumerated().sorted {
-            let a = p.order.firstIndex(of: $0.element) ?? Int.max, b = p.order.firstIndex(of: $1.element) ?? Int.max
-            return a == b ? $0.offset < $1.offset : a < b
+            let a = homeRowSlot($0.element, p.order), b = homeRowSlot($1.element, p.order)
+            return a == b ? $0.offset < $1.offset : (a.0, a.1) < (b.0, b.1)
         }.map(\.element)
     }
     public static func moveHomeRow(order: [String], visible: [String], key: String, delta: Int) -> [String] {

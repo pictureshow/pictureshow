@@ -2331,6 +2331,9 @@ enum SpecCaseManifest {
         editor-combined-only|home-browse/editor-visible-rows
         editor-separate-only-retains-hidden|home-browse/editor-visible-rows
         editor-sort-dedupe|home-browse/editor-visible-rows
+        editor-separate-rows-take-the-combined-row-place|home-browse/editor-visible-rows
+        editor-combined-row-takes-the-separate-rows-place|home-browse/editor-visible-rows
+        editor-move-after-combine-off-keeps-resume-rows-on-top|home-browse/editor-move-sequence
         move-retains-dormant|home-browse/editor-move-row
         move-up-boundary|home-browse/editor-move-row
         move-down-boundary|home-browse/editor-move-row

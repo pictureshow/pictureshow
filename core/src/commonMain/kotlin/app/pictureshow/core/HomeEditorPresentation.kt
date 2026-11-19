@@ -12,8 +12,10 @@ fun homeRowEditHint(shown: Boolean, moving: Boolean, tv: Boolean): String? = bui
 /** The editor presents only rows that can actually appear in the current watching mode. */
 fun editableHomeKeys(keys: List<String>, preferences: HomePreferences): List<String> {
     val inactive = if (preferences.mergeWatching) setOf("resume", "nextup") else setOf("watching")
+    // The same slots Home sorts by, so after Combine is switched the editor lists the rows where Home shows them, and
+    // a move saves that order rather than dropping Continue watching and Next up below every Latest row.
     return keys.distinct().filterNot { it in inactive }
-        .sortedBy { preferences.order.indexOf(it).takeIf { index -> index >= 0 } ?: Int.MAX_VALUE }
+        .sortedWith(compareBy({ homeRowSlot(it, preferences.order).first }, { homeRowSlot(it, preferences.order).second }))
 }
 
 /** Reorder the visible rows while retaining dormant mode rows in the saved order. */

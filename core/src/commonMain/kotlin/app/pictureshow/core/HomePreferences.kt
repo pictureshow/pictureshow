@@ -104,7 +104,7 @@ fun customizedHome(rows: List<HomeRow>, preferences: HomePreferences): List<Home
  * Combine off puts Continue watching then Next up where the combined row was, and turning it on puts the combined
  * row where the first of them was, instead of below every Latest row. Unknown rows keep their order at the end.
  */
-private fun homeRowSlot(key: String, order: List<String>): Pair<Int, Int> {
+internal fun homeRowSlot(key: String, order: List<String>): Pair<Int, Int> {
     val saved = order.distinct()
     fun at(k: String) = saved.indexOf(k).takeIf { it >= 0 }
     at(key)?.let { return it to 0 }

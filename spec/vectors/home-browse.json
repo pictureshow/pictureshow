@@ -1091,6 +1091,97 @@
       ]
     },
     {
+      "id": "editor-separate-rows-take-the-combined-row-place",
+      "operation": "editor-visible-rows",
+      "note": "HOME-03: the editor lists rows in Home's order after Combine is turned off (Android pilot 172).",
+      "input": {
+        "keys": [
+          "resume",
+          "nextup",
+          "watching",
+          "libraries",
+          "latest:m",
+          "latest:t"
+        ],
+        "preferences": {
+          "order": [
+            "latest:m",
+            "watching",
+            "libraries",
+            "latest:t"
+          ],
+          "mergeWatching": false
+        }
+      },
+      "expected": [
+        "latest:m",
+        "resume",
+        "nextup",
+        "libraries",
+        "latest:t"
+      ]
+    },
+    {
+      "id": "editor-combined-row-takes-the-separate-rows-place",
+      "operation": "editor-visible-rows",
+      "note": "HOME-03: the editor lists rows in Home's order after Combine is turned on.",
+      "input": {
+        "keys": [
+          "resume",
+          "nextup",
+          "watching",
+          "libraries",
+          "latest:m",
+          "latest:t"
+        ],
+        "preferences": {
+          "order": [
+            "libraries",
+            "latest:m",
+            "nextup",
+            "resume",
+            "latest:t"
+          ],
+          "mergeWatching": true
+        }
+      },
+      "expected": [
+        "libraries",
+        "latest:m",
+        "watching",
+        "latest:t"
+      ]
+    },
+    {
+      "id": "editor-move-after-combine-off-keeps-resume-rows-on-top",
+      "operation": "editor-move-sequence",
+      "note": "HOME-03: moving any row after Combine is turned off saves Continue watching and Next up where Home showed them, not at the bottom.",
+      "input": {
+        "order": [
+          "watching",
+          "latest:m",
+          "latest:t"
+        ],
+        "visible": [
+          "resume",
+          "nextup",
+          "latest:m",
+          "latest:t"
+        ],
+        "key": "latest:t",
+        "deltas": [
+          -1
+        ]
+      },
+      "expected": [
+        "watching",
+        "resume",
+        "nextup",
+        "latest:t",
+        "latest:m"
+      ]
+    },
+    {
       "id": "move-retains-dormant",
       "operation": "editor-move-row",
       "input": {
