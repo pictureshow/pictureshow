@@ -259,7 +259,9 @@ class DesktopAccountsStreamTest {
             assertEquals(SeerrError.PASSWORD, seerr.state.value.connectError)
             assertFalse(seerr.state.value.connected)
             seerr.connect(url, null, "Ana", "right") { true }
-            await("connected") { seerr.state.value.connected }
+            // The store's listener marks the viewer connected before the connect job's own last step closes the
+            // dialog, so wait for that step too.
+            await("connected") { seerr.state.value.connected && !seerr.state.value.connecting }
             assertEquals("Ana", seerr.state.value.config?.user?.name)
             assertFalse(seerr.state.value.connectOpen)
             val saved = File(d, "seerr.json").readText()
