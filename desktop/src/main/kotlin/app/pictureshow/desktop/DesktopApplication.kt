@@ -92,8 +92,9 @@ fun desktopMain(args: Array<String>) {
                 }
                 controller.attachWindow(window)
                 controller.start()
-                // Stream E: a remote target and Watch together need a live server socket; the smoke run stays off the server's session list.
-                if(!smoke) controller.startTogether()
+                // Stream E: remote target and Watch together. The smoke starts them too, on its own disposable server, so a
+                // startup throw here (a missing Main dispatcher stopped the macOS app at launch, 2026-11-19) fails CI.
+                controller.startTogether()
                 if(smoke) Thread { runDesktopSmoke(controller,window,state,args.drop(1)) { close("smoke") } }.apply { name="desktop-ui-smoke";isDaemon=true;start() }
             }
             DisposableEffect(window) {

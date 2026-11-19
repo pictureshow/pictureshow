@@ -450,7 +450,10 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
         check(c.state.value.errorKind==ErrorKind.INVALID_CREDENTIALS) { "Cursor movement cleared the credential rejection" };screenshot("02b-sign-in-error");screenshot("02b-sign-in-error-minimum",listOf(800 to 600))
         click("password");repeat(32) { key(KeyEvent.VK_RIGHT) };repeat(32) { key(KeyEvent.VK_BACK_SPACE) };type(password)
         click("sign-in");ready(DesktopRoute.Home);checks["passwordSignIn"]=true
-        waitFor("home rows") { c.state.value.homeRows.any { it.items.isNotEmpty() } };checks["home"]=true;screenshot("03-home");screenshot("03b-home-minimum",listOf(800 to 600));if(System.getenv("PICTURESHOW_SMOKE_4K")=="1") screenshot("03c-home-4k",listOf(3840 to 2160))
+        waitFor("home rows") { c.state.value.homeRows.any { it.items.isNotEmpty() } };checks["home"]=true
+        // The remote/Watch-together socket the app started at launch is attached to this viewer's server session.
+        waitFor("watch together socket") { c.together?.remote?.syncSocketReady == true };checks["togetherSocket"]=true
+        screenshot("03-home");screenshot("03b-home-minimum",listOf(800 to 600));if(System.getenv("PICTURESHOW_SMOKE_4K")=="1") screenshot("03c-home-4k",listOf(3840 to 2160))
         val library=firstLibrary();click("nav:library:${library.id}");ready(DesktopRoute.Library);waitFor("library items"){c.state.value.items.isNotEmpty()};checks["library"]=true;screenshot("04-library");screenshot("04b-library-minimum",listOf(800 to 600))
         click("sort");click("sort:DateCreated");waitFor("sort applied"){c.state.value.sortBy=="DateCreated"&&!c.state.value.busy};checks["sort"]=true
         val movie=c.state.value.items.first{it.name=="Signal One"};click("grid:${movie.id}");ready(DesktopRoute.Detail);checks["detail"]=true;screenshot("05-movie-detail");screenshot("05b-detail-minimum",listOf(800 to 600));if(System.getenv("PICTURESHOW_SMOKE_4K")=="1") screenshot("05c-detail-4k",listOf(3840 to 2160))

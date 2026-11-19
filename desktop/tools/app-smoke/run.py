@@ -42,7 +42,7 @@ ARCHIVES = {
 REQUIRED_CHECKS = frozenset({
     "server", "passwordSignIn", "home", "library", "sort", "detail",
     "seasons", "episodes", "resume", "playback", "progress", "audio",
-    "subtitles", "nextEpisode", "settings", "quickConnect", "conversion", "autoplayNext",
+    "subtitles", "nextEpisode", "settings", "quickConnect", "conversion", "autoplayNext", "togetherSocket",
 })
 
 
