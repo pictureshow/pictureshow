@@ -71,7 +71,12 @@ class DesktopTogetherTest {
         override fun audio(index: Int) { calls += "audio:$index" }
         override fun subtitle(index: Int) { calls += "subtitle:$index" }
         override fun engineSeek(positionMs: Long) { calls += "engine-seek:$positionMs" }
-        override fun enginePlaying(playing: Boolean) { calls += "engine-playing:$playing" }
+        /** mpv before its core is initialized: commands throw "core not initialized" (macOS recheck log). */
+        @Volatile var engineUp = true
+        override fun enginePlaying(playing: Boolean) {
+            check(engineUp) { "core not initialized" }
+            calls += "engine-playing:$playing"
+        }
         override fun engineSpeed(rate: Double): Boolean { calls += "engine-speed:$rate"; return true }
     }
 
@@ -239,6 +244,29 @@ class DesktopTogetherTest {
         assertFalse(rig.playback.calls.any { it == "toggle" }, "and not straight to this player")
         assertTrue(rig.together.ended(), "a genuine end in a group: the group decides what plays next, no local autoplay")
         assertTrue(groupQueueRequest(rig.together.sync, RemoteEffect("open", listOf(film), 0, null, generation = 1)), "a remote Play in a group goes to the group queue")
+    }
+
+    @Test fun aPlayerThatRefusesThePauseBeforeItIsUpStillGetsItAndBackShowsTheStayBar() = together {
+        val rig = Rig(this)
+        rig.online()
+        rig.joinGroup()
+        rig.playback.engineUp = false
+        val viewing = Any()
+        rig.playback.video = DesktopTogetherVideo(viewing, film, "Movie", 0, 600_000, ready = false, paused = false, live = false)
+        testScheduler.advanceTimeBy(DesktopTogether.OBSERVE_MS * 2)
+        runCurrent()
+        assertTrue(rig.logs.any { "engine not ready" in it }, "the refused pause is held: ${rig.logs}")
+        rig.playback.engineUp = true
+        testScheduler.advanceTimeBy(DesktopTogether.OBSERVE_MS * 2)
+        runCurrent()
+        assertTrue("engine-playing:false" in rig.playback.calls, "the group's pause reaches the engine once it is up: ${rig.playback.calls}")
+        // Back: the viewing closes, and the hosts must still be watching to see it go.
+        rig.together.closing(app.pictureshow.core.sync.SyncCloseReason.STOP_BUTTON)
+        rig.playback.video = null
+        testScheduler.advanceTimeBy(DesktopTogether.OBSERVE_MS * 2)
+        runCurrent()
+        assertTrue(rig.together.participating)
+        assertTrue(rig.together.sync.stayReminder != null, "Still in Evening · Leave shows under the page")
     }
 
     @Test fun leavingTheGroupHandsTheControlsBack() = together {

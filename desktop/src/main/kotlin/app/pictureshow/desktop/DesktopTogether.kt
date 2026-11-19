@@ -171,9 +171,18 @@ internal class DesktopTogether(
         scope.launch { remote.navigation.collect { name -> log("remote navigation name=$name") } }
         scope.launch { sync.opens.collect(::openFromGroup) }
         // The player's state as the hosts see it: what a remote reads, and the bridge/renderer binding per viewing.
+        // One failed look must not end the loop: it is also what unbinds a closed player, so the stay bar and the remote's
+        // view of this device depend on it (macOS recheck: mpv refused a pause before it was initialized, the loop died,
+        // and the bar never came back after Back).
         scope.launch {
             while (true) {
-                observe()
+                try {
+                    observe()
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    log("together observe failed error=${e.javaClass.simpleName}")
+                }
                 kotlinx.coroutines.delay(OBSERVE_MS)
             }
         }
@@ -220,7 +229,10 @@ internal class DesktopTogether(
                 remote.clearPlayer(old)
             }
             videoToken = video?.token
+            heldPlaying = null
             if (video != null) bindVideo(video)
+        } else if (video != null) {
+            retryHeldPlaying(video)
         }
         if (video != null) {
             remote.report(video.token, RemoteViewing(video.itemId, video.ready, video.durationMs * 10_000, video.positionMs * 10_000, video.paused, !video.live))
@@ -238,7 +250,27 @@ internal class DesktopTogether(
         } else {
             null
         }
-        if (!sync.bindRenderer(video.token, renderer, selection, opening)) playback.enginePlaying(false)
+        if (!sync.bindRenderer(video.token, renderer, selection, opening)) enginePlaying(false)
+    }
+
+    /**
+     * The group's play/pause for a player that could not take it yet (mpv before its core is up refuses commands).
+     * Retried on each look until the engine takes it or a newer choice replaces it.
+     */
+    private var heldPlaying: Boolean? = null
+
+    private fun enginePlaying(playing: Boolean) {
+        heldPlaying = if (runCatching { playback.enginePlaying(playing) }.isSuccess) null else playing
+        if (heldPlaying != null) log("together engine not ready; holding playing=$playing")
+    }
+
+    private fun retryHeldPlaying(video: DesktopTogetherVideo) {
+        val playing = heldPlaying ?: return
+        if (playing != video.paused) {
+            heldPlaying = null
+            return
+        }
+        enginePlaying(playing)
     }
 
     private fun observeMusic(free: Boolean) {
@@ -302,12 +334,14 @@ internal class DesktopTogether(
         override fun apply(positionTicks: Long?, playing: Boolean?, rate: Double): Boolean {
             val v = playback.video() ?: return false
             var sought = false
+            // Never throw into the host: an engine that isn't up yet refuses, and the group corrects it on a later tick.
             if (positionTicks != null && kotlin.math.abs(v.positionMs - positionTicks / 10_000) > 1) {
-                playback.engineSeek(positionTicks / 10_000)
-                sought = true
+                sought = runCatching { playback.engineSeek(positionTicks / 10_000) }.isSuccess
             }
-            playback.engineSpeed(rate)
-            if (playing != null && playing == v.paused) playback.enginePlaying(playing)
+            runCatching { playback.engineSpeed(rate) }
+            if (playing != null) {
+                if (playing == v.paused) enginePlaying(playing) else heldPlaying = null
+            }
             if (sought) {
                 // mpv takes a seek as soon as it is asked; tell the group once this call has returned.
                 val self = this
