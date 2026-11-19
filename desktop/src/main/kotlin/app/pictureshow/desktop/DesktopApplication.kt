@@ -92,6 +92,8 @@ fun desktopMain(args: Array<String>) {
                 }
                 controller.attachWindow(window)
                 controller.start()
+                // Stream E: a remote target and Watch together need a live server socket; the smoke run stays off the server's session list.
+                if(!smoke) controller.startTogether()
                 if(smoke) Thread { runDesktopSmoke(controller,window,state,args.drop(1)) { close("smoke") } }.apply { name="desktop-ui-smoke";isDaemon=true;start() }
             }
             DisposableEffect(window) {

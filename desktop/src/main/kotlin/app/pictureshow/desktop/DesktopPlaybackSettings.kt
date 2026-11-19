@@ -41,7 +41,8 @@ internal fun readDesktopPlayback(p: Properties): PlaybackPreferences = PlaybackP
     passthrough = p.getProperty("passthrough")?.toBooleanStrictOrNull() ?: false,
     subtitleSize = p.getProperty("subtitleSize"),
     subtitleBackground = p.getProperty("subtitleBackground"),
-    segmentModes = SegmentType.entries.filter { it != SegmentType.Unknown }.associateWith { p.getProperty(segmentKey(it)) }
+    segmentModes = SegmentType.entries.filter { it != SegmentType.Unknown }.associateWith { p.getProperty(segmentKey(it)) },
+    remoteReceiver = p.getProperty("remoteReceiver")
 ).copy(
     tuning = PlaybackPreferenceJson.tuning(p.getProperty("tuning")),
     subtitleStyle = PlaybackPreferenceJson.style(p.getProperty("subtitleStyle"))
@@ -49,6 +50,7 @@ internal fun readDesktopPlayback(p: Properties): PlaybackPreferences = PlaybackP
 
 internal fun writeDesktopPlayback(p: Properties, prefs: PlaybackPreferences) {
     p.setProperty("passthrough", prefs.passthrough.toString())
+    p.setProperty("remoteReceiver", prefs.remoteReceiver)
     p.setProperty("subtitleSize", prefs.subtitleSize.name)
     p.setProperty("subtitleBackground", prefs.subtitleBackground.name)
     SegmentType.entries.filter { it != SegmentType.Unknown }.forEach { type ->
@@ -170,6 +172,8 @@ internal fun DesktopPlaybackRows(s: DesktopSettings, c: DesktopController) {
 }
 
 private val COLOR_CHOICES = SubtitleStyle.COLORS.map { it to if (it == "System") "Default" else it }
+internal val DESKTOP_REMOTE_RECEIVER_CHOICES = listOf("same-viewer" to "Only you", "server-allowed" to "Anyone this server allows", "off" to "Off")
+
 private val OPACITY_CHOICES = listOf(0, 25, 50, 75, 80, 100).map { it to "$it%" }
 
 /** SET-03/04/15 and SET-05, SET-06..08, SET-02/19: the sections after Playback. */
@@ -223,6 +227,11 @@ internal fun DesktopPlaybackSections(state: DesktopState, c: DesktopController) 
             }
         }
         server.error?.takeIf { config != null }?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+    }
+    // Stream E, REM-07: who may play and control things on this computer from another device.
+    SettingsSection("Remote control") {
+        ChoiceRow("Control from other devices", "Who can play and control things on this computer from a phone or another Pictureshow while it's open.",
+            DESKTOP_REMOTE_RECEIVER_CHOICES, prefs.remoteReceiver, "remote-receiver") { save(prefs.copy(remoteReceiver = it)) }
     }
     SettingsSection("Audio") {
         val tuning = prefs.tuning

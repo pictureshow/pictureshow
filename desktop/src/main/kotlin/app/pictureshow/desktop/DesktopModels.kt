@@ -10,7 +10,9 @@ enum class DesktopRoute { Loading, Servers, Accounts, SignIn, QuickConnect, Home
     /** Stream B: MUS-01..03. */
     MusicLibrary, MusicItem, MusicNow,
     /** Stream C2: SEERR-03..06 and INFO-01..08. */
-    Requests, SeerrTitle, About, Licenses, License, Supporter, ThisComputer }
+    Requests, SeerrTitle, About, Licenses, License, Supporter, ThisComputer,
+    /** Stream E: SYN-01..11 and REM-01..09. */
+    WatchTogether, Remote }
 
 data class DesktopSettings(
     val bitrateMbps: Int? = null,

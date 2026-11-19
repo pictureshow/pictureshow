@@ -250,7 +250,7 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                 Row(Modifier.fillMaxWidth().height(52.dp).background(MaterialTheme.colorScheme.surface).padding(start = if(macChrome) 80.dp else 28.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("PICTURESHOW", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.width(20.dp))
-                    if (state.route in setOf(DesktopRoute.SignIn, DesktopRoute.QuickConnect, DesktopRoute.Detail, DesktopRoute.Player, DesktopRoute.Library, DesktopRoute.LiveTv, DesktopRoute.Settings, DesktopRoute.Search, DesktopRoute.Person, DesktopRoute.HomeEditor, DesktopRoute.MusicLibrary, DesktopRoute.MusicItem, DesktopRoute.MusicNow) || state.route in DESKTOP_ACCOUNTS_ROUTES || (state.route == DesktopRoute.Accounts && state.account != null)) TextButton(onClick = controller::back, modifier = Modifier.controlFocus().probe("back")) { Icon(DesktopGlyph.Back, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Back") }
+                    if (state.route in setOf(DesktopRoute.SignIn, DesktopRoute.QuickConnect, DesktopRoute.Detail, DesktopRoute.Player, DesktopRoute.Library, DesktopRoute.LiveTv, DesktopRoute.Settings, DesktopRoute.Search, DesktopRoute.Person, DesktopRoute.HomeEditor, DesktopRoute.MusicLibrary, DesktopRoute.MusicItem, DesktopRoute.MusicNow, DesktopRoute.WatchTogether, DesktopRoute.Remote) || state.route in DESKTOP_ACCOUNTS_ROUTES || (state.route == DesktopRoute.Accounts && state.account != null)) TextButton(onClick = controller::back, modifier = Modifier.controlFocus().probe("back")) { Icon(DesktopGlyph.Back, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Back") }
                     Spacer(Modifier.weight(1f))
                     DesktopUtility("Keyboard shortcuts", DesktopGlyph.Keyboard, "shortcuts") { modalReturnFocus = "shortcuts"; help = true }
                     DesktopUtility(if(fullscreen) "Exit fullscreen" else "Fullscreen", DesktopGlyph.Fullscreen, "fullscreen", onFullscreen)
@@ -274,6 +274,7 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                             onSettings = { if (state.route != DesktopRoute.Settings) controller.settings() },
                             onAccounts = controller::accounts,
                             onRequests = controller::openRequests.takeIf { controller.seerr.state.collectAsState().value.connected },
+                            together = controller.together?.let { { DesktopTogetherNav(controller, state.route) } },
                             onSignOut = { modalReturnFocus = "nav:account"; signOut = state.account }
                         )
                     }
@@ -310,6 +311,8 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                                 DesktopRoute.MusicLibrary -> DesktopMusicLibraryPage(state, controller)
                                 DesktopRoute.MusicItem -> DesktopMusicItemPage(state, controller)
                                 DesktopRoute.MusicNow -> DesktopMusicNowPage(controller)
+                                DesktopRoute.WatchTogether -> DesktopWatchTogetherPage(controller)
+                                DesktopRoute.Remote -> DesktopRemotePage(controller)
                             }
                             }
                             }
@@ -318,6 +321,7 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                 }
                 // MUS-03/04: music keeps playing while browsing; the bar stays put under every page but the player and Now playing.
                 if (state.account != null && state.route !in setOf(DesktopRoute.Player, DesktopRoute.MusicNow, DesktopRoute.SignIn, DesktopRoute.QuickConnect, DesktopRoute.Servers)) DesktopMusicMiniBar(controller)
+                if (state.account != null && state.route != DesktopRoute.Player) DesktopTogetherBar(controller)
             }
             val windowHeight = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.height.toDp() }
             musicUi.prompt?.let { DesktopMusicReplacePrompt(controller, it) }
@@ -383,7 +387,8 @@ internal fun DesktopSidebar(
     onAccounts: () -> Unit,
     onSignOut: () -> Unit,
     onSearch: () -> Unit = {},
-    onRequests: (() -> Unit)? = null
+    onRequests: (() -> Unit)? = null,
+    together: (@Composable () -> Unit)? = null
 ) {
     Column(Modifier.width(SIDEBAR_WIDTH_DP.dp).fillMaxHeight().background(MaterialTheme.colorScheme.surfaceContainer).padding(vertical = 12.dp).testTag("sidebar")) {
         DesktopAccountMenu(account, onSettings, onAccounts, onSignOut, Modifier.padding(horizontal = 12.dp))
@@ -405,6 +410,7 @@ internal fun DesktopSidebar(
         // Search and Settings stay reachable independently of the number of libraries.
         Column(Modifier.padding(horizontal = 12.dp).testTag("sidebar-footer"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             onRequests?.let { SidebarItem("Requests", root == DESKTOP_ROOT_REQUESTS, "nav:requests", it) }
+            together?.invoke()
             SidebarItem("Search", root == DESKTOP_ROOT_SEARCH, "nav:search", onSearch)
             SidebarItem("Settings", root == DESKTOP_ROOT_SETTINGS, "nav:settings", onSettings)
         }
@@ -413,7 +419,7 @@ internal fun DesktopSidebar(
 
 /** A destination: up to two lines, and a tooltip with the full name when even two don't fit (D-14). */
 @Composable
-private fun SidebarItem(label: String, selected: Boolean, tag: String, onClick: () -> Unit) {
+internal fun SidebarItem(label: String, selected: Boolean, tag: String, onClick: () -> Unit) {
     var clipped by remember(label) { mutableStateOf(false) }
     TooltipArea(
         tooltip = { if (clipped) Surface(color = MaterialTheme.colorScheme.inverseSurface, shape = RoundedCornerShape(4.dp)) {
@@ -529,6 +535,8 @@ internal fun desktopEntryTarget(state: DesktopState): String? = when(state.route
     DesktopRoute.MusicLibrary -> "music:tab:ALBUMS"
     DesktopRoute.MusicItem -> "music:play"
     DesktopRoute.MusicNow -> "music:now:toggle"
+    DesktopRoute.WatchTogether -> "together-refresh"
+    DesktopRoute.Remote -> "remote-disconnect"
     else -> desktopAccountsEntryTarget(state)
 }
 

@@ -197,6 +197,7 @@ fun PlayerPage(state: DesktopState, c: DesktopController, fullscreen: () -> Unit
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(if (p.isLiveChannel) livePlayerProgram(p.liveChannel, System.currentTimeMillis())?.name ?: p.item.name else p.item.name, Modifier.weight(1f, fill = false), style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    DesktopSyncChip(c) // Stream E: SYN-08, shown only while in a group.
                     val video = p.decision.mediaSource.mediaStreams.firstOrNull { it.type == MediaStreamType.Video }
                     val sourceRange = PlaybackFormatInformation.range(video?.videoRangeType, video?.dvProfile)
                     DesktopTooltip("$sourceRange source · ${PlaybackFormatInformation.display(p.received.transfer, p.received.output)} · Playback info", above = true) {

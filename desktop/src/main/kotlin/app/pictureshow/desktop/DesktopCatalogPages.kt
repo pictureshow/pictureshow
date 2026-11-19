@@ -251,6 +251,7 @@ internal fun DetailPage(state: DesktopState, c: DesktopController) {
                         val (playLabel, playFromStart) = desktopDetailPlay(item, state.finished)
                         Button(onClick={c.play(item, playFromStart)},enabled=!state.busy,modifier = Modifier.controlFocus().heightIn(min=48.dp).probe("play")) { Text(playLabel) }
                         if(!playFromStart && item.userData.playbackPositionTicks>0) OutlinedButton(onClick={c.play(item,true)},modifier = Modifier.controlFocus().heightIn(min=48.dp).probe("play-start")) { Text("Play from start") }
+                        if (!item.isFolder && item.type in DESKTOP_REMOTE_VIDEO_TYPES + "Audio") DesktopPlayOnButton(c, item)
                         Row(verticalAlignment = Alignment.CenterVertically) {
                         DesktopTooltip(if (item.isWatched) "Mark unwatched" else "Mark watched") {
                             IconToggleButton(checked = item.isWatched, onCheckedChange = { c.toggleWatched() }, modifier = Modifier.controlFocus().probe("watched").semantics { contentDescription = "Watched"; stateDescription = if (item.isWatched) "Watched" else "Not watched" }) {

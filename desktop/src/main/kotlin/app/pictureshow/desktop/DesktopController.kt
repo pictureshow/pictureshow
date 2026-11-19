@@ -50,6 +50,8 @@ class DesktopController(
     /** INFO-01..08 (DesktopInformation.kt). */
     val information = DesktopInformation(scope, { mutable.value.settings }, nativeMpvProbe(File(directory, "probe")))
     internal val appVersion: String get() = identity.version
+    /** Stream E (DesktopTogether.kt): remote control both ways and Watch together. The app starts it; tests don't. */
+    @Volatile internal var together: DesktopTogether? = null
     internal val generation = AtomicLong()
     private val extrasLoader = DesktopPlayerExtrasLoader(http, identity)
     internal val viewerInput = DesktopViewerInput()
@@ -110,7 +112,9 @@ class DesktopController(
         @Volatile var ended: Boolean = false, @Volatile var endPosition: Double = 0.0,
         /** The media itself failed (decoder/stream error). Only this is reported to the server as Failed. */
         @Volatile var playbackFailed: Boolean = false,
-        @Volatile var muted: Boolean = false
+        @Volatile var muted: Boolean = false,
+        /** Stream E: where this viewing started, for a title picked while in a Watch-together group. */
+        val startMs: Long = 0
     )
     private fun takeCarriedReportError(): String? = carriedReportError.also { carriedReportError = null }
 
@@ -776,7 +780,7 @@ class DesktopController(
         val si = negotiatedSubtitle ?: StreamDefaults.choose(streams, MediaStreamType.Subtitle, decision.mediaSource.defaultSubtitleStreamIndex, java.util.Locale.getDefault().language)
         window?.let(player::attach)
         engine = player
-        val v = Viewing(a, item, decision, player, audioChosen = audioChosen, subtitleChosen = subtitleChosen)
+        val v = Viewing(a, item, decision, player, audioChosen = audioChosen, subtitleChosen = subtitleChosen, startMs = (start * 1000).toLong())
         viewing = v
         val notice = if (mutable.value.settings.conversionNotice) ConversionNotice.of(decision, si, "this computer") else null
         publish(g) { it.copy(playback = DesktopPlaybackState(item, decision, notice, streams.filter { t -> t.type == MediaStreamType.Audio }, streams.filter { t -> t.type == MediaStreamType.Subtitle }, ai, si, positionSeconds = start, durationSeconds = (item.runTimeTicks ?: 0).toDouble() / 10_000_000, liveChannel = liveChannel,
@@ -905,7 +909,9 @@ class DesktopController(
             if (snap.paused && w.pausedPositionExpired(pausedLivePosition)) { goLive(); return }
             pausedLivePosition = if (!snap.paused) (snap.positionSeconds * 1000).toLong() else null
         }
-        if (viewing?.closing == true) return; engine?.togglePause(); viewing?.let { v -> scope.launch { delay(100); if (viewing === v) sendProgress(v) } } }
+        if (viewing?.closing == true) return
+        if (together?.transport(if (p?.paused == true) "play" else "pause") == true) return
+        engine?.togglePause(); viewing?.let { v -> scope.launch { delay(100); if (viewing === v) sendProgress(v) } } }
     fun seek(seconds: Double) {
         if (viewing?.closing == true || !seconds.isFinite()) return
         val p = mutable.value.playback
@@ -921,6 +927,7 @@ class DesktopController(
         }
         val duration = mutable.value.playback?.durationSeconds?.takeIf { it > 0 }
         val target = seconds.coerceAtLeast(0.0).let { if (duration != null) it.coerceAtMost(duration) else it }
+        if (together?.transport("seek", (target * 1000).toLong()) == true) return
         engine?.seek(target)
         seekTarget = target; seekTargetAt = System.nanoTime()
         updateState { s -> s.copy(playback = s.playback?.copy(positionSeconds = target)) }
@@ -1078,6 +1085,7 @@ class DesktopController(
     /** Manual "Next episode" in the control bar, or Play now on the end card. */
     fun nextEpisode() {
         val p = mutable.value.playback ?: return
+        if (p.end == null && together?.transport("next") == true) return
         val next = p.end?.next ?: p.nextEpisode
         if (next == null) { stopPlayback(); return }
         val a = mutable.value.account ?: return
@@ -1096,6 +1104,7 @@ class DesktopController(
         page(DesktopRoute.Player) { g -> finishViewing(); prepareViewing(g, a, item, 0.0) }
     }
     fun stopPlayback() {
+        together?.closing(if (mutable.value.playback?.end != null) app.pictureshow.core.sync.SyncCloseReason.CLOSE else app.pictureshow.core.sync.SyncCloseReason.STOP_BUTTON)
         if (mutable.value.playback?.let { it.liveChannel != null || it.decision.isLive } == true) {
             synchronized(history) { if (history.lastOrNull()?.route == DesktopRoute.LiveTv) history.removeAt(history.lastIndex) }
             page(DesktopRoute.LiveTv) { g ->
@@ -1130,7 +1139,9 @@ class DesktopController(
         patchPlaybackData(v.item, v.endPosition, true)
         val next = mutable.value.playback?.nextEpisode
         val configured = endCountdownSeconds?.coerceAtLeast(0) ?: mutable.value.settings.preferences().tuning.nextEpisodeCountdownSeconds.takeIf { it > 0 }
-        val autoplay = next != null && mutable.value.settings.autoplayNext && configured != null
+        // SYN: in a group the group decides what plays next; this device doesn't continue on its own.
+        val grouped = together?.ended() == true
+        val autoplay = !grouped && next != null && mutable.value.settings.autoplayNext && configured != null
         // PLAY-30: after enough episodes in a row, or long enough without a key press, ask instead of counting down.
         val ask = autoplay && viewerInput.due(mutable.value.settings.preferences().tuning.stillWatching)
         val countdown = if (autoplay && !ask) configured else null
@@ -1241,7 +1252,63 @@ class DesktopController(
             }
         }
     }
-    suspend fun shutdown() { music.closeNow(); detachWindow(); inputDiagnostics.heartbeat(); closing = true; generation.incrementAndGet(); pageJob?.cancelAndJoin(); withContext(NonCancellable) { finishViewing() }; scope.cancel(); http.close() }
+    /** Stream E: start being a remote target, a remote controller and a Watch-together member (DesktopTogether.kt). */
+    fun startTogether(hostDispatcher: CoroutineDispatcher = Dispatchers.Main) {
+        if (together != null) return
+        val t = DesktopTogether(togetherPlayback, http, identity, hostDispatcher, log = { events.log(it) }, admitted = { pins.admits(it.key) })
+        t.lookups(item = { a, id -> client.item(a, id) }, items = { a, ids -> desktopItemsById(client, a, ids) })
+        together = t
+        t.scope.launch {
+            t.start(state.map { it.account }.distinctUntilChanged(), state.map { it.settings.playback.remoteReceiver }.distinctUntilChanged())
+            pins.state.map { pins.gated() || !pins.admits(mutable.value.account?.key) }.distinctUntilChanged().collect { t.lockChanged(it) }
+        }
+    }
+    /** What the remote and group hosts may do to playback; the group's corrections go straight to the engine. */
+    internal val togetherPlayback = object : DesktopTogetherPlayback {
+        override fun video(): DesktopTogetherVideo? {
+            val v = viewing?.takeIf { !it.closing && !it.stopped } ?: return null
+            val p = mutable.value.playback?.takeIf { it.item.id == v.item.id } ?: return null
+            val snap = runCatching { v.engine.snapshot() }.getOrNull()
+            val duration = snap?.durationSeconds?.takeIf { it > 0 } ?: p.durationSeconds
+            return DesktopTogetherVideo(v, v.item.id, v.item.type, ((snap?.positionSeconds ?: p.positionSeconds) * 1000).toLong(), (duration * 1000).toLong(),
+                (snap?.ready ?: p.ready) && p.end == null, snap?.paused ?: p.paused, p.liveChannel != null || p.decision.isLive, v.playbackFailed || snap?.error != null, v.startMs)
+        }
+        override fun music(): DesktopMusic = this@DesktopController.music
+        override fun open(itemId: String, startMs: Long?, admit: suspend (Boolean) -> Boolean) { openFor(itemId, startMs, admit) }
+        override fun toggle() = playerToggle()
+        override fun seek(positionMs: Long) = seek(positionMs / 1000.0)
+        override fun stop() = stopPlayback()
+        override fun nextEpisode() = this@DesktopController.nextEpisode()
+        override fun audio(index: Int) = selectAudio(index)
+        override fun subtitle(index: Int) = selectSubtitle(index)
+        override fun engineSeek(positionMs: Long) { engine?.seek(positionMs / 1000.0) }
+        override fun enginePlaying(playing: Boolean) {
+            val e = engine ?: return
+            if (runCatching { e.snapshot().paused }.getOrDefault(playing) == playing) e.togglePause()
+        }
+        override fun engineSpeed(rate: Double): Boolean = runCatching { engine?.speed(rate.toFloat()) == true }.getOrDefault(false)
+    }
+    /**
+     * Stream E: a title a remote or the Watch-together group opens. It resolves first and asks [admit] (on the host's thread)
+     * before anything changes on screen, so a stale or refused command leaves the page as it is.
+     */
+    internal fun openFor(itemId: String, startMs: Long?, admit: suspend (Boolean) -> Boolean) {
+        val host = together?.hostDispatcher
+        suspend fun decide(ok: Boolean): Boolean = if (host == null) admit(ok) else withContext(host) { admit(ok) }
+        scope.launch {
+            val a = mutable.value.account?.takeIf { pins.admits(it.key) && !pins.gated() }
+            val fresh = a?.let { (client.item(it, itemId) as? ClientResult.Success)?.value }
+            val playable = fresh?.takeIf { !it.isFolder && it.type in DESKTOP_REMOTE_VIDEO_TYPES }
+            if (!decide(playable != null) || a == null || playable == null) {
+                events.log("together open refused resolved=${playable != null}")
+                return@launch
+            }
+            val start = (startMs ?: (playable.userData.playbackPositionTicks.coerceAtLeast(0) / 10_000)) / 1000.0
+            catalogSession.queue = emptyList(); catalogSession.returnToOpener = false
+            page(DesktopRoute.Player, remember = mutable.value.route != DesktopRoute.Player) { g -> finishViewing(); prepareViewing(g, a, playable, start) }
+        }
+    }
+    suspend fun shutdown() { together?.close(); music.closeNow(); detachWindow(); inputDiagnostics.heartbeat(); closing = true; generation.incrementAndGet(); pageJob?.cancelAndJoin(); withContext(NonCancellable) { finishViewing() }; scope.cancel(); http.close() }
     override fun close() { runBlocking { shutdown() } }
 }
 
