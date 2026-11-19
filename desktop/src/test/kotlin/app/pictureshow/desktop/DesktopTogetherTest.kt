@@ -7,6 +7,7 @@ package app.pictureshow.desktop
 
 import app.pictureshow.core.Account
 import app.pictureshow.core.ClientIdentity
+import app.pictureshow.core.MediaItem
 import app.pictureshow.core.Server
 import app.pictureshow.core.User
 import app.pictureshow.core.control.RemoteEffect
@@ -57,6 +58,11 @@ class DesktopTogetherTest {
         var admit: (suspend (Boolean) -> Boolean)? = null
         override fun video() = video
         override fun music(): DesktopMusic? = null
+        /** True in the music cases; starts are recorded rather than played. */
+        var musicHere = false
+        override fun hasMusic() = musicHere
+        override fun playMusic(play: DesktopMusicPlay) { calls += "music-play:${play.tracks.map { it.id }}" }
+        override fun queueMusic(owner: Account, tracks: List<DesktopMusicTrack>, next: Boolean) { calls += "music-queue:$next" }
         override fun open(itemId: String, startMs: Long?, admit: suspend (Boolean) -> Boolean) { calls += "open:$itemId:$startMs"; this.admit = admit }
         override fun toggle() { calls += "toggle" }
         override fun seek(positionMs: Long) { calls += "seek:$positionMs" }
@@ -86,8 +92,9 @@ class DesktopTogetherTest {
         })
         val receiver = MutableStateFlow(receiver)
         val accounts = MutableStateFlow<Account?>(account)
+        @Volatile var allowed = true
         val together = DesktopTogether(playback, http, ClientIdentity("Pictureshow Desktop", "install"), StandardTestDispatcher(test.testScheduler),
-            onHost = { true }, sockets = { url, _, events -> Socket(url, events).also { sockets += it } }, log = { logs += it }, nowMs = { test.testScheduler.currentTime })
+            onHost = { true }, sockets = { url, _, events -> Socket(url, events).also { sockets += it } }, log = { logs += it }, allowed = { allowed }, nowMs = { test.testScheduler.currentTime })
         /** The mock server answers on ktor's threads, outside the test scheduler: wait (bounded) until [done]. */
         fun until(what: String, done: () -> Boolean) {
             repeat(300) {
@@ -258,5 +265,31 @@ class DesktopTogetherTest {
         assertEquals(SyncNoticeKind.SOURCE_UNAVAILABLE, rig.together.sync.state.value.notice?.kind, "a local copy can't join: ${rig.together.sync.state.value}")
         assertFalse(rig.together.participating)
         assertFalse(rig.posted.any { it.endsWith("SyncPlay/Join") })
+    }
+
+    private fun musicRig(test: TestScope, lockDuringLookup: Boolean): Rig {
+        val rig = Rig(test)
+        val track = "d".repeat(32)
+        rig.playback.musicHere = true
+        rig.together.lookups(item = { _, id -> app.pictureshow.core.ClientResult.Success(MediaItem(id)) }, items = { _, ids ->
+            // The profile locks while this lookup is on the wire.
+            if (lockDuringLookup) rig.allowed = false
+            ids.map { MediaItem(it, type = "Audio") }
+        })
+        rig.online()
+        rig.message(play(listOf(track)))
+        rig.until("the remote's music open to settle") { rig.playback.calls.isNotEmpty() || rig.logs.any { "music open refused" in it } }
+        return rig
+    }
+
+    @Test fun aRemoteMusicPlayStartsTheTracks() = together {
+        val rig = musicRig(this, lockDuringLookup = false)
+        assertEquals(listOf("music-play:[${"d".repeat(32)}]"), rig.playback.calls)
+    }
+
+    @Test fun aProfileThatLocksDuringTheLookupStartsNoMusic() = together {
+        val rig = musicRig(this, lockDuringLookup = true)
+        assertEquals(emptyList(), rig.playback.calls.filter { it.startsWith("music") }, "a locked profile starts nothing")
+        assertEquals(emptyList(), rig.playback.calls.filter { it.startsWith("open") }, "nor falls back to the video player")
     }
 }

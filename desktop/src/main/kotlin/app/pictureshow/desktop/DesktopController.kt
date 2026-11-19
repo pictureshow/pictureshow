@@ -1316,7 +1316,8 @@ class DesktopController(
     /** Stream E: start being a remote target, a remote controller and a Watch-together member (DesktopTogether.kt). */
     fun startTogether(hostDispatcher: CoroutineDispatcher = Dispatchers.Main) {
         if (together != null) return
-        val t = DesktopTogether(togetherPlayback, http, identity, hostDispatcher, log = { events.log(it) }, admitted = { pins.admits(it.key) })
+        val t = DesktopTogether(togetherPlayback, http, identity, hostDispatcher, log = { events.log(it) }, admitted = { pins.admits(it.key) },
+            allowed = { a -> mutable.value.account?.key == a.key && pins.admits(a.key) && !pins.gated() })
         t.lookups(item = { a, id -> client.item(a, id) }, items = { a, ids -> desktopItemsById(client, a, ids) })
         together = t
         t.scope.launch {
@@ -1335,6 +1336,10 @@ class DesktopController(
                 (snap?.ready ?: p.ready) && p.end == null, snap?.paused ?: p.paused, p.liveChannel != null || p.decision.isLive, v.playbackFailed || snap?.error != null, v.startMs, offline = v.local != null)
         }
         override fun music(): DesktopMusic = this@DesktopController.music
+        override fun playMusic(play: DesktopMusicPlay) { this@DesktopController.music.request(play) }
+        override fun queueMusic(owner: Account, tracks: List<DesktopMusicTrack>, next: Boolean) {
+            if (next) this@DesktopController.music.playNext(owner, tracks) else this@DesktopController.music.append(owner, tracks)
+        }
         override fun open(itemId: String, startMs: Long?, admit: suspend (Boolean) -> Boolean) { openFor(itemId, startMs, admit) }
         override fun toggle() = playerToggle()
         override fun seek(positionMs: Long) = seek(positionMs / 1000.0)

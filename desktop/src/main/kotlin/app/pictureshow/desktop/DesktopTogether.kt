@@ -43,6 +43,13 @@ internal interface DesktopTogetherPlayback {
     fun video(): DesktopTogetherVideo?
     fun music(): DesktopMusic?
 
+    /** Whether music can take a remote's tracks here (the music player exists). */
+    fun hasMusic(): Boolean = music() != null
+
+    /** Music starts a remote asks for. Callers check [DesktopTogether]'s `allowed` first, after any lookup. */
+    fun playMusic(play: DesktopMusicPlay)
+    fun queueMusic(owner: Account, tracks: List<DesktopMusicTrack>, next: Boolean)
+
     /** Open [itemId] in the player; [admit] runs on the host thread with whether it resolved, and false drops it. */
     fun open(itemId: String, startMs: Long?, admit: suspend (Boolean) -> Boolean)
     fun toggle()
@@ -89,6 +96,11 @@ internal class DesktopTogether(
     private val sockets: RemoteSocketFactory = OkHttpRemoteSocketFactory(),
     private val log: (String) -> Unit = {},
     private val admitted: (Account) -> Boolean = { true },
+    /**
+     * Whether a remote's command may still start something for [Account] now: it is the signed-in viewer and no PIN
+     * holds it. Asked after every lookup, since the profile can lock or switch while one is in flight.
+     */
+    private val allowed: (Account) -> Boolean = { true },
     nowMs: () -> Long = { System.nanoTime() / 1_000_000 }
 ) {
     internal val scope = CoroutineScope(SupervisorJob() + hostDispatcher)
@@ -338,7 +350,11 @@ internal class DesktopTogether(
                 // Only tracks join a music queue, as on Android.
                 val tracks = itemsLookup(active, items).filter { it.type == "Audio" }.map(active::desktopMusicTrack)
                 if (tracks.isEmpty()) return@launch
-                if (next) music.playNext(active, tracks) else music.append(active, tracks)
+                if (!stillAllowed(active)) {
+                    log("together music queue refused")
+                    return@launch
+                }
+                playback.queueMusic(active, tracks, next)
             }
             return true
         }
@@ -355,19 +371,26 @@ internal class DesktopTogether(
             remote.resolved(effect.generation, false)
             return
         }
-        val music = playback.music()
-        if (music != null) {
+        if (playback.hasMusic()) {
             val rows = itemsLookup(target, effect.items)
             val tracks = rows.filter { it.type == "Audio" }
             if (rows.firstOrNull { it.id == first }?.type == "Audio" && tracks.isNotEmpty()) {
-                if (!remote.resolved(effect.generation, true)) return
+                // The lookup took time: the profile may have locked or switched since the command arrived.
+                val ok = stillAllowed(target)
+                if (!remote.resolved(effect.generation, ok) || !ok) {
+                    if (!ok) log("together music open refused")
+                    return
+                }
                 val start = tracks.indexOfFirst { it.id == first }.coerceAtLeast(0)
-                music.request(DesktopMusicPlay(target.key, tracks.map(target::desktopMusicTrack), start = start))
+                playback.playMusic(DesktopMusicPlay(target.key, tracks.map(target::desktopMusicTrack), start = start))
                 return
             }
         }
         playback.open(first, effect.ticks?.div(10_000)) { ok -> remote.resolved(effect.generation, ok) }
     }
+
+    /** The command's viewer is still the one signed in here, and no PIN holds them. */
+    private fun stillAllowed(target: Account): Boolean = account?.key == target.key && !target.expired && allowed(target)
 
     /** SYN: the group's current entry opens here when this device follows the group. */
     private fun openFromGroup(request: SyncOpen) {
