@@ -502,7 +502,7 @@ class DesktopOfflineEngineTest {
         withTimeout(10_000) { engine.libraries.first { viewerA.key !in it } }
         assertFalse(dirA.exists())
         withTimeout(10_000) {
-            while (!engine.files.sessions().readText().contains("pending-revoke")) delay(5)
+            while (!sessionsText(engine).contains("pending-revoke")) delay(5)
         }
         assertTrue(engine.files.sessions().readText().contains("set-viewer-a"))
         logoutStatus = 204
@@ -716,6 +716,9 @@ class DesktopOfflineEngineTest {
         return crashes
     }
 
+    /** Windows refuses a read while the engine's atomic replace holds the file; the next poll reads it. */
+    private fun sessionsText(engine: DesktopOfflineEngine): String = runCatching { engine.files.sessions().readText() }.getOrDefault("")
+
     @Test
     fun `a revocation owed at sign-out goes through when the server returns, with no network change or restart`() = runBlocking<Unit> {
         revocationMs = 100
@@ -726,11 +729,11 @@ class DesktopOfflineEngineTest {
         logoutStatus = 500
         accounts.signOutKeepingAccount(viewerA.key)
         withTimeout(10_000) {
-            while (!engine.files.sessions().readText().contains("pending-revoke")) delay(5)
+            while (!sessionsText(engine).contains("pending-revoke")) delay(5)
         }
         logoutStatus = 204
         withTimeout(10_000) {
-            while (engine.files.sessions().readText().contains("set-viewer-a")) delay(20)
+            while (sessionsText(engine).contains("set-viewer-a")) delay(20)
         }
     }
 

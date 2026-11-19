@@ -337,8 +337,10 @@ class ProfileLockStore(private val persistence: TextPersistence, private val has
         check(unlockedKey.value == key || mutable.value[key] == null) { "Unlock this viewer first." }
         checkChangeAllowed(key)
         require(validProfilePin(pin)) { "A PIN is 4 to 8 digits." }
-        saveLocked(mutable.value + (key to ProfileLock(hasher.create(pin), askOnStart)))
+        // Open before the new PIN is published, so nothing that sees the saved PIN (the app-wide check, a relock in
+        // between) finds its own viewer locked. Safe if the save fails: this viewer was open or had no PIN.
         unlockedKey.value = key
+        saveLocked(mutable.value + (key to ProfileLock(hasher.create(pin), askOnStart)))
     }
 
     suspend fun setAskOnStart(key: String, askOnStart: Boolean) = mutex.withLock {
