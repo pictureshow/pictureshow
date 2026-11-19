@@ -2817,7 +2817,10 @@ class SyncPlayHostTest {
         runCurrent()
         assertEquals(listOf("Leave"), rig.operations())
         assertFalse(rig.host.participating)
-        assertTrue(rig.host.state.value.notice?.kind != SyncNoticeKind.LEAVE_UNCONFIRMED, "403 is Jellyfin's not-in-a-group: ${rig.host.state.value.notice}")
+        assertTrue(
+            rig.host.state.value.notice?.kind != SyncNoticeKind.LEAVE_UNCONFIRMED,
+            "403 is Jellyfin's not-in-a-group: ${rig.host.state.value.notice}"
+        )
         assertEquals(1, routes)
         rig.host.clearRenderer(rig.renderer)
         assertEquals(null, rig.host.stayReminder, "no \"Leaving wasn't confirmed\" bar")
