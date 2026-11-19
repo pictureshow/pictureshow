@@ -648,10 +648,10 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
         click("watched");waitFor("unwatched server state") { c.state.value.detail?.isWatched==false }
         click("favorite");waitFor("unfavorite server state") { c.state.value.detail?.userData?.isFavorite==false }
         click("nav:home");ready(DesktopRoute.Home)
-        successful=checks.size==18&&checks.values.all{it}
+        successful=checks.size==19&&checks.values.all{it}
         File(out,"app-smoke-result.json").writeText("{\"pass\":$successful,\"checks\":{${checks.entries.joinToString(","){(k,v)->"\"$k\":$v"}}}}\n")
         check(successful)
-        println("SMOKE all 18 viewer flows passed")
+        println("SMOKE all 19 viewer flows passed")
         if(com.sun.jna.Platform.isMac() && System.getenv("PICTURESHOW_SMOKE_NATIVE_CLOSE")=="1") {
             click("nav:library:${library.id}");ready(DesktopRoute.Library)
             click("grid:${movie.id}");ready(DesktopRoute.Detail);click("play");ready(DesktopRoute.Player)
