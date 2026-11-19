@@ -4,6 +4,7 @@
 import groovy.json.JsonOutput
 import groovy.json.JsonSlurper
 import groovy.xml.XmlSlurper
+import org.gradle.api.artifacts.Dependency
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier
 import org.gradle.api.artifacts.component.ProjectComponentIdentifier
 import java.util.zip.ZipInputStream
@@ -73,12 +74,13 @@ def resolveLicensePoms = tasks.register('resolveLicensePoms') {
         def level = pomCoordinates.get() as LinkedHashSet
         while (level) {
             def parents = [] as LinkedHashSet
-            // One version of a module per detached configuration, so conflict resolution can't drop a version.
+            // One version of a module per detached configuration, so conflict resolution can't drop a version. An array, not
+            // a spread: a JVM call takes at most 255 arguments and the app has more POMs than that.
             def versions = level.groupBy { it.substring(0, it.lastIndexOf(':')) }.values()
             (0..<versions*.size().max()).each { slot ->
                 def batch = versions.findAll { it.size() > slot }.collect { it[slot] }
                 requested.addAll(batch)
-                def poms = pomConfigurations.detachedConfiguration(*batch.collect { pomDependencies.create("$it@pom") })
+                def poms = pomConfigurations.detachedConfiguration(batch.collect { pomDependencies.create("$it@pom") } as Dependency[])
                 poms.transitive = false
                 def files
                 try {
