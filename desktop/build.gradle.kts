@@ -22,6 +22,9 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.serialization.json)
     implementation(libs.coroutines.core)
+    // Dispatchers.Main on desktop is the Swing event thread; without this the app stops at launch with "Module with the
+    // Main dispatcher is missing" (Watch together and remote hosts run on Main).
+    implementation(libs.coroutines.swing)
     testImplementation(libs.kotlin.test.junit)
     testImplementation(libs.coroutines.test)
     testImplementation(libs.mockwebserver)
