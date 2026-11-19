@@ -3,6 +3,7 @@
  */
 import groovy.json.JsonOutput
 import groovy.json.JsonSlurper
+import groovy.xml.XmlSlurper
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier
 import org.gradle.api.artifacts.component.ProjectComponentIdentifier
 import org.gradle.api.file.DirectoryProperty
@@ -53,6 +54,56 @@ embedded = { byte[] bytes, String prefix = '' ->
     }
     result
 }
+
+// AboutLibraries 15.3.0 reads each library's POM, and each parent POM, through a lenient detached configuration
+// (BaseAboutLibrariesTask.fetchPomBatch). A POM the repository fails to serve is skipped without a word: the library
+// drops out of aboutlibraries.json and the catalog stops with "Missing license metadata" for a library that declares
+// a license (desktop/licenses.gradle has the same pre-fetch). On GitHub's runners Maven Central answered 404 for every
+// POM one job in eight asked for (2026-11-19).
+// So the same POMs are fetched strictly first: a repository fault fails here and names the file, and the export,
+// which resolves its POMs again when it runs, reads them from the cache.
+def pomCoordinates = providers.provider {
+    [configurations.releaseRuntimeClasspath, configurations.coreLibraryDesugaring].collectMany {
+        it.incoming.resolutionResult.allComponents.collect { it.id }.findAll { it instanceof ModuleComponentIdentifier }
+            .collect { "${it.group}:${it.module}:${it.version}".toString() }
+    }.unique()
+}
+def pomDependencies = dependencies
+def pomConfigurations = configurations
+def resolveLicensePoms = tasks.register('resolveLicensePoms') {
+    doLast {
+        def requested = [] as Set
+        def level = pomCoordinates.get() as LinkedHashSet
+        while (level) {
+            def parents = [] as LinkedHashSet
+            // One version of a module per detached configuration, so conflict resolution can't drop a version.
+            def versions = level.groupBy { it.substring(0, it.lastIndexOf(':')) }.values()
+            (0..<versions*.size().max()).each { slot ->
+                def batch = versions.findAll { it.size() > slot }.collect { it[slot] }
+                requested.addAll(batch)
+                def poms = pomConfigurations.detachedConfiguration(*batch.collect { pomDependencies.create("$it@pom") })
+                poms.transitive = false
+                def files
+                try {
+                    files = poms.incoming.artifactView {}.artifacts.artifacts.collect { it.file }
+                } catch (Exception e) {
+                    // Gradle would report only its resolution error (the deepest contextual one), so its text goes in this message.
+                    def reasons = [e.message] + (e.respondsTo('getCauses') ? e.causes : [e.cause]).findAll()*.message
+                    throw new GradleException('A repository did not serve a POM the license catalog reads (AboutLibraries would drop that library ' +
+                        'without an error). Re-run once the repository answers; do not add a license override for it.\n' + reasons.unique().join('\n'))
+                }
+                files.each { pom ->
+                    def parent = new XmlSlurper(false, false).parse(pom).parent
+                    def coordinate = [parent.groupId.text(), parent.artifactId.text(), parent.version.text()]
+                    if (coordinate.every { it && !it.contains('$') }) parents.add(coordinate.join(':'))
+                }
+            }
+            level = parents - requested
+        }
+        logger.lifecycle("License POMs: ${requested.size()} resolved")
+    }
+}
+tasks.named('exportLibraryDefinitions') { dependsOn(resolveLicensePoms) }
 
 def generateLicenseCatalog = tasks.register('generateLicenseCatalog', GenerateLicenseCatalog) {
     dependsOn('exportLibraryDefinitions')

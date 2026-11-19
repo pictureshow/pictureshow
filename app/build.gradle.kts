@@ -61,6 +61,10 @@ android {
             it.maxHeapSize = "1g"
             // Backstop for what PerTestTimeLimit can't stop: code spinning with no looper and no interrupt.
             it.timeout.set(Duration.ofMinutes(25))
+            // Robolectric fetches its android-all jars from Maven Central at test time, outside Gradle's repositories.
+            // GitHub's runners share addresses Central sometimes refuses (404/429 for a whole job), which failed whole
+            // test classes in MavenArtifactFetcher; Google's mirror of Central serves the same files (settings.gradle.kts).
+            it.systemProperty("robolectric.dependency.repo.url", "https://maven-central.storage-download.googleapis.com/maven2")
         }
     }
     lint {
