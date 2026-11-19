@@ -245,4 +245,18 @@ class DesktopTogetherTest {
         assertFalse(rig.together.participating)
         assertFalse(rig.together.transport("play"), "after leaving, Play is this device's own again")
     }
+
+    @Test fun aDownloadedCopyCantBeTheGroupsSource() = together {
+        val rig = Rig(this)
+        rig.online()
+        rig.playback.video = DesktopTogetherVideo(Any(), film, "Movie", 1_000, 600_000, ready = true, paused = true, live = false, offline = true)
+        rig.together.observe()
+        rig.together.sync.show()
+        rig.until("access and groups") { rig.together.sync.state.value.let { it.policyKnown && it.groups.isNotEmpty() && !it.busy } }
+        rig.together.sync.join("g")
+        runCurrent()
+        assertEquals(SyncNoticeKind.SOURCE_UNAVAILABLE, rig.together.sync.state.value.notice?.kind, "a local copy can't join: ${rig.together.sync.state.value}")
+        assertFalse(rig.together.participating)
+        assertFalse(rig.posted.any { it.endsWith("SyncPlay/Join") })
+    }
 }

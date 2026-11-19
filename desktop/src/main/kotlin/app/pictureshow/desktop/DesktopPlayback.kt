@@ -228,7 +228,9 @@ class NativeDesktopPlayback(private val directory: File) : DesktopPlaybackEngine
         player.option("sub-margin-y", "24")
         // An option this libmpv doesn't know (an older build) is skipped, not fatal: the defaults still play.
         desktopMpvOptions(playbackPreferences).forEach { (name, value) -> runCatching { player.option(name, value) } }
-        proxy = DesktopMediaProxy(account, decision)
+        val local = decision.localFile()
+        // OFF-05: a download is a file on this computer; it needs no proxy, origin check or headers.
+        proxy = if (local != null) null else DesktopMediaProxy(account, decision)
         if (Platform.isLinux()) {
             val hdr = decision.mediaSource.mediaStreams.any { it.type == MediaStreamType.Video && it.videoRangeType !in listOf(null, VideoRangeType.Unknown, VideoRangeType.SDR) }
             if (hdr) { player.option("target-trc", "pq"); player.option("target-prim", "bt.2020"); player.option("target-peak", "10000"); player.option("fbo-format", "rgba16f"); player.option("dither-depth", "10") }
@@ -302,10 +304,22 @@ class NativeDesktopPlayback(private val directory: File) : DesktopPlaybackEngine
         val streams = decision.mediaSource.mediaStreams
         fun ordinal(index: Int, type: MediaStreamType) = streams.filter { it.type == type && !it.isExternal }
             .indexOfFirst { it.index == index }.takeIf { it >= 0 }?.plus(1)
-        player.optionIfInitialized("aid", ordinal(audio, MediaStreamType.Audio)?.toString() ?: "auto")
-        player.optionIfInitialized("sid", nativeSubtitleOrdinal(streams, subtitle)?.toString() ?: "no")
+        val localTracks = local?.let { desktopLocalTracks(streams, audio, subtitle) }
+        if (localTracks != null) {
+            if (localTracks.audioFiles.isNotEmpty()) player.set("audio-files", localTracks.audioFiles.joinToString(File.pathSeparator) { it.absolutePath })
+            player.optionIfInitialized("aid", localTracks.aid)
+            player.optionIfInitialized("sid", localTracks.sid)
+        } else {
+            player.optionIfInitialized("aid", ordinal(audio, MediaStreamType.Audio)?.toString() ?: "auto")
+            player.optionIfInitialized("sid", nativeSubtitleOrdinal(streams, subtitle)?.toString() ?: "no")
+        }
         offset = if (decision.method == PlayMethod.Transcode) position else 0.0
         if (decision.method != PlayMethod.Transcode && position > 0) player.set("start", position.toString())
+        if (local != null) {
+            player.command("loadfile", local.absolutePath)
+            pendingExternalSubtitle = localTracks?.subtitleFile?.absolutePath
+            return
+        }
         player.command("loadfile", proxy!!.url())
         // External subtitle responses receive the same origin checks and headers as media.
         streams.firstOrNull { it.type == MediaStreamType.Subtitle && it.index == subtitle && it.requiresExternalSubtitleDelivery() }?.deliveryUrl?.let { delivery ->
@@ -350,7 +364,11 @@ class NativeDesktopPlayback(private val directory: File) : DesktopPlaybackEngine
         pendingExternalSubtitle = null
         if (index == -1) { mpv?.set("sid", "no"); selectedSubtitleIndex = index; return true }
         val stream = d.mediaSource.mediaStreams.firstOrNull { it.type == MediaStreamType.Subtitle && it.index == index } ?: return false
-        if (stream.requiresExternalSubtitleDelivery()) {
+        if (d.localFile() != null) {
+            val (sid, file) = desktopLocalSubtitle(d.mediaSource.mediaStreams, index)
+            mpv?.set("sid", sid)
+            pendingExternalSubtitle = file?.absolutePath
+        } else if (stream.requiresExternalSubtitleDelivery()) {
             val account = sourceAccount ?: return false
             val delivery = stream.deliveryUrl ?: return false
             val url = PlayDecisions.resolve(account.server, delivery)

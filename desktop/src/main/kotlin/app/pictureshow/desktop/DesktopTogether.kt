@@ -69,7 +69,9 @@ internal data class DesktopTogetherVideo(
     val paused: Boolean,
     val live: Boolean,
     val failed: Boolean = false,
-    val startMs: Long = 0
+    val startMs: Long = 0,
+    /** A downloaded copy playing from this computer: never a group's source (core syncSourceEligible). */
+    val offline: Boolean = false
 )
 
 /**
@@ -279,7 +281,7 @@ internal class DesktopTogether(
                 ready = v.ready && !v.failed,
                 buffering = !v.ready && !v.failed,
                 playing = v.ready && !v.paused,
-                seekable = syncSourceEligible(durationTicks, !v.live, v.live || v.itemType == "TvChannel", v.live, offline = false),
+                seekable = syncSourceEligible(durationTicks, !v.live, v.live || v.itemType == "TvChannel", v.live, offline = v.offline),
                 rateSupported = true,
                 playWhenReady = !v.paused
             )

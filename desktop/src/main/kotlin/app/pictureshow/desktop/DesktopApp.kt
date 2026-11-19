@@ -250,7 +250,7 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                 Row(Modifier.fillMaxWidth().height(52.dp).background(MaterialTheme.colorScheme.surface).padding(start = if(macChrome) 80.dp else 28.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("PICTURESHOW", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.width(20.dp))
-                    if (state.route in setOf(DesktopRoute.SignIn, DesktopRoute.QuickConnect, DesktopRoute.Detail, DesktopRoute.Player, DesktopRoute.Library, DesktopRoute.LiveTv, DesktopRoute.Settings, DesktopRoute.Search, DesktopRoute.Person, DesktopRoute.HomeEditor, DesktopRoute.MusicLibrary, DesktopRoute.MusicItem, DesktopRoute.MusicNow, DesktopRoute.WatchTogether, DesktopRoute.Remote) || state.route in DESKTOP_ACCOUNTS_ROUTES || (state.route == DesktopRoute.Accounts && state.account != null)) TextButton(onClick = controller::back, modifier = Modifier.controlFocus().probe("back")) { Icon(DesktopGlyph.Back, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Back") }
+                    if (state.route in setOf(DesktopRoute.SignIn, DesktopRoute.QuickConnect, DesktopRoute.Detail, DesktopRoute.Player, DesktopRoute.Library, DesktopRoute.LiveTv, DesktopRoute.Settings, DesktopRoute.Search, DesktopRoute.Person, DesktopRoute.HomeEditor, DesktopRoute.MusicLibrary, DesktopRoute.MusicItem, DesktopRoute.MusicNow, DesktopRoute.Downloads, DesktopRoute.WatchTogether, DesktopRoute.Remote) || state.route in DESKTOP_ACCOUNTS_ROUTES || (state.route == DesktopRoute.Accounts && state.account != null)) TextButton(onClick = controller::back, modifier = Modifier.controlFocus().probe("back")) { Icon(DesktopGlyph.Back, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Back") }
                     Spacer(Modifier.weight(1f))
                     DesktopUtility("Keyboard shortcuts", DesktopGlyph.Keyboard, "shortcuts") { modalReturnFocus = "shortcuts"; help = true }
                     DesktopUtility(if(fullscreen) "Exit fullscreen" else "Fullscreen", DesktopGlyph.Fullscreen, "fullscreen", onFullscreen)
@@ -274,6 +274,7 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                             onSettings = { if (state.route != DesktopRoute.Settings) controller.settings() },
                             onAccounts = controller::accounts,
                             onRequests = controller::openRequests.takeIf { controller.seerr.state.collectAsState().value.connected },
+                            onDownloads = { if (state.route != DesktopRoute.Downloads) controller.downloads() },
                             together = controller.together?.let { { DesktopTogetherNav(controller, state.route) } },
                             onSignOut = { modalReturnFocus = "nav:account"; signOut = state.account }
                         )
@@ -311,6 +312,7 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                                 DesktopRoute.MusicLibrary -> DesktopMusicLibraryPage(state, controller)
                                 DesktopRoute.MusicItem -> DesktopMusicItemPage(state, controller)
                                 DesktopRoute.MusicNow -> DesktopMusicNowPage(controller)
+                                DesktopRoute.Downloads -> DesktopDownloadsPage(controller)
                                 DesktopRoute.WatchTogether -> DesktopWatchTogetherPage(controller)
                                 DesktopRoute.Remote -> DesktopRemotePage(controller)
                             }
@@ -388,6 +390,7 @@ internal fun DesktopSidebar(
     onSignOut: () -> Unit,
     onSearch: () -> Unit = {},
     onRequests: (() -> Unit)? = null,
+    onDownloads: () -> Unit = {},
     together: (@Composable () -> Unit)? = null
 ) {
     Column(Modifier.width(SIDEBAR_WIDTH_DP.dp).fillMaxHeight().background(MaterialTheme.colorScheme.surfaceContainer).padding(vertical = 12.dp).testTag("sidebar")) {
@@ -409,6 +412,7 @@ internal fun DesktopSidebar(
         HorizontalDivider(Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
         // Search and Settings stay reachable independently of the number of libraries.
         Column(Modifier.padding(horizontal = 12.dp).testTag("sidebar-footer"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            SidebarItem("Downloads", root == DESKTOP_ROOT_DOWNLOADS, "nav:downloads", onDownloads)
             onRequests?.let { SidebarItem("Requests", root == DESKTOP_ROOT_REQUESTS, "nav:requests", it) }
             together?.invoke()
             SidebarItem("Search", root == DESKTOP_ROOT_SEARCH, "nav:search", onSearch)
@@ -521,8 +525,10 @@ internal fun destructiveEntryTarget(tag: String): Boolean = tag == "sign-out" ||
 internal fun desktopEntryTarget(state: DesktopState): String? = when(state.route) {
     DesktopRoute.Servers -> "server-address"
     DesktopRoute.SignIn -> "username"
-    DesktopRoute.Settings -> "quality"
+    // The page's first control, so Settings opens at its top (pilot 172), not scrolled to Video quality.
+    DesktopRoute.Settings -> "jump:Account"
     DesktopRoute.LiveTv -> "live:tab:Channels"
+    DesktopRoute.Downloads -> "downloads:cap"
     DesktopRoute.Detail -> "play"
     DesktopRoute.Home -> state.homeRows.firstOrNull()?.let { row -> row.items.firstOrNull()?.let { "card:${row.key}:${it.id}" } }
     DesktopRoute.Library -> state.items.firstOrNull()?.let { "grid:${it.id}" } ?: "sort"

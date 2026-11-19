@@ -11,6 +11,8 @@ enum class DesktopRoute { Loading, Servers, Accounts, SignIn, QuickConnect, Home
     MusicLibrary, MusicItem, MusicNow,
     /** Stream C2: SEERR-03..06 and INFO-01..08. */
     Requests, SeerrTitle, About, Licenses, License, Supporter, ThisComputer,
+    /** Stream D: OFF-01..12. */
+    Downloads,
     /** Stream E: SYN-01..11 and REM-01..09. */
     WatchTogether, Remote }
 
@@ -121,6 +123,7 @@ data class DesktopState(
 internal const val DESKTOP_ROOT_HOME = "home"
 internal const val DESKTOP_ROOT_SEARCH = "search"
 internal const val DESKTOP_ROOT_SETTINGS = "settings"
+internal const val DESKTOP_ROOT_DOWNLOADS = "downloads"
 internal fun desktopLibraryRoot(id: String) = "library:$id"
 /** A root page owns itself; any other page keeps the root it was opened from. */
 internal fun desktopRootFor(route: DesktopRoute, previous: String?): String? = when (route) {
@@ -128,5 +131,6 @@ internal fun desktopRootFor(route: DesktopRoute, previous: String?): String? = w
     DesktopRoute.Search -> DESKTOP_ROOT_SEARCH
     DesktopRoute.Settings -> DESKTOP_ROOT_SETTINGS
     DesktopRoute.Requests -> DESKTOP_ROOT_REQUESTS
+    DesktopRoute.Downloads -> DESKTOP_ROOT_DOWNLOADS
     else -> previous
 }

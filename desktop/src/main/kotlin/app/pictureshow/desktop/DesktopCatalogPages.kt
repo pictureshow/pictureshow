@@ -265,6 +265,9 @@ internal fun DetailPage(state: DesktopState, c: DesktopController) {
                         }
                         }
                     }
+                    // OFF-04a: this title's own download, and the way to start one (OFF-01).
+                    val offlineState by c.offline.state.collectAsState()
+                    DesktopDetailDownload(item, offlineState, c.offline)
                     item.overview?.let { Text(it, Modifier.widthIn(max = 640.dp), style=MaterialTheme.typography.bodyLarge) }
                     if(item.genres.isNotEmpty()) Text(item.genres.joinToString(" · "),color=MaterialTheme.colorScheme.onSurfaceVariant)
                 }
