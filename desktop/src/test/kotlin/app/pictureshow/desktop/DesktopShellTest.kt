@@ -178,4 +178,8 @@ class DesktopShellTest {
         assertEquals(ShellAction.Down, act(Key.DirectionDown, DesktopRoute.Settings))
         assertNull(act(Key.DirectionDown, DesktopRoute.SignIn))
     }
+    @Test fun downloadsPageTakesTheSidebarShortcutsAndArrows() {
+        assertEquals(ShellAction.Settings, act(Key.Comma, DesktopRoute.Downloads, ctrl = true))
+        assertEquals(ShellAction.Down, act(Key.DirectionDown, DesktopRoute.Downloads))
+    }
 }
