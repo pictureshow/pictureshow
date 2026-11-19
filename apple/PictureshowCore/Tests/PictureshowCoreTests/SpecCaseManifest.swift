@@ -2849,6 +2849,9 @@ enum SpecCaseManifest {
         sync-state.malformed-seek-is-recoverable|sync-state/membership
         sync-state.library-denial-retains-way-to-leave|sync-state/membership
         sync-state.legacy-CreateGroupDenied|sync-state/membership
+        sync-state.rejoin-to-a-group-that-ended-hears-the-empty-group-id-denial|sync-state/membership
+        sync-state.not-in-group-with-a-dashed-empty-group-id-is-heard|sync-state/membership
+        sync-state.another-groups-denial-is-still-ignored|sync-state/membership
         sync-state.legacy-JoinGroupDenied|sync-state/membership
         sync-state.server-left-invalidates-membership|sync-state/membership
         sync-state.participants-use-server-names|sync-state/membership

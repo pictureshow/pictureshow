@@ -128,6 +128,11 @@ public enum SyncPlay {
         return SyncQueue(entries: entries, currentIndex: index, startPositionTicks: start, isPlaying: playing, repeatMode: repeatMode, shuffleMode: shuffleMode, lastUpdateTicks: updated)
     }
 
+    static let denials: Set<String> = ["NotInGroup", "GroupDoesNotExist", "LibraryAccessDenied", "CreateGroupDenied", "JoinGroupDenied"]
+
+    /// Guid.Empty in either of Jellyfin's spellings: "N" (32 zeros) or dashed.
+    public static func emptyGroupId(_ value: String) -> Bool { !value.isEmpty && value.allSatisfy { $0 == "0" || $0 == "-" } }
+
     /// Unrelated socket messages return nil. A malformed or unknown SyncPlay message returns `.invalid`,
     /// which the reducer turns into a paused resnapshot.
     public static func parseMessage(_ text: String) -> SyncEvent? {
@@ -138,7 +143,12 @@ public enum SyncPlay {
         do {
             id = Self.text(envelope, "MessageId").flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 }
             let data = try object(envelope, "Data")
-            group = Self.text(data, "GroupId").flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 }
+            // Jellyfin sends its "no group" answers (GroupDoesNotExist after a Join, NotInGroup) with an all-zero GroupId,
+            // which names no group: without this a session whose group ended while it was away never hears it (measured 12.0).
+            group = Self.text(data, "GroupId").flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || emptyGroupId($0) ? nil : $0 }
+            if type == "SyncPlayGroupUpdate", let reason = Self.text(data, "Type"), denials.contains(reason) {
+                return .denied(groupId: group, messageId: id, reason: reason)
+            }
             guard let groupId = group else { throw SyncWireError() }
             if type == "SyncPlayCommand" {
                 let command = try requiredText(data, "Command")
@@ -170,8 +180,6 @@ public enum SyncPlay {
                 return .participant(groupId: groupId, messageId: id, name: name, joined: updateType == "UserJoined")
             case "GroupLeft":
                 return .left(groupId: groupId, messageId: id)
-            case "NotInGroup", "GroupDoesNotExist", "LibraryAccessDenied", "CreateGroupDenied", "JoinGroupDenied":
-                return .denied(groupId: groupId, messageId: id, reason: updateType)
             default:
                 return .invalid(groupId: groupId, messageId: id)
             }
