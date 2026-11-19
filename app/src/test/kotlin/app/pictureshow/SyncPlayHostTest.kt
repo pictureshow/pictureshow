@@ -2783,6 +2783,64 @@ class SyncPlayHostTest {
         assertEquals(null, rig.host.state.value.departure)
     }
 
+    // macOS recheck 2026-11-19: what Jellyfin 12.0 really answered after the server dropped the group during an outage.
+    private fun emptyGroupDenial(type: String) =
+        """{"MessageId":"m-$type","MessageType":"SyncPlayGroupUpdate","Data":{"GroupId":"00000000000000000000000000000000","Data":"","Type":"$type"}}"""
+
+    @Test fun aGroupThatEndedWhileThisDeviceWasAwayIsDroppedWhenRejoiningHearsItIsGone() = runTest {
+        val rig = Rig(this)
+        rig.join()
+        rig.snapshot()
+        rig.host.clearRenderer(rig.renderer)
+        rig.host.socket(false)
+        rig.sent.clear()
+        rig.host.socket(true)
+        runCurrent()
+        assertEquals(listOf("Join"), rig.operations(), "reconnecting rejoins the group it had")
+        // Join answers 204 for a missing group; the news comes on the socket, naming Guid.Empty.
+        rig.host.receive(emptyGroupDenial("GroupDoesNotExist"))
+        runCurrent()
+        assertFalse(rig.host.participating, "no ghost group: ${rig.host.membership}")
+        assertEquals(null, rig.host.stayReminder)
+        assertEquals(listOf("Join"), rig.operations(), "the server already said this session is in no group: no Leave")
+    }
+
+    @Test fun leaveAnsweredNotInAGroupIsLeftAndStartsTheRouteThatWaitedForIt() = runTest {
+        val rig = Rig(this)
+        rig.join()
+        rig.snapshot()
+        rig.sent.clear()
+        rig.httpStatus = 403
+        var routes = 0
+        assertTrue(rig.host.confirmExternalRoute { routes++ })
+        rig.host.leaveForExternalRoute()
+        runCurrent()
+        assertEquals(listOf("Leave"), rig.operations())
+        assertFalse(rig.host.participating)
+        assertTrue(rig.host.state.value.notice?.kind != SyncNoticeKind.LEAVE_UNCONFIRMED, "403 is Jellyfin's not-in-a-group: ${rig.host.state.value.notice}")
+        assertEquals(1, routes)
+        rig.host.clearRenderer(rig.renderer)
+        assertEquals(null, rig.host.stayReminder, "no \"Leaving wasn't confirmed\" bar")
+    }
+
+    @Test fun anUnconfirmedLeaveIsSettledByJoiningAGroupAndNeverNamesTheNewOne() = runTest {
+        val rig = Rig(this)
+        rig.join()
+        rig.snapshot()
+        rig.httpStatus = 503
+        rig.host.leave()
+        runCurrent()
+        assertEquals(SyncNoticeKind.LEAVE_UNCONFIRMED, rig.host.state.value.notice?.kind)
+        rig.httpStatus = 204
+        rig.host.join("g")
+        runCurrent()
+        rig.joined()
+        runCurrent()
+        rig.host.clearRenderer(rig.renderer)
+        val reminder = assertNotNull(rig.host.stayReminder)
+        assertFalse(reminder.leaveUnconfirmed, "the server left the old group when it joined this one: $reminder")
+    }
+
     @Test fun departureRepeatedLeaveSendsOnceAndNeverReplacesStopIdentity() = runTest {
         val rig = Rig(this)
         rig.join()

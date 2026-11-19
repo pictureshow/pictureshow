@@ -668,6 +668,11 @@ internal class SyncPlayHost(
                 )
                 return@launch
             }
+            // The server leaves any earlier group before it joins or creates this one, so an unconfirmed Leave is settled.
+            if (leavePending) {
+                leavePending = false
+                refreshReminder()
+            }
             calibrate()
             if (!current(target, version)) return@launch
             startTicker()
@@ -722,8 +727,11 @@ internal class SyncPlayHost(
             scope.launch {
                 val status = tracedSend(target, SyncRequest("Leave"))
                 if (!current(target, version)) return@launch
-                if (status in 200..299 && !participating) after?.invoke()
-                if (status !in 200..299 && !participating) {
+                // Jellyfin guards Leave with its SyncPlayIsInGroup policy: 403 means this session is in no group, which is
+                // what Leave wanted (measured on 12.0 after the server dropped the group during an outage).
+                val left = status in 200..299 || status == 403
+                if (left && !participating) after?.invoke()
+                if (!left && !participating) {
                     leavePending = true
                     mutable.value = mutable.value.copy(phase = "Reconnecting")
                     refreshReminder()

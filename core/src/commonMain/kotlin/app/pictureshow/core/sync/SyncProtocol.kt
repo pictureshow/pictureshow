@@ -102,6 +102,9 @@ fun parseSyncQueue(value: JsonObject): SyncQueue {
     )
 }
 
+/** Guid.Empty in either of Jellyfin's spellings: "N" (32 zeros) or dashed. */
+fun syncEmptyGroupId(value: String): Boolean = value.isNotEmpty() && value.all { it == '0' || it == '-' }
+
 /**
  * Generated SDK wrapper names changed in 10.11; the actual socket discriminator did not.
  * Unrelated messages return null. A malformed/unknown SyncPlay event asks the owner to resnapshot paused.
@@ -117,7 +120,9 @@ fun parseSyncMessage(text: String): SyncEvent? {
         recognized = true
         id = envelope.text("MessageId")?.takeIf { it.isNotBlank() }
         val data = envelope.objectAt("Data")
-        group = data.text("GroupId")?.takeIf { it.isNotBlank() }
+        // Jellyfin sends its "no group" answers (GroupDoesNotExist after a Join, NotInGroup) with an all-zero GroupId,
+        // which names no group: without this a session whose group ended while it was away never hears it (measured 12.0).
+        group = data.text("GroupId")?.takeIf { it.isNotBlank() && !syncEmptyGroupId(it) }
         if (type == "SyncPlayCommand") {
             val groupId = requireNotNull(group)
             val command = data.requiredText("Command").also { require(it in syncCommands) }
@@ -138,8 +143,12 @@ fun parseSyncMessage(text: String): SyncEvent? {
                 )
             )
         } else {
+            val updateType = data.requiredText("Type")
+            if (updateType in setOf("NotInGroup", "GroupDoesNotExist", "LibraryAccessDenied", "CreateGroupDenied", "JoinGroupDenied")) {
+                return SyncEvent.Denied(group, id, updateType)
+            }
             val groupId = requireNotNull(group)
-            when (val updateType = data.requiredText("Type")) {
+            when (updateType) {
                 "GroupJoined" -> {
                     val info = parseSyncGroup(data.objectAt("Data"))
                     require(info.id == groupId)
@@ -168,9 +177,6 @@ fun parseSyncMessage(text: String): SyncEvent? {
                 )
 
                 "GroupLeft" -> SyncEvent.Left(groupId, id)
-
-                "NotInGroup", "GroupDoesNotExist", "LibraryAccessDenied", "CreateGroupDenied", "JoinGroupDenied" ->
-                    SyncEvent.Denied(groupId, id, updateType)
 
                 else -> SyncEvent.Invalid(groupId, id)
             }

@@ -3342,6 +3342,96 @@
           }
         }
       ]
+    },
+    {
+      "id": "sync-state.rejoin-to-a-group-that-ended-hears-the-empty-group-id-denial",
+      "operation": "membership",
+      "state": {
+        "generation": 1,
+        "groupId": "g",
+        "phase": "Joining"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "message",
+            "envelope": {
+              "MessageId": "m-GroupDoesNotExist",
+              "MessageType": "SyncPlayGroupUpdate",
+              "Data": {
+                "GroupId": "00000000000000000000000000000000",
+                "Data": "",
+                "Type": "GroupDoesNotExist"
+              }
+            }
+          },
+          "expected": {
+            "phase": "Error",
+            "groupId": "g",
+            "hasSnapshot": false,
+            "noticeContains": "no longer available"
+          }
+        }
+      ]
+    },
+    {
+      "id": "sync-state.not-in-group-with-a-dashed-empty-group-id-is-heard",
+      "operation": "membership",
+      "state": {
+        "generation": 1,
+        "groupId": "g",
+        "phase": "Reconnecting"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "message",
+            "envelope": {
+              "MessageId": "m-NotInGroup",
+              "MessageType": "SyncPlayGroupUpdate",
+              "Data": {
+                "GroupId": "00000000-0000-0000-0000-000000000000",
+                "Data": "",
+                "Type": "NotInGroup"
+              }
+            }
+          },
+          "expected": {
+            "phase": "Error",
+            "groupId": "g",
+            "noticeContains": "no longer available"
+          }
+        }
+      ]
+    },
+    {
+      "id": "sync-state.another-groups-denial-is-still-ignored",
+      "operation": "membership",
+      "state": {
+        "generation": 1,
+        "groupId": "g",
+        "phase": "Joining"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "message",
+            "envelope": {
+              "MessageId": "m-GroupDoesNotExist",
+              "MessageType": "SyncPlayGroupUpdate",
+              "Data": {
+                "GroupId": "h",
+                "Data": "",
+                "Type": "GroupDoesNotExist"
+              }
+            }
+          },
+          "expected": {
+            "phase": "Joining",
+            "groupId": "g"
+          }
+        }
+      ]
     }
   ]
 }
