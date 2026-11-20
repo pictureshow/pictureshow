@@ -61,8 +61,9 @@ jobs:
           for script in desktop/tools/package-macos.sh desktop/tools/macos/build-*.sh; do bash -n "$script"; done
           python -m py_compile desktop/tools/macos/{bundle,notarize,store-profile}.py
           xcrun swiftc -typecheck -target "$(uname -m)-apple-macos15.0" desktop/tools/macos/StoreKitBridge.swift
+      # Release signing may reuse these two artifacts, so only runs of this repository's own pushes keep them.
       - name: Retain macOS runtime for native verification without a local Gradle build
-        if: runner.os == 'macOS'
+        if: runner.os == 'macOS' && github.event_name == 'push'
         uses: actions/upload-artifact@v7
         with:
           name: desktop-runtime-macOS
@@ -83,7 +84,7 @@ jobs:
         shell: bash
         run: PICTURESHOW_MAC_RUNTIME="$PWD/desktop/build/spike-runtime/lib" bash desktop/tools/package-macos.sh --unsigned
       - name: Retain native build inputs for local release signing
-        if: always() && runner.os == 'macOS'
+        if: always() && runner.os == 'macOS' && github.event_name == 'push'
         shell: bash
         run: |
           shopt -s nullglob
@@ -97,7 +98,7 @@ jobs:
             source/fribidi-*/COPYING source/harfbuzz-*/COPYING source/libunibreak-*/LICENCE source/glad-*/LICENSE \
             mpv-source/mpv.tar.gz mpv-source/mpv-*/Copyright mpv-source/build/meson-info/intro-buildoptions.json
       - uses: actions/upload-artifact@v7
-        if: always() && runner.os == 'macOS'
+        if: always() && runner.os == 'macOS' && github.event_name == 'push'
         with:
           name: desktop-macos-native-inputs
           retention-days: 2

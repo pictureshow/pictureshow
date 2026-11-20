@@ -41,6 +41,23 @@ evidence="$work/evidence"
 mkdir "$evidence"
 echo "Packaging work and evidence: $work"
 
+# Signed builds reuse prebuilt inputs only from a push run of this repository at this exact commit. Pull request
+# runs, forks included, never upload them, and anything else is rebuilt here from pinned sources.
+if [[ "$channel" != unsigned && ( -n "${PICTURESHOW_MAC_NATIVE_BUILD:-}" || -n "${PICTURESHOW_MAC_RUNTIME:-}" ) ]]; then
+  inputs_run=${PICTURESHOW_MAC_INPUTS_RUN:?Set PICTURESHOW_MAC_INPUTS_RUN to the Desktop app run that built the reused inputs, or unset PICTURESHOW_MAC_NATIVE_BUILD and PICTURESHOW_MAC_RUNTIME to build them here.}
+  [[ "$inputs_run" =~ ^[0-9]+$ ]] || { echo 'PICTURESHOW_MAC_INPUTS_RUN must be a numeric run id.' >&2; exit 2; }
+  [[ -z "$(git status --porcelain)" ]] || { echo 'Reused inputs need a clean checkout to compare against.' >&2; exit 2; }
+  run_facts=$("${GH:-gh}" api "repos/pictureshow/pictureshow/actions/runs/$inputs_run" \
+    --jq '[.event, .head_repository.full_name, .head_sha, .path, .conclusion] | join(" ")') || {
+    echo "Could not read run $inputs_run from GitHub." >&2; exit 2;
+  }
+  expected="push pictureshow/pictureshow $(git rev-parse HEAD) .github/workflows/desktop-app.yml success"
+  [[ "$run_facts" == "$expected" ]] || {
+    printf 'Run %s does not qualify for signing.\n  found:    %s\n  expected: %s\n' "$inputs_run" "$run_facts" "$expected" >&2; exit 2;
+  }
+  printf 'Reused inputs from Desktop app run %s (%s)\n' "$inputs_run" "$run_facts" > "$evidence/input-provenance.txt"
+fi
+
 # FFmpeg configuration requires a build prefix without spaces.
 alias_dir=$(mktemp -d)
 trap 'python3 -c "from pathlib import Path; import sys; p=Path(sys.argv[1]); (p / \"native\").unlink(missing_ok=True); p.rmdir()" "$alias_dir"' EXIT
