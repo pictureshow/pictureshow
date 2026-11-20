@@ -43,7 +43,7 @@ final class SupporterTests: XCTestCase {
     }
 
     @MainActor
-    func testStoreKitExpiryRemovesSupporterOnRefresh() async throws {
+    func testStoreKitExpiryRemovesVerifiedSupporter() async throws {
         let session = try testSession()
         defer { session.clearTransactions() }
         let model = SupporterModel(store: StoreKitSupporter())
@@ -134,8 +134,7 @@ final class SupporterTests: XCTestCase {
 
     @MainActor
     private func sessionWithLocalConfiguration() throws -> SKTestSession {
-        let config = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "Supporter", withExtension: "storekit"))
-        return try SKTestSession(contentsOf: config)
+        try SKTestSession(configurationFileNamed: "Supporter")
     }
 
     private enum TestSetupError: Error {

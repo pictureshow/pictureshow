@@ -36,7 +36,10 @@ targets:
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
         UIBackgroundModes: [audio]
-    sources: [App]
+    sources:
+      - App
+      - path: Config/Supporter.storekit
+        buildPhase: resources
     dependencies:
       - package: PictureshowCore
       - package: PictureshowTransport
@@ -59,7 +62,10 @@ targets:
             CFBundleURLSchemes: [pictureshow]
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
-    sources: [App]
+    sources:
+      - App
+      - path: Config/Supporter.storekit
+        buildPhase: resources
     dependencies:
       - package: PictureshowCore
       - package: PictureshowTransport
@@ -69,10 +75,7 @@ targets:
   Pictureshow-iOS-UnitTests:
     type: bundle.unit-test
     platform: iOS
-    sources:
-      - UnitTests
-      - path: Config/Supporter.storekit
-        buildPhase: resources
+    sources: [UnitTests]
     dependencies:
       - target: Pictureshow-iOS
       - package: PictureshowCore
@@ -84,10 +87,7 @@ targets:
   Pictureshow-tvOS-UnitTests:
     type: bundle.unit-test
     platform: tvOS
-    sources:
-      - UnitTests
-      - path: Config/Supporter.storekit
-        buildPhase: resources
+    sources: [UnitTests]
     dependencies:
       - target: Pictureshow-tvOS
       - package: PictureshowCore

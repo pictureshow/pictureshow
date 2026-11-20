@@ -19,7 +19,13 @@ import PictureshowCore
             RootView()
                 .environmentObject(app)
                 .environmentObject(supporter)
-                .task { supporter.startObserving() }
+                .task {
+                    #if DEBUG
+                    // Hosted tests set up their own StoreKit session before starting a listener.
+                    guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else { return }
+                    #endif
+                    supporter.startObserving()
+                }
                 .tint(Theme.accent)
                 .preferredColorScheme(app.preferences.appearance.scheme)
                 #if DEBUG && os(iOS)

@@ -1,5 +1,9 @@
 {
-  "identifier" : "PictureshowSupporter",
+  "appPolicies" : {
+    "eula" : "",
+    "policies" : []
+  },
+  "identifier" : "39F3C5E0",
   "nonRenewingSubscriptions" : [],
   "products" : [],
   "settings" : {
@@ -10,10 +14,8 @@
   },
   "subscriptionGroups" : [
     {
-      "id" : "22599049",
-      "localizations" : [
-        { "displayName" : "Supporter", "locale" : "en_US" }
-      ],
+      "id" : "D3B47C19",
+      "localizations" : [],
       "name" : "Supporter",
       "subscriptions" : [
         {
@@ -22,7 +24,7 @@
           "displayPrice" : "2.99",
           "familyShareable" : false,
           "groupNumber" : 1,
-          "internalID" : "6837219616",
+          "internalID" : "A5473B97",
           "introductoryOffer" : null,
           "localizations" : [
             {
@@ -34,11 +36,12 @@
           "productID" : "app.pictureshow.supporter.monthly",
           "recurringSubscriptionPeriod" : "P1M",
           "referenceName" : "Supporter",
-          "subscriptionGroupID" : "22599049",
-          "type" : "RecurringSubscription"
+          "subscriptionGroupID" : "D3B47C19",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : []
         }
       ]
     }
   ],
-  "version" : { "major" : 3, "minor" : 0 }
+  "version" : { "major" : 4, "minor" : 0 }
 }

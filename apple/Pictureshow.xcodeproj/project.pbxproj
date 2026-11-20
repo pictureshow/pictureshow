@@ -9,7 +9,6 @@
 /* Begin PBXBuildFile section */
 		0100B807A26C110198528541 /* InformationViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62471EE4B103D973C242E55E /* InformationViews.swift */; };
 		01217037B07D1AF498719ECB /* AccountStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95005E06BDB9445CEF5DEFF1 /* AccountStore.swift */; };
-		017EFFA274F0F0D922C3BE8C /* Supporter.storekit in Resources */ = {isa = PBXBuildFile; fileRef = 36069B96C247513EF8BA39E5 /* Supporter.storekit */; };
 		0536BC89B07BA3EDE11DE35F /* CatalogPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF4BE7B5C858C8D9C22AF100 /* CatalogPresentation.swift */; };
 		06519DF114D2428C05B55CEA /* OfflineAppTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81EBF4E3F4237D733B2DFBD5 /* OfflineAppTests.swift */; };
 		0B99F18F8D129486022D92F3 /* ProfileLocks.swift in Sources */ = {isa = PBXBuildFile; fileRef = 771392D0B7A834239EEE71B2 /* ProfileLocks.swift */; };
@@ -73,12 +72,12 @@
 		637CD8DB5AE4B8F49DEAD040 /* PictureInPictureHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81298277BD56E4141639BCA9 /* PictureInPictureHost.swift */; };
 		64A258E750FA41E87A267F30 /* MusicAppTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43B89D9898337A7314EE0529 /* MusicAppTests.swift */; };
 		65BE9E44567717B4C20096A0 /* RemoteAppTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9A5B6C33DF619C8C187BB21 /* RemoteAppTests.swift */; };
-		671B433F4E420D9FF30860A8 /* Supporter.storekit in Resources */ = {isa = PBXBuildFile; fileRef = 36069B96C247513EF8BA39E5 /* Supporter.storekit */; };
 		6823A4F1B1D927786EA9988A /* OfflineFiles.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85BFCB25BD1407FDFF65CF38 /* OfflineFiles.swift */; };
 		688E2276F883D67112CAAE3F /* PlayerScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78A1DE7E5968B6A48C7CCEE2 /* PlayerScreen.swift */; };
 		6A39D438B44AA1076A6E5C1C /* PictureInPictureAppTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20457044766A5D62E09FF0C7 /* PictureInPictureAppTests.swift */; };
 		6D4E9A4961A8AFCDDF847698 /* SeerrViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 156D1D7A3EB3C5FBF4F64411 /* SeerrViews.swift */; };
 		6E10CC2CD1BA49AE2B16D3B5 /* SeerrStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC4D33D303EBD962B2332E14 /* SeerrStoreTests.swift */; };
+		6E5F5C6CBE430A1599C4D58C /* Supporter.storekit in Resources */ = {isa = PBXBuildFile; fileRef = 36069B96C247513EF8BA39E5 /* Supporter.storekit */; };
 		6FB7EF793C86BF0504BF8FB8 /* DetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1888E9F0F445CD4A406416E7 /* DetailView.swift */; };
 		7206CEBCDFC001684E844D45 /* ProfilePinViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5C502B937F39A28F4CBDFBB /* ProfilePinViews.swift */; };
 		76F4A15E3BDE612CBD2B9D03 /* PlayerScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78A1DE7E5968B6A48C7CCEE2 /* PlayerScreen.swift */; };
@@ -159,6 +158,7 @@
 		F09A66D13482AA3E668A0EF1 /* ViewingSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3C4E018F24A7810A30B593F /* ViewingSettings.swift */; };
 		F28357EE5882DC9A217BDBB9 /* DetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1888E9F0F445CD4A406416E7 /* DetailView.swift */; };
 		F4A5D71B1FA7E29BEB321E8B /* SeerrConnections.swift in Sources */ = {isa = PBXBuildFile; fileRef = D81F8C31A8B1AE7EAC1E70C4 /* SeerrConnections.swift */; };
+		F4C7A803FEB43080163485CE /* Supporter.storekit in Resources */ = {isa = PBXBuildFile; fileRef = 36069B96C247513EF8BA39E5 /* Supporter.storekit */; };
 		F9BFA88B0817643FE7C8DE15 /* MusicNowPlaying.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF10883368366E8F842B16C4 /* MusicNowPlaying.swift */; };
 		FAD8CA3B5BE4D3331E2CF855 /* SeerrStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC4D33D303EBD962B2332E14 /* SeerrStoreTests.swift */; };
 		FBE993AB0C057D0A1E88E3EB /* MusicStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C2D97A848BCA6199F8CF76B /* MusicStore.swift */; };
@@ -532,7 +532,6 @@
 			buildConfigurationList = A3630F45820D53DF891C491A /* Build configuration list for PBXNativeTarget "Pictureshow-tvOS-UnitTests" */;
 			buildPhases = (
 				580CFC9FAD08AA051647801F /* Sources */,
-				28F6DF8AB2469FA66B060DBC /* Resources */,
 				1920501EB590EBB7712C1D16 /* Frameworks */,
 			);
 			buildRules = (
@@ -574,7 +573,6 @@
 			buildConfigurationList = 28EEE1AE441FE4643230EC0F /* Build configuration list for PBXNativeTarget "Pictureshow-iOS-UnitTests" */;
 			buildPhases = (
 				95786F81240ABE76D1B83E8E /* Sources */,
-				E3D79A5490D32F15C569446D /* Resources */,
 				7DBBB9D5D8863E15507F80A9 /* Frameworks */,
 			);
 			buildRules = (
@@ -628,19 +626,12 @@
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		28F6DF8AB2469FA66B060DBC /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				671B433F4E420D9FF30860A8 /* Supporter.storekit in Resources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		498EAB9046989F799FA6980D /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 				B2048C739BE03E29989CCDD9 /* MPL-2.0.txt in Resources */,
+				F4C7A803FEB43080163485CE /* Supporter.storekit in Resources */,
 				552DE76342EA5C4A738264BD /* hevc-main8-1080p30.mp4 in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -650,15 +641,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				3F2C51E8D81F56BF967603B2 /* MPL-2.0.txt in Resources */,
+				6E5F5C6CBE430A1599C4D58C /* Supporter.storekit in Resources */,
 				8B3B46BDA8F258118F40C929 /* hevc-main8-1080p30.mp4 in Resources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		E3D79A5490D32F15C569446D /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				017EFFA274F0F0D922C3BE8C /* Supporter.storekit in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
