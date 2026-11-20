@@ -1,4 +1,4 @@
-name: Phone remote target proof
+name: TV remote target parity proof
 on:
   push:
     branches: ['ci/remote-lows-phone-proof']
@@ -36,13 +36,14 @@ jobs:
       - name: Verify a separate Jellyfin controller opens, pauses, seeks and stops playback
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 35
-          target: google_apis
+          api-level: 34
+          target: android-tv
           arch: x86_64
-          profile: pixel_6
+          profile: tv_1080p
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-boot-anim -camera-back none -no-snapshot
           script: |
+            adb -s emulator-5554 shell pm list features android.software.leanback | grep -x true
             adb -s emulator-5554 reverse tcp:18097 tcp:18097
             adb -s emulator-5554 install app/build/outputs/apk/debug/app-debug.apk
             adb -s emulator-5554 shell wm dismiss-keyguard
