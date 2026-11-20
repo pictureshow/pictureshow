@@ -846,6 +846,10 @@ test("rc28 full-timeline HLS seeks to resume, owns caption boundaries, and resto
         .toBeGreaterThanOrEqual(2);
     // PlaybackInfo's master has no start query: its decoder clock must seek to
     // the requested 10s instead of adding a fictitious UI/subtitle offset.
+    // Checked before playback so a start at 0 cannot catch up and pass.
+    await expect
+        .poll(() => video.evaluate((v: HTMLVideoElement) => v.currentTime))
+        .toBeGreaterThanOrEqual(9.9);
     await playing(page);
     await page.getByRole("button", { name: "Pause", exact: true }).click();
     await expect
