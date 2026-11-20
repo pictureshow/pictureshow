@@ -752,9 +752,6 @@ internal class DesktopOfflineEngine(
                 is DesktopOfflineSetToken.Ready -> token
                 DesktopOfflineSetToken.NeedsPassword -> {
                     fail(key, entryId, attempt, "needs-password")
-                    mutex.withLock {
-                        mutableLibraries.update { all -> all[key]?.let { all + (key to it.copy(needsPassword = true)) } ?: all }
-                    }
                     return
                 }
                 is DesktopOfflineSetToken.Unavailable -> {
@@ -899,7 +896,13 @@ internal class DesktopOfflineEngine(
     }
 
     private suspend fun fail(key: String, entryId: String, attempt: Long, reason: String) {
-        mutex.withLock { eventLocked(key, entryId, OfflineJobEvent("fail", attempt = attempt, reason = reason)) }
+        mutex.withLock {
+            val handled = eventLocked(key, entryId, OfflineJobEvent("fail", attempt = attempt, reason = reason))
+            // The failed attempt can cancel itself in eventLocked. Publish the prompt before suspending again.
+            if (handled && reason == "needs-password") {
+                mutableLibraries.update { all -> all[key]?.let { all + (key to it.copy(needsPassword = true)) } ?: all }
+            }
+        }
     }
 
     private fun ledger(key: String, entryId: String) = object : OfflineLedger {

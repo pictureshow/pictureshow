@@ -191,6 +191,9 @@ def signed_jar(jar, work, identity, bundle, output):
                         changes[f"{entry.filename}.sha256"] = None
                     native.unlink()
                     continue
+                ids = load_commands(native).get("LC_ID_DYLIB", ())
+                if ids and ids != {f"@rpath/{native.name}"}:
+                    run("install_name_tool", "-id", f"@rpath/{native.name}", str(native))
                 audit_mach(native, bundle, f"{archive_name}!/{entry.filename}", output)
                 sign(native, identity)
                 run("codesign", "--verify", "--strict", str(native))
