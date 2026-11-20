@@ -135,29 +135,33 @@ def stage_player(native, destination):
 
 def audit_mach(path, bundle, origins, output):
     commands = load_commands(path)
+    anchors = {
+        "@loader_path": path.parent,
+        "@executable_path": bundle / "Contents/MacOS",
+    }
+
+    def bundled(file):
+        return file.is_file() and file.resolve().is_relative_to(bundle.resolve())
+
     for kind in DEPENDENCIES | {"LC_ID_DYLIB", "LC_RPATH", "LC_LOAD_DYLINKER"}:
         for name in commands.get(kind, ()):
-            if not system_path(name) and not name.startswith(("@rpath/", "@loader_path/", "@executable_path/")):
+            relative = name.startswith(("@rpath/", "@loader_path/", "@executable_path/"))
+            if not system_path(name) and not relative and not (kind == "LC_RPATH" and name in anchors):
                 raise ValueError(f"{origins}: {kind} contains external path {name}")
+    runpaths = []
+    for rpath in commands.get("LC_RPATH", ()):
+        anchor, _, suffix = rpath.partition("/")
+        if anchor in anchors:
+            runpaths.append(anchors[anchor] / suffix)
     for kind in DEPENDENCIES:
         for name in commands.get(kind, ()):
-            if name.startswith("@loader_path/") and not (path.parent / name.removeprefix("@loader_path/")).is_file():
+            anchor, _, relative = name.partition("/")
+            if anchor in anchors and not bundled(anchors[anchor] / relative):
                 raise ValueError(f"{origins}: missing {name}")
-            if name.startswith("@executable_path/") and not (bundle / "Contents/MacOS" / name.removeprefix("@executable_path/")).is_file():
-                raise ValueError(f"{origins}: missing {name}")
-            if name.startswith("@rpath/"):
-                relative = name.removeprefix("@rpath/")
-                paths = [
-                    path.parent / rpath.removeprefix("@loader_path/")
-                    for rpath in commands.get("LC_RPATH", ()) if rpath.startswith("@loader_path/")
-                ]
-                paths += [
-                    bundle / "Contents/MacOS" / rpath.removeprefix("@executable_path/")
-                    for rpath in commands.get("LC_RPATH", ()) if rpath.startswith("@executable_path/")
-                ]
-                if not any((directory / relative).is_file() for directory in paths):
-                    raise ValueError(f"{origins}: could not resolve {name} from its runpath")
-    output.append(f"{origins}:\n" + "\n".join(run("otool", "-arch", "all", "-L", str(path)).splitlines()[1:]))
+            if anchor == "@rpath" and not any(bundled(directory / relative) for directory in runpaths):
+                raise ValueError(f"{origins}: could not resolve {name} from its runpath")
+    linked = run("otool", "-arch", "all", "-L", str(path)).splitlines()
+    output.append(f"{origins}:\n" + "\n".join(line for line in linked if line.startswith("\t")))
 
 
 def foreign_native(header, name):

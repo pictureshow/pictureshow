@@ -116,7 +116,7 @@ private enum DownloadFolder {
         let preferences = UserDefaults.standard
         guard let bookmark = preferences.data(forKey: folderKey) else { return nil }
         var stale = false
-        guard let folder = try? URL(resolvingBookmarkData: bookmark, options: .withSecurityScope,
+        guard let folder = try? URL(resolvingBookmarkData: bookmark, options: [.withSecurityScope, .withoutUI],
                                     relativeTo: nil, bookmarkDataIsStale: &stale),
               folder.startAccessingSecurityScopedResource() else { return nil }
         guard FileManager.default.fileExists(atPath: folder.path) else {

@@ -51,8 +51,7 @@ class JellyfinClient(
     private val client: HttpClient,
     private val identity: ClientIdentity,
     private val probeConnectionHint: (String, Throwable) -> String? = { _, _ -> null }
-) :
-    JellyfinService,
+) : JellyfinService,
     CatalogService by CatalogClient(client, identity),
     SearchService by SearchClient(client, identity),
     app.pictureshow.core.music.MusicService by app.pictureshow.core.music.MusicClient(client, identity),
@@ -70,9 +69,12 @@ class JellyfinClient(
         var error = ClientError(ErrorKind.NETWORK, "Could not reach the server. Check its address and connection.")
         var hint: String? = null
         for (url in candidates) {
-            val result = request(url, "System/Info/Public", timeoutMillis = probeTimeout, onNetworkFailure = { failure ->
-                hint = hint ?: probeConnectionHint(url, failure)
-            }) { text ->
+            val result = request(
+                url,
+                "System/Info/Public",
+                timeoutMillis = probeTimeout,
+                onNetworkFailure = { failure -> hint = hint ?: probeConnectionHint(url, failure) }
+            ) { text ->
                 val info = json.parseToJsonElement(text).jsonObject
                 if (info.string("ProductName") != "Jellyfin Server") {
                     throw ProtocolFailure(ErrorKind.NOT_JELLYFIN, "This address is not a Jellyfin server.")
