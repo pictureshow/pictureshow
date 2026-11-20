@@ -275,7 +275,7 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                             onAccounts = controller::accounts,
                             onRequests = controller::openRequests.takeIf { controller.seerr.state.collectAsState().value.connected },
                             onDownloads = { if (state.route != DesktopRoute.Downloads) controller.downloads() },
-                            together = controller.together?.let { { DesktopTogetherNav(controller, state.route) } },
+                            together = controller.together?.let { { DesktopTogetherNav(state.root, controller::watchTogether, controller::remoteControl) } },
                             onSignOut = { modalReturnFocus = "nav:account"; signOut = state.account }
                         )
                     }

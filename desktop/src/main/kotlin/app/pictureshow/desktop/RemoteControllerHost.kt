@@ -174,6 +174,8 @@ internal class RemoteControllerHost(
 
     fun subtitle(index: Int) = send("subtitle", index = index) { RemoteCommand("subtitle", index = index) }
 
+    fun volume(level: Int) = send("volume", level = level) { RemoteCommand("volume", level = level) }
+
     fun navigate(name: String) {
         val target = controller?.target ?: return
         if (controller?.phase != "attached") return
@@ -204,10 +206,16 @@ internal class RemoteControllerHost(
         }
     }
 
-    private fun send(value: String, entry: String? = null, index: Int? = null, command: (RemoteControllerState) -> RemoteCommand) {
+    private fun send(
+        value: String,
+        entry: String? = null,
+        index: Int? = null,
+        level: Int? = null,
+        command: (RemoteControllerState) -> RemoteCommand
+    ) {
         val signedIn = account ?: return
         val id = nextId++
-        reduce(RemoteControllerEvent("intent", id = id, nowMs = nowMs(), value = value, entry = entry, index = index))
+        reduce(RemoteControllerEvent("intent", id = id, nowMs = nowMs(), value = value, entry = entry, index = index, level = level))
         val after = controller ?: return
         if (after.effect != "dispatch") return
         val wire = after.target?.let { remoteRequest(it, command(after)) }
@@ -234,38 +242,23 @@ internal class RemoteControllerHost(
 }
 
 /** Plain words for a phase, or null while everything is in order. Nothing here names what a denied viewer cannot see. */
-internal const val REMOTE_CHECKING = "Checking the TV…"
-internal const val REMOTE_IDLE = "Nothing is playing on this TV."
+internal const val REMOTE_CHECKING = "Checking the device…"
+internal const val REMOTE_IDLE = "Nothing is playing on this device."
 
 /** A track type the TV hasn't reported: it stays silent about its own automatic choice until someone picks (PLAY-20). */
-internal const val REMOTE_TRACK_UNREPORTED = "TV reports it once you pick"
+internal const val REMOTE_TRACK_UNREPORTED = "Device reports it once you pick"
 
 internal fun remoteProblem(phase: String?): String? = when (phase) {
-    "target-gone" -> "This TV isn't available right now. Open Pictureshow on the TV, then try again."
-    "target-restarted" -> "This TV restarted. Reconnect to keep controlling it."
+    "target-gone" -> "This device isn't available right now. Open its app, then try again."
+    "target-restarted" -> "This device restarted. Reconnect to keep controlling it."
     "denied" -> "This account isn't allowed to control that device. The server's administrator can change this."
     "signed-out" -> "Your sign-in has ended. Sign in again to use the remote."
     else -> null
 }
 
-/** An outcome stays this long after the command's confirmation window closes. */
-private const val STATUS_AFTER_WINDOW_MS = 10_000L
-
-/** Every wording of [remoteCommandStatus] and the slot's other lines: the screen reserves room for the longest. */
-internal val REMOTE_STATUS_WORDINGS = listOf(
-    remoteCapNote(RemoteCap(REMOTE_PLAY_ITEM_LIMIT, 1_000_000)),
-    "Sent to the TV.",
-    "Sending to the TV…",
-    "Sent. Check the queue on the TV.",
-    "The TV didn't confirm that.",
-    "That wasn't allowed.",
-    REMOTE_CHECKING,
-    REMOTE_IDLE
-)
-
 /**
- * What the screen may claim about the last command. A 204 only ever reads as sending, and an old outcome leaves the
- * screen rather than sitting under whatever has happened since.
+ * A 204 means the server accepted dispatch. Only a later session report can confirm delivery. Keep a missed
+ * confirmation visible until the viewer sends something else or disconnects, even when a refresh is still in flight.
  */
 internal fun remoteCommandStatus(state: RemoteControllerState?, nowMs: Long, capped: RemoteCapped? = null): String? {
     if (state?.phase != "attached") return null
@@ -276,17 +269,17 @@ internal fun remoteCommandStatus(state: RemoteControllerState?, nowMs: Long, cap
     } else {
         pending?.let { Triple(it.operation, it.result, it.sentAtMs) }
     } ?: return null
-    val (operation, result, sentAtMs) = latest
-    if (nowMs - sentAtMs >= confirmWindowMs(operation) + STATUS_AFTER_WINDOW_MS) return null
+    val (operation, observed, sentAtMs) = latest
+    val result = if (observed == "sent" && nowMs - sentAtMs >= confirmWindowMs(operation)) "unknown" else observed
     val latestId = if (follow != null && (pending == null || follow.id > pending.id)) follow.id else pending?.id
     // A cut list says how much went for as long as its command is the one on screen and nothing has gone wrong.
     if (capped != null && capped.id == latestId && result == "sent") return capped.note
     return when (result) {
-        "sent" -> if (operation == "queue") "Sent to the TV." else "Sending to the TV…"
+        "sent" -> if (operation == "queue") "Sent to the device." else "Sending to the device…"
         "unknown" -> if (operation == "queue") {
-            "Sent. Check the queue on the TV."
+            "Sent. Check the queue on the device."
         } else {
-            "The TV didn't confirm that."
+            "The device didn't confirm that command."
         }
         "rejected" -> "That wasn't allowed."
         else -> null

@@ -3,6 +3,7 @@
  */
 package app.pictureshow.desktop
 
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -17,7 +18,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.input.ImeAction
@@ -72,7 +75,11 @@ internal fun DownloadsPage(s: DesktopOfflineState, owner: DesktopOffline, play: 
         DesktopUiProbe.requestFocus[first]?.let { runCatching { it.requestFocus() } }
     }
     CompositionLocalProvider(LocalModalOpen provides (LocalModalOpen.current || s.confirm != null)) {
-        LazyColumn(Modifier.fillMaxSize().padding(horizontal = 20.dp), state = rememberLazyListState(), verticalArrangement = Arrangement.spacedBy(10.dp),
+        LazyColumn(Modifier.fillMaxSize().focusProperties {
+            onExit = {
+                if (requestedFocusDirection == FocusDirection.Up || requestedFocusDirection == FocusDirection.Down) cancelFocusChange()
+            }
+        }.focusGroup().padding(horizontal = 20.dp), state = rememberLazyListState(), verticalArrangement = Arrangement.spacedBy(10.dp),
             contentPadding = PaddingValues(vertical = 12.dp)) {
             item(key = "title") { Text("Downloads", Modifier.semantics { heading() }, style = MaterialTheme.typography.headlineMedium) }
             if (s.serverUnreachable) item(key = "unreachable") {

@@ -115,7 +115,7 @@ internal fun desktopStillWatchingCaption(value: StillWatching): String {
 private fun bitrateLabel(mbps: Int?) = if (mbps == null) "Original" else "$mbps Mbps"
 
 /** SET-23: the long Settings page opens with its sections; choosing one scrolls to it and focuses its heading. */
-internal val DESKTOP_SETTINGS_SECTIONS = listOf("Account", "Playback", "Subtitles", "Skip segments", "Languages", "Audio", "Interface", "About")
+internal val DESKTOP_SETTINGS_SECTIONS = listOf("Account", "Playback", "Subtitles", "Skip segments", "Languages", "Remote control", "Audio", "Interface", "About")
 
 internal class DesktopSettingsAnchors {
     val views = DESKTOP_SETTINGS_SECTIONS.associateWith { BringIntoViewRequester() }

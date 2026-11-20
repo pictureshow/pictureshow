@@ -197,6 +197,7 @@ const pendingApplicationCases = new Map([
     ["runtime-label-tiny", "runtime-label"],
     ["runtime-label-just-under-minute", "runtime-label"],
     ["runtime-label-one-minute", "runtime-label"],
+    ["runtime-label-short-clip-keeps-seconds", "runtime-label"],
     ["runtime-label-hours", "runtime-label"],
     ["runtime-label-implausible", "runtime-label"],
     ["placeholder-kind-movies", "catalog-placeholder-kind"],

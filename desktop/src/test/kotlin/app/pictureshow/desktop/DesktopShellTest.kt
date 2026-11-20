@@ -92,6 +92,28 @@ class DesktopShellTest {
         assertInsideWindow("nav:settings")
     }
 
+    @Test fun remoteAndTogetherReplaceThePreviousSidebarOwner() = runDesktopComposeUiTest(1280, 800) {
+        val root = mutableStateOf<String?>(DESKTOP_ROOT_HOME)
+        setContent {
+            PictureshowTheme {
+                DesktopSidebar(account, libraries(2), root.value, {}, {}, {}, {}, {}, together = {
+                    DesktopTogetherNav(
+                        root.value,
+                        { root.value = desktopRootFor(DesktopRoute.WatchTogether, root.value) },
+                        { root.value = desktopRootFor(DesktopRoute.Remote, root.value) }
+                    )
+                })
+            }
+        }
+        onNodeWithTag("nav:home").assertIsSelected()
+        onNodeWithTag("nav:together").performClick()
+        onNodeWithTag("nav:home").assertIsNotSelected()
+        onNodeWithTag("nav:together").assertIsSelected()
+        onNodeWithTag("nav:remote").performClick()
+        onNodeWithTag("nav:together").assertIsNotSelected()
+        onNodeWithTag("nav:remote").assertIsSelected()
+    }
+
     @Test fun litRootIsTheStoredOwner() = runDesktopComposeUiTest(1280, 800) {
         shell(views = 3, livingRoom = false, root = desktopLibraryRoot("lib2"))
         onNodeWithTag("nav:library:lib2", useUnmergedTree = true).assertIsSelected()

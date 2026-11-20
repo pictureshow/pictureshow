@@ -124,6 +124,8 @@ internal const val DESKTOP_ROOT_HOME = "home"
 internal const val DESKTOP_ROOT_SEARCH = "search"
 internal const val DESKTOP_ROOT_SETTINGS = "settings"
 internal const val DESKTOP_ROOT_DOWNLOADS = "downloads"
+internal const val DESKTOP_ROOT_TOGETHER = "watch-together"
+internal const val DESKTOP_ROOT_REMOTE = "remote"
 internal fun desktopLibraryRoot(id: String) = "library:$id"
 /** A root page owns itself; any other page keeps the root it was opened from. */
 internal fun desktopRootFor(route: DesktopRoute, previous: String?): String? = when (route) {
@@ -132,5 +134,7 @@ internal fun desktopRootFor(route: DesktopRoute, previous: String?): String? = w
     DesktopRoute.Settings -> DESKTOP_ROOT_SETTINGS
     DesktopRoute.Requests -> DESKTOP_ROOT_REQUESTS
     DesktopRoute.Downloads -> DESKTOP_ROOT_DOWNLOADS
+    DesktopRoute.WatchTogether -> DESKTOP_ROOT_TOGETHER
+    DesktopRoute.Remote -> DESKTOP_ROOT_REMOTE
     else -> previous
 }

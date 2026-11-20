@@ -22,6 +22,8 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class RemoteControllerHostTest {
@@ -178,7 +180,7 @@ class RemoteControllerHostTest {
     }
 
     @Test
-    fun aNeverConfirmedCommandSaysSoThenLeavesTheScreen() = runTest {
+    fun aNeverConfirmedCommandStaysVisibleUntilTheViewerActs() = runTest {
         val gateway = Gateway()
         gateway.targets = ClientResult.Success(listOf(tv))
         val host = host(gateway)
@@ -186,14 +188,45 @@ class RemoteControllerHostTest {
         runCurrent()
         host.pause()
         runCurrent()
-        assertEquals("Sending to the TV…", remoteCommandStatus(host.state.value.controller, currentTime))
+        assertEquals("Sending to the device…", remoteCommandStatus(host.state.value.controller, currentTime))
         advanceTimeBy(6_000)
         assertEquals(
-            "The TV didn't confirm that.",
+            "The device didn't confirm that command.",
             remoteCommandStatus(host.state.value.controller, currentTime)
         )
         advanceTimeBy(10_000)
+        assertEquals("The device didn't confirm that command.", remoteCommandStatus(host.state.value.controller, currentTime))
+        host.detach()
         assertNull(remoteCommandStatus(host.state.value.controller, currentTime))
+    }
+
+    @Test
+    fun volumeUsesAdvertisedCapabilityAndWaitsForTheTargetsReport() = runTest {
+        val gateway = Gateway()
+        gateway.targets = ClientResult.Success(listOf(tv))
+        val host = host(gateway)
+        host.attach(tv)
+        runCurrent()
+        host.volume(55)
+        runCurrent()
+        assertTrue(gateway.sent.isEmpty())
+
+        val adjustable = tv.copy(commands = tv.commands + "SetVolume", now = tv.now!!.copy(volume = 35))
+        gateway.targets = ClientResult.Success(listOf(adjustable))
+        advanceTimeBy(2_000)
+        runCurrent()
+        host.volume(55)
+        runCurrent()
+        val payload = gateway.sent.single().body!!
+        assertEquals("SetVolume", payload.getValue("Name").jsonPrimitive.content)
+        assertEquals("55", payload.getValue("Arguments").jsonObject.getValue("Volume").jsonPrimitive.content)
+        assertEquals(35, host.state.value.controller!!.target!!.now!!.volume)
+        assertEquals("sent", host.state.value.controller!!.followUp!!.result)
+
+        gateway.targets = ClientResult.Success(listOf(adjustable.copy(now = adjustable.now!!.copy(volume = 55))))
+        advanceTimeBy(2_000)
+        runCurrent()
+        assertEquals("confirmed", host.state.value.controller!!.followUp!!.result)
     }
 
     // REM-03: a long list starts on the TV with what fits in one request line, and the phone says how many went.
@@ -218,7 +251,7 @@ class RemoteControllerHostTest {
         host.playNow(tracks.take(3))
         runCurrent()
         assertEquals(3, gateway.sent.last().query.getValue("itemIds").split(",").size)
-        assertEquals("Sending to the TV…", remoteCommandStatus(host.state.value.controller, currentTime, host.state.value.capped))
+        assertEquals("Sending to the device…", remoteCommandStatus(host.state.value.controller, currentTime, host.state.value.capped))
     }
 
     // rc33: a picker start read "didn't confirm" while the TV was already starting the title, which takes it seconds.
@@ -234,7 +267,7 @@ class RemoteControllerHostTest {
         runCurrent()
         assertEquals(item, gateway.sent.single().query["itemIds"])
         advanceTimeBy(6_000)
-        assertEquals("Sending to the TV…", remoteCommandStatus(host.state.value.controller, currentTime))
+        assertEquals("Sending to the device…", remoteCommandStatus(host.state.value.controller, currentTime))
         gateway.targets = ClientResult.Success(listOf(tv.copy(now = tv.now!!.copy(item = item, positionTicks = 0, paused = false))))
         advanceTimeBy(1_500)
         assertEquals("confirmed", host.state.value.controller!!.command!!.pending!!.result)
@@ -254,8 +287,10 @@ class RemoteControllerHostTest {
         assertEquals(item, gateway.sent.single().query["itemIds"])
         advanceTimeBy(12_500)
         runCurrent()
-        assertEquals("The TV didn't confirm that.", remoteCommandStatus(host.state.value.controller, currentTime))
+        assertEquals("The device didn't confirm that command.", remoteCommandStatus(host.state.value.controller, currentTime))
         advanceTimeBy(10_000)
+        assertEquals("The device didn't confirm that command.", remoteCommandStatus(host.state.value.controller, currentTime))
+        host.detach()
         assertNull(remoteCommandStatus(host.state.value.controller, currentTime))
     }
 

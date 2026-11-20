@@ -112,9 +112,11 @@ public enum CatalogRules {
     /// rounded to the nearest and never "0 s"; unknown or implausible totals (over 24 h) are omitted.
     public static func runtimeLabel(_ ticks: Int64?) -> String {
         guard let ticks, ticks >= 1, ticks <= 864_000_000_000 else { return "" }
-        if ticks < 600_000_000 {
+        if ticks < 6_000_000_000 {
             let seconds = max(1, (ticks + 5_000_000) / 10_000_000)
-            return seconds < 60 ? "\(seconds) s" : "1m"
+            let minutes = seconds / 60, remainder = seconds % 60
+            if minutes == 0 { return "\(seconds) s" }
+            return remainder == 0 ? "\(minutes)m" : "\(minutes)m \(remainder)s"
         }
         let minutes = ticks / 600_000_000, hours = minutes / 60
         return hours > 0 ? "\(hours)h \(minutes % 60)m" : "\(minutes)m"

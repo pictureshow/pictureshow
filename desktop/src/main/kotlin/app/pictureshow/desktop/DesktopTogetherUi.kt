@@ -4,6 +4,8 @@
 package app.pictureshow.desktop
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
@@ -12,6 +14,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
@@ -22,11 +26,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.pictureshow.core.MediaItem
 import app.pictureshow.core.control.RemoteTarget
+import app.pictureshow.core.control.RemoteControllerState
 import app.pictureshow.core.control.remoteTrackSelected
 import app.pictureshow.core.sync.SyncDepartureCause
 import app.pictureshow.core.sync.SyncQuality
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import kotlin.math.roundToInt
 
 // Navigation. Host calls hop to the host thread; the page itself opens through the controller as any other.
 
@@ -52,7 +58,7 @@ internal fun syncNoticeText(notice: SyncNotice): String = when (notice.kind) {
     SyncNoticeKind.PREPARING -> "Preparing playback…"
     SyncNoticeKind.LIBRARY_DENIED -> "This title is unavailable to your account. Leave the group to keep watching on your own."
     SyncNoticeKind.CONNECTION -> "Waiting for a server connection. Try again when connected."
-    SyncNoticeKind.SOURCE_UNAVAILABLE -> "Watch together needs an online movie, episode or song. Leave the group to play this source separately."
+    SyncNoticeKind.SOURCE_UNAVAILABLE -> "Watch together needs an online movie or episode. Leave the group to play this source separately."
     SyncNoticeKind.CHECK_ACCESS -> "Refresh to check whether your account can join groups."
     SyncNoticeKind.ACCESS_DENIED -> "Your account cannot join groups. Ask your server admin to turn on SyncPlay for your account."
     SyncNoticeKind.REQUEST_FAILED -> "The server has not confirmed that request. Try again after refreshing the connection."
@@ -97,6 +103,18 @@ internal fun syncQualityText(quality: SyncQuality): String = when (quality) {
     SyncQuality.IN_SYNC -> "Looks in sync"
     SyncQuality.CATCHING_UP -> "Catching up"
     SyncQuality.OUT_OF_SYNC -> "Out of sync · Rejoin"
+}
+
+private fun SyncPlayPresentation.syncQualityLabel(): String? =
+    syncQualityText(quality).takeUnless { phase == "Paused" && quality == SyncQuality.UNKNOWN }
+
+private fun Modifier.onEnter(action: () -> Unit): Modifier = onPreviewKeyEvent { event ->
+    if (event.key != Key.Enter && event.key != Key.NumPadEnter) {
+        false
+    } else {
+        if (event.type == KeyEventType.KeyUp) action()
+        true
+    }
 }
 
 /** SYN-01..07: groups on this server, creating and joining one, and the group itself with its shared controls. */
@@ -145,6 +163,12 @@ internal fun DesktopWatchTogetherPage(c: DesktopController) {
 @Composable
 private fun DesktopTogetherChooser(t: DesktopTogether, state: SyncPlayPresentation) {
     var name by remember { mutableStateOf("") }
+    val canCreate = name.isNotBlank() && !state.busy
+    fun create() {
+        if (!canCreate) return
+        t.sync.action("create", name.trim())
+        name = ""
+    }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         state.accessNotice?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.probe("together-access")) }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -159,8 +183,8 @@ private fun DesktopTogetherChooser(t: DesktopTogether, state: SyncPlayPresentati
             if (state.policy == "CreateAndJoinGroups") {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     OutlinedTextField(name, { name = it.take(64) }, label = { Text("Group name") }, singleLine = true,
-                        modifier = Modifier.widthIn(max = 360.dp).weight(1f, fill = false).probe("together-name"))
-                    Button(onClick = { t.sync.action("create", name.trim()); name = "" }, enabled = name.isNotBlank() && !state.busy,
+                        modifier = Modifier.widthIn(max = 360.dp).weight(1f, fill = false).onEnter(::create).probe("together-name"))
+                    Button(onClick = ::create, enabled = canCreate,
                         modifier = Modifier.controlFocus().heightIn(min = 48.dp).probe("together-create")) { Text("Create and join") }
                 }
             } else {
@@ -175,7 +199,9 @@ private fun DesktopTogetherGroup(t: DesktopTogether, state: SyncPlayPresentation
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(state.groupName ?: "Your group", style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() }.probe("together-group-name"))
         Text(syncPhaseText(state), modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }.probe("together-phase"))
-        Text("${syncQualityText(state.quality)} · Sync is estimated from this device. Other devices may differ.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+        state.syncQualityLabel()?.let { label ->
+            Text("$label · Sync is estimated from this device. Other devices may differ.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+        }
         if (state.participants.isNotEmpty()) {
             Text("People watching: ${state.participants.joinToString(", ")}", modifier = Modifier.probe("together-people"))
             Text("Jellyfin shares names only, not who is ready.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
@@ -205,7 +231,7 @@ private fun DesktopTogetherGroup(t: DesktopTogether, state: SyncPlayPresentation
                 modifier = Modifier.controlFocus().probe("together-shuffle"))
         }
         Text("Group queue", style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
-        if (state.queue.isEmpty()) Text("Play a movie, episode or song while you're in this group, and it starts for everyone.", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.probe("together-queue-empty"))
+        if (state.queue.isEmpty()) Text("Play a movie or episode while you're in this group, and it starts for everyone.", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.probe("together-queue-empty"))
         state.queue.forEach { row ->
             val title = row.title ?: if (row.titleUnavailable) "Title unavailable" else "Loading…"
             Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -238,8 +264,9 @@ internal fun DesktopSyncChip(c: DesktopController) {
     val opener = remember { FocusRequester() }
     val first = remember { FocusRequester() }
     Box {
-        AssistChip(onClick = { open = true }, label = { Text("Watching together · ${state.groupName ?: "Group"} · ${syncQualityText(state.quality)}", maxLines = 1, overflow = TextOverflow.Ellipsis) },
-            modifier = Modifier.focusRequester(opener).controlFocus().probe("together-chip"))
+        val label = listOfNotNull("Watching together", state.groupName ?: "Group", state.syncQualityLabel() ?: "Paused").joinToString(" · ")
+        AssistChip(onClick = { open = true }, label = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+            modifier = Modifier.focusRequester(opener).controlFocus().onEnter { open = true }.probe("together-chip"))
         DesktopDropdownMenu(open, { open = false }, opener, first) {
             DropdownMenuItem({ Text(if (state.ignoreWait) "Wait for this device" else "Don't wait for this device") }, { open = false; t.sync.action("ignore-wait", (!state.ignoreWait).toString()) },
                 modifier = Modifier.focusRequester(first).menuItemFocus().probe("together-chip-wait"))
@@ -273,7 +300,7 @@ internal fun DesktopTogetherBar(c: DesktopController) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Column(Modifier.weight(1f)) {
                         Text(remoteProblem(ui.controller?.phase) ?: remoteNowLine(target), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.probe("remote-bar-status"))
-                        Text(target.name, maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                        Text(desktopRemoteName(target), maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                     }
                     TextButton(onClick = c::remoteControl, modifier = Modifier.controlFocus().probe("remote-bar-open")) { Text("Remote") }
                 }
@@ -306,12 +333,12 @@ internal fun DesktopPlayOnButton(c: DesktopController, item: MediaItem) {
             when {
                 ui.listing -> DropdownMenuItem({ Text("Looking for devices…") }, {}, enabled = false, modifier = Modifier.focusRequester(first).menuItemFocus())
                 ui.listFailed && ui.targets.isEmpty() -> DropdownMenuItem({ Text("Couldn't list devices. Try again.") }, {}, enabled = false, modifier = Modifier.focusRequester(first).menuItemFocus())
-                ui.targets.isEmpty() -> DropdownMenuItem({ Text("No other devices. Open Pictureshow on the TV, signed in to this server.") }, {}, enabled = false,
+                ui.targets.isEmpty() -> DropdownMenuItem({ Text("No other devices. Open a compatible app on another device and sign in to this server.") }, {}, enabled = false,
                     modifier = Modifier.focusRequester(first).menuItemFocus().probe("play-on-none"))
                 else -> ui.targets.forEachIndexed { i, target ->
                     DropdownMenuItem(
                         { Column {
-                            Text(target.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(desktopRemoteName(target), maxLines = 1, overflow = TextOverflow.Ellipsis)
                             target.viewerName?.takeIf { !target.sameViewer }?.let { Text("Signed in as $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                         } },
                         {
@@ -342,25 +369,30 @@ internal fun DesktopRemotePage(c: DesktopController) {
         t.controller.setPicker(target == null)
         onDispose { t.controller.setPicker(false) }
     }
-    Column(Modifier.fillMaxSize().padding(horizontal = 32.dp, vertical = 24.dp).probe("remote-page"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 32.dp, vertical = 24.dp).probe("remote-page"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Remote", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.semantics { heading() })
         if (target == null) {
-            Text(remoteProblem(state?.phase) ?: "Control Pictureshow on a TV from this computer. The TV needs to be on and signed in to this server.")
+            Text(remoteProblem(state?.phase) ?: "Control another device from this computer. Keep the other device signed in and its app open.")
             ui.targets.forEach { candidate ->
                 OutlinedButton(onClick = { t.controller.attach(candidate) }, modifier = Modifier.controlFocus().heightIn(min = 48.dp).probe("remote-choose:${candidate.session}")) {
-                    Text(candidate.name + (candidate.viewerName?.takeIf { !candidate.sameViewer }?.let { " · Signed in as $it" } ?: ""))
+                    Column {
+                        Text(desktopRemoteName(candidate))
+                        candidate.viewerName?.takeIf { !candidate.sameViewer }?.let {
+                            Text("Signed in as $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
                 }
             }
             if (ui.targets.isEmpty() && !ui.listing) Text("No other devices are available right now.", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.probe("remote-none"))
             return@Column
         }
-        Text(target.name, style = MaterialTheme.typography.titleLarge, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.probe("remote-target"))
+        Text(desktopRemoteName(target), style = MaterialTheme.typography.titleLarge, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.probe("remote-target"))
         target.viewerName?.takeIf { !target.sameViewer }?.let { Text("Signed in as $it", color = MaterialTheme.colorScheme.onSurfaceVariant) }
         // The status line keeps its height whatever it says, so no control moves when it changes (REM-04).
         val status = remoteProblem(state.phase) ?: remoteCommandStatus(state, now, ui.capped) ?: if (state.phase == "attached") remoteNowLine(target) else REMOTE_CHECKING
         Text(status, maxLines = 2, minLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }.probe("remote-status"))
         val playing = target.now
-        val usable = state.phase == "attached"
+        val usable = state.phase == "attached" && state.command?.fresh == true
         playing?.takeIf { it.durationTicks > 0 }?.let { n ->
             Text("${formatTicks(n.positionTicks)} / ${formatTicks(n.durationTicks)}", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.probe("remote-position"))
         }
@@ -378,7 +410,8 @@ internal fun DesktopRemotePage(c: DesktopController) {
             OutlinedButton(onClick = t.controller::stop, enabled = usable && playing != null, modifier = Modifier.controlFocus().heightIn(min = 48.dp).probe("remote-stop")) { Text("Stop") }
             TextButton(onClick = t.controller::detach, modifier = Modifier.controlFocus().heightIn(min = 48.dp).probe("remote-disconnect")) { Text("Disconnect") }
         }
-        Text("Disconnect leaves the TV playing. Stop ends it.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+        Text("Disconnect leaves playback running. Stop ends it.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+        DesktopRemoteVolume(t.controller, state, target, usable)
         playing?.let { n ->
             listOf("Audio" to "Audio", "Subtitle" to "Subtitles").forEach { (type, label) ->
                 val tracks = n.tracks.filter { it.type == type }
@@ -398,6 +431,38 @@ internal fun DesktopRemotePage(c: DesktopController) {
     }
 }
 
+/** A device's report owns the value. A local draft is used only until the viewer releases the slider. */
+@Composable
+private fun DesktopRemoteVolume(host: RemoteControllerHost, state: RemoteControllerState, target: RemoteTarget, enabled: Boolean) {
+    Text("Volume", style = MaterialTheme.typography.titleSmall)
+    val reported = target.now?.volume?.takeIf { it in 0..100 }
+    when {
+        "SetVolume" !in target.commands ->
+            Text("Adjust volume on the device.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        reported == null ->
+            Text("This device hasn't reported a volume level.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        else -> {
+            var draft by remember(target.session, state.generation) { mutableStateOf<Float?>(null) }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Slider(draft ?: reported.toFloat(), { draft = it }, enabled = enabled,
+                    onValueChangeFinished = {
+                        draft?.roundToInt()?.takeIf { it != reported }?.let(host::volume)
+                        draft = null
+                    },
+                    valueRange = 0f..100f, modifier = Modifier.width(220.dp).controlFocus(RoundedCornerShape(8.dp), enabled = enabled)
+                        .probe("remote-volume").semantics { contentDescription = "Device volume" })
+                Text("${draft?.roundToInt() ?: reported}%")
+            }
+        }
+    }
+}
+
+private fun desktopRemoteName(target: RemoteTarget): String = buildString {
+    append(target.name)
+    if (target.duplicateName) append(" (").append(target.device.takeLast(4)).append(')')
+    if (target.client.isNotBlank() && !target.client.equals(target.name, ignoreCase = true)) append(" · ").append(target.client)
+}
+
 private const val REMOTE_STEP_TICKS = 300_000_000L
 
 private fun formatTicks(ticks: Long): String {
@@ -410,7 +475,7 @@ private fun formatTicks(ticks: Long): String {
 
 /** The sidebar's Watch together and Remote entries. */
 @Composable
-internal fun DesktopTogetherNav(c: DesktopController, route: DesktopRoute) {
-    SidebarItem("Watch together", route == DesktopRoute.WatchTogether, "nav:together", c::watchTogether)
-    SidebarItem("Remote", route == DesktopRoute.Remote, "nav:remote", c::remoteControl)
+internal fun DesktopTogetherNav(root: String?, watchTogether: () -> Unit, remoteControl: () -> Unit) {
+    SidebarItem("Watch together", root == DESKTOP_ROOT_TOGETHER, "nav:together", watchTogether)
+    SidebarItem("Remote", root == DESKTOP_ROOT_REMOTE, "nav:remote", remoteControl)
 }
