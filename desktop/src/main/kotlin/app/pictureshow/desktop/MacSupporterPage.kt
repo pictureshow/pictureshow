@@ -60,7 +60,7 @@ internal fun MacSupporterPage(bridge: StoreKitBridge) {
                 modifier = Modifier.controlFocus().probe("supporter:manage")
             ) { Text("Manage or cancel in the App Store") }
             if (model.showManageInstructions) {
-                Text("To manage or cancel, open the App Store, then choose your Apple Account name, Account Settings, and Subscriptions.")
+                Text("To manage or cancel, open the App Store, then choose your name, Account Settings, and Subscriptions.")
             }
         } else if (product != null) {
             Text(product.name)
