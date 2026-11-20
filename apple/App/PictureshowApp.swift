@@ -6,6 +6,7 @@ import PictureshowCore
 
 @main struct PictureshowApp: App {
     @StateObject private var app = AppModel()
+    @StateObject private var supporter = SupporterModel(store: StoreKitSupporter())
 
     init() {
         #if os(iOS)
@@ -17,6 +18,8 @@ import PictureshowCore
         WindowGroup {
             RootView()
                 .environmentObject(app)
+                .environmentObject(supporter)
+                .task { await supporter.observeChanges() }
                 .tint(Theme.accent)
                 .preferredColorScheme(app.preferences.appearance.scheme)
                 #if DEBUG && os(iOS)

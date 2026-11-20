@@ -16,11 +16,13 @@ private struct StoreEntitlement: Encodable {
     let productId: String
     let active: Bool
     let expirationMillis: Int64?
+    let supporterCode: String
 
-    init(_ transaction: Transaction) {
+    init(_ transaction: Transaction, entitled: Bool? = nil) {
         productId = transaction.productID
-        active = transaction.revocationDate == nil && !transaction.isUpgraded &&
-            (transaction.expirationDate.map { $0 > Date() } ?? true)
+        let current = entitled ?? (transaction.expirationDate.map { $0 > Date() } ?? true)
+        active = current && transaction.revocationDate == nil && !transaction.isUpgraded
+        supporterCode = String(transaction.originalID)
         expirationMillis = transaction.expirationDate.map { Int64($0.timeIntervalSince1970 * 1000) }
     }
 }
@@ -31,6 +33,8 @@ private struct StoreReply: Encodable {
     var purchase: String?
     var update: StoreEntitlement?
     var error: String?
+    var failure: String?
+    var opened: Bool?
 }
 
 public typealias StoreCallback = @convention(c) (Int64, UnsafePointer<CChar>) -> Void
@@ -48,14 +52,22 @@ public func storeRequest(_ id: Int64, _ command: Int32, _ product: UnsafePointer
         do {
             switch command {
             case 1:
-                let products = try await Product.products(for: [supporterProduct])
+                guard AppStore.canMakePayments else {
+                    send(StoreReply(error: "Payments are restricted.", failure: "PAYMENTS_RESTRICTED"), id: id, to: callback)
+                    return
+                }
+                let products = try await Product.products(for: [supporterProduct]).filter(isMonthly)
                 reply = StoreReply(products: products.map {
                     StoreProduct(id: $0.id, name: $0.displayName, displayPrice: $0.displayPrice)
                 })
             case 2:
+                guard AppStore.canMakePayments else {
+                    send(StoreReply(error: "Payments are restricted.", failure: "PAYMENTS_RESTRICTED"), id: id, to: callback)
+                    return
+                }
                 guard requested == supporterProduct,
-                      let product = try await Product.products(for: [supporterProduct]).first else {
-                    send(StoreReply(error: "The Supporter subscription is unavailable."), id: id, to: callback)
+                      let product = try await Product.products(for: [supporterProduct]).first(where: isMonthly) else {
+                    send(StoreReply(error: "The Supporter subscription is unavailable.", failure: "PRODUCT_UNAVAILABLE"), id: id, to: callback)
                     return
                 }
                 switch try await product.purchase() {
@@ -75,19 +87,37 @@ public func storeRequest(_ id: Int64, _ command: Int32, _ product: UnsafePointer
                 var entitlements: [StoreEntitlement] = []
                 for await result in Transaction.currentEntitlements {
                     if case .verified(let transaction) = result, transaction.productID == supporterProduct {
-                        let entitlement = StoreEntitlement(transaction)
+                        let entitlement = StoreEntitlement(transaction, entitled: true)
                         if entitlement.active { entitlements.append(entitlement) }
                     }
                 }
                 reply = StoreReply(entitlements: entitlements)
+            case 4:
+                try await AppStore.sync()
+                reply = StoreReply()
+            case 5:
+                let url = URL(string: "https://apps.apple.com/account/subscriptions")!
+                reply = StoreReply(opened: NSWorkspace.shared.open(url))
             default:
                 reply = StoreReply(error: "This App Store operation is unavailable.")
             }
         } catch {
-            reply = StoreReply(error: "The App Store request could not be completed. Try again.")
+            let failure: String?
+            switch error {
+            case StoreKitError.notAvailableInStorefront: failure = "PRODUCT_UNAVAILABLE"
+            case StoreKitError.networkError, is URLError: failure = "NETWORK"
+            case StoreKitError.userCancelled: failure = "CANCELLED"
+            default: failure = nil
+            }
+            reply = StoreReply(error: "The App Store request could not be completed. Try again.", failure: failure)
         }
         send(reply, id: id, to: callback)
     }
+}
+
+private func isMonthly(_ product: Product) -> Bool {
+    guard let period = product.subscription?.subscriptionPeriod else { return false }
+    return period.value == 1 && period.unit == .month
 }
 
 @MainActor private var observer: Task<Void, Never>?
@@ -97,10 +127,21 @@ public func storeObserve(_ callback: StoreCallback) {
     Task { @MainActor in
         guard observer == nil else { return }
         observer = Task {
-            for await result in Transaction.updates {
-                guard case .verified(let transaction) = result, transaction.productID == supporterProduct else { continue }
-                send(StoreReply(update: StoreEntitlement(transaction)), id: 0, to: callback)
-                await transaction.finish()
+            await withTaskGroup(of: Void.self) { group in
+                group.addTask {
+                    for await result in Transaction.updates {
+                        guard case .verified(let transaction) = result, transaction.productID == supporterProduct else { continue }
+                        send(StoreReply(update: StoreEntitlement(transaction)), id: 0, to: callback)
+                        await transaction.finish()
+                    }
+                }
+                group.addTask {
+                    for await status in Product.SubscriptionInfo.Status.updates {
+                        guard case .verified(let transaction) = status.transaction, transaction.productID == supporterProduct else { continue }
+                        let update = StoreEntitlement(transaction, entitled: status.state == .subscribed || status.state == .inGracePeriod)
+                        send(StoreReply(update: update), id: 0, to: callback)
+                    }
+                }
             }
         }
     }

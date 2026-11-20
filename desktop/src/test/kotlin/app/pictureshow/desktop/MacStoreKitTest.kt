@@ -9,6 +9,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class MacStoreKitTest {
     @Test fun dispatchesProductsPurchaseEntitlementsAndVerifiedUpdatesThroughTheBridge() = runTest {
@@ -19,6 +20,8 @@ class MacStoreKitTest {
         assertEquals(StorePurchase.PENDING, bridge.purchase(MAC_SUPPORTER_PRODUCT))
         val entitlement = StoreEntitlement(MAC_SUPPORTER_PRODUCT, true, 123000L)
         assertEquals(listOf(entitlement), bridge.currentEntitlements())
+        bridge.restore()
+        assertTrue(bridge.manage())
         native.emit("""{"update":{"productId":"$MAC_SUPPORTER_PRODUCT","active":false,"expirationMillis":123000}}""")
         assertEquals(entitlement.copy(active = false), bridge.transactionUpdates.first())
     }
@@ -44,6 +47,8 @@ class MacStoreKitTest {
                 1 -> """{"products":[{"id":"$MAC_SUPPORTER_PRODUCT","name":"Supporter","displayPrice":"$2.99"}]}"""
                 2 -> """{"purchase":"PENDING"}"""
                 3 -> """{"entitlements":[{"productId":"$MAC_SUPPORTER_PRODUCT","active":true,"expirationMillis":123000}]}"""
+                4 -> "{}"
+                5 -> """{"opened":true}"""
                 else -> error("Unexpected command")
             }
             callback.invoke(id, reply)

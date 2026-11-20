@@ -24,15 +24,22 @@ internal const val MAC_SUPPORTER_PRODUCT = "app.pictureshow.supporter.monthly"
 internal data class StoreProduct(val id: String, val name: String, val displayPrice: String)
 
 @Serializable
-internal data class StoreEntitlement(val productId: String, val active: Boolean, val expirationMillis: Long? = null)
+internal data class StoreEntitlement(val productId: String, val active: Boolean, val expirationMillis: Long? = null, val supporterCode: String? = null)
 
 @Serializable
 internal enum class StorePurchase { PURCHASED, PENDING, CANCELLED }
+
+@Serializable
+internal enum class StoreFailure { PAYMENTS_RESTRICTED, PRODUCT_UNAVAILABLE, NETWORK, CANCELLED }
+
+internal class StoreRequestException(message: String, val failure: StoreFailure?) : IllegalStateException(message)
 
 internal interface StoreKitBridge {
     suspend fun products(): List<StoreProduct>
     suspend fun purchase(productId: String): StorePurchase
     suspend fun currentEntitlements(): List<StoreEntitlement>
+    suspend fun restore()
+    suspend fun manage(): Boolean
     val transactionUpdates: Flow<StoreEntitlement>
 }
 
@@ -42,7 +49,9 @@ private data class StoreReply(
     val entitlements: List<StoreEntitlement>? = null,
     val purchase: StorePurchase? = null,
     val update: StoreEntitlement? = null,
-    val error: String? = null
+    val error: String? = null,
+    val failure: StoreFailure? = null,
+    val opened: Boolean? = null
 )
 
 internal fun interface StoreKitCallback : Callback {
@@ -95,13 +104,17 @@ internal class MacStoreKit(private val native: StoreKitNative) : StoreKitBridge 
 
     override suspend fun currentEntitlements() = requireNotNull(send(3).entitlements)
 
+    override suspend fun restore() { send(4) }
+
+    override suspend fun manage() = requireNotNull(send(5).opened)
+
     private suspend fun send(command: Int, product: String? = null): StoreReply {
         val id = nextId.incrementAndGet()
         val completion = CompletableDeferred<StoreReply>()
         inflight[id] = completion
         try {
             native.ps_storekit_request(id, command, product, callback)
-            return completion.await().also { reply -> reply.error?.let { error(it) } }
+            return completion.await().also { reply -> reply.error?.let { throw StoreRequestException(it, reply.failure) } }
         } finally {
             inflight.remove(id)
         }

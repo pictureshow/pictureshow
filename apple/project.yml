@@ -69,7 +69,10 @@ targets:
   Pictureshow-iOS-UnitTests:
     type: bundle.unit-test
     platform: iOS
-    sources: [UnitTests]
+    sources:
+      - UnitTests
+      - path: Config/Supporter.storekit
+        buildPhase: resources
     dependencies:
       - target: Pictureshow-iOS
       - package: PictureshowCore
@@ -81,7 +84,10 @@ targets:
   Pictureshow-tvOS-UnitTests:
     type: bundle.unit-test
     platform: tvOS
-    sources: [UnitTests]
+    sources:
+      - UnitTests
+      - path: Config/Supporter.storekit
+        buildPhase: resources
     dependencies:
       - target: Pictureshow-tvOS
       - package: PictureshowCore
@@ -95,11 +101,15 @@ schemes:
     build:
       targets:
         Pictureshow-iOS: all
+    run:
+      storeKitConfiguration: Config/Supporter.storekit
     test:
       targets: [Pictureshow-iOS-UnitTests]
   Pictureshow-tvOS:
     build:
       targets:
         Pictureshow-tvOS: all
+    run:
+      storeKitConfiguration: Config/Supporter.storekit
     test:
       targets: [Pictureshow-tvOS-UnitTests]

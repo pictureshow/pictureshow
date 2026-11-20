@@ -145,28 +145,3 @@ struct AboutView: View {
         #endif
     }
 }
-
-/// INFO-06/08: what supporting means, said plainly, and that there is no way to become a supporter in this app
-/// yet. Apple has no authorised purchase path, so no price, store button or outside payment link is shown.
-struct SupportView: View {
-    var body: some View {
-        Form {
-            Section {
-                Text("Pictureshow is free and open source. Monthly supporters help pay for its development, and their feature requests are considered first.")
-                Text("Supporting doesn't promise a feature or a date. Watching stays free.")
-            }
-            Section {
-                Text("You can't become a supporter in this app yet").font(.headline)
-                Text("Everything here stays free.").foregroundStyle(Theme.muted)
-            }
-            #if os(tvOS)
-            .focusable()
-            #endif
-        }
-        .navigationTitle("Support Pictureshow")
-        #if os(iOS)
-        .scrollContentBackground(.hidden)
-        .pageBackground()
-        #endif
-    }
-}

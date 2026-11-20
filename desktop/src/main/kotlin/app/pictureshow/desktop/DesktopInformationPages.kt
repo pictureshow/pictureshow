@@ -167,9 +167,13 @@ internal const val DESKTOP_SUPPORTER_NO_PURCHASE = "Subscribing isn't available 
 
 /** INFO-06..08 on a computer: the honest explanation, no purchase, no outside payment links. */
 @Composable
-internal fun DesktopSupporterPage() {
-    FormPage("Support Pictureshow", "Pictureshow is free and open source. Supporters pay monthly to have their feature requests read and considered first.") {
-        Text("Requests are not guaranteed to be built or delivered by a particular date.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+internal fun DesktopSupporterPage(bridge: StoreKitBridge? = packagedStoreKit) {
+    if (bridge != null) {
+        MacSupporterPage(bridge)
+        return
+    }
+    FormPage("Support Pictureshow", SUPPORTER_DESCRIPTION) {
+        Text(SUPPORTER_NO_GUARANTEE, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(DESKTOP_SUPPORTER_NO_PURCHASE, modifier = Modifier.probe("supporter-unavailable"))
         Text("Already a supporter? Email info@legitimateapps.com with your request and the supporter code from Pictureshow on Android.")
     }
@@ -217,7 +221,7 @@ internal fun DesktopThisComputerPage(c: DesktopController) {
 }
 
 @Composable
-private fun InfoLine(label: String, value: String) {
+internal fun InfoLine(label: String, value: String) {
     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         Text(label, Modifier.width(180.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
         SelectionContainer(Modifier.weight(1f)) { Text(value) }
