@@ -82,6 +82,27 @@ jobs:
         if: runner.os == 'macOS'
         shell: bash
         run: PICTURESHOW_MAC_RUNTIME="$PWD/desktop/build/spike-runtime/lib" bash desktop/tools/package-macos.sh --unsigned
+      - name: Retain native build inputs for local release signing
+        if: always() && runner.os == 'macOS'
+        shell: bash
+        run: |
+          shopt -s nullglob
+          work=(desktop/build/macos-package/work-*)
+          [[ ${#work[@]} -gt 0 && -f "${work[0]}/native/libpictureshow_window.dylib" ]] || exit 0
+          archive="$PWD/desktop/build/macos-native-inputs.tar.gz"
+          cd "${work[0]}/native"
+          tar -czf "$archive" libpictureshow_*.dylib prefix/lib/*.dylib source/*.tar.* \
+            source/ffmpeg-*/{config.h,config_components.h,COPYING.LGPLv2.1} source/dav1d-*/COPYING \
+            source/libplacebo-*/LICENSE source/libass-*/COPYING source/freetype-*/docs/FTL.TXT \
+            source/fribidi-*/COPYING source/harfbuzz-*/COPYING source/libunibreak-*/LICENCE source/glad-*/LICENSE \
+            mpv-source/mpv.tar.gz mpv-source/mpv-*/Copyright mpv-source/build/meson-info/intro-buildoptions.json
+      - uses: actions/upload-artifact@v7
+        if: always() && runner.os == 'macOS'
+        with:
+          name: desktop-macos-native-inputs
+          retention-days: 2
+          if-no-files-found: ignore
+          path: desktop/build/macos-native-inputs.tar.gz
       - name: Build LGPL mpv and qualified native surface
         if: runner.os != 'Windows'
         run: bash desktop/tools/app-smoke/build-native.sh

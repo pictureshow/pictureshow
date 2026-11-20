@@ -164,6 +164,20 @@ def audit_mach(path, bundle, origins, output):
     output.append(f"{origins}:\n" + "\n".join(line for line in linked if line.startswith("\t")))
 
 
+def relocate_hotspot_dependencies(runtime):
+    libraries = runtime / "Contents/Home/lib"
+    hotspot = libraries / "server/libjvm.dylib"
+    if not hotspot.is_file():
+        raise ValueError("The packaged Java runtime is missing its HotSpot library")
+    for library in sorted(libraries.glob("*.dylib")):
+        commands = load_commands(library)
+        if any("@rpath/libjvm.dylib" in commands.get(kind, ()) for kind in DEPENDENCIES):
+            # The stock launcher loads HotSpot first. Express that bundled
+            # dependency directly so it also resolves in an isolated audit.
+            run("install_name_tool", "-change", "@rpath/libjvm.dylib",
+                "@loader_path/server/libjvm.dylib", str(library))
+
+
 def foreign_native(header, name):
     return header.startswith((b"\x7fELF", b"MZ", b"!<arch>\n")) and name.lower().endswith(
         (".dll", ".so", ".a", ".jnilib", ".exe")
@@ -245,6 +259,7 @@ def main():
     players = stage_player(args.native, contents / "Frameworks")
     if args.store_bridge:
         shutil.copy2(args.store_bridge, contents / "Frameworks" / args.store_bridge.name)
+    relocate_hotspot_dependencies(contents / "runtime")
     (args.evidence / "player-libraries.json").write_text(json.dumps(players, indent=2) + "\n")
     output = []
     with tempfile.TemporaryDirectory(prefix="pictureshow-sign-jar-") as folder:
