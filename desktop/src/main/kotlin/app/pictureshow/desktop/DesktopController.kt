@@ -631,6 +631,9 @@ class DesktopController(
             else -> updateState { it.copy(error = null, errorKind = null) }
         }
     }
+    /** Supply the desktop Supporter screen with the provider for its current package. */
+    internal fun packagedSupporterStore(): StoreKitBridge? = packagedStoreKit ?: window?.let(::windowsSupporterStore)
+
     fun attachWindow(window: Window) {
         this.window = window
         attachPinWindow(window, pins)

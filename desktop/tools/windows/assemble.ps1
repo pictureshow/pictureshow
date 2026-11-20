@@ -81,11 +81,6 @@ $sdk = Get-ChildItem "${env:ProgramFiles(x86)}/Windows Kits/10/bin" -Directory |
     Where-Object { Test-Path "$($_.FullName)/x64/makeappx.exe" } |
     Sort-Object { [version]$_.Name } -Descending | Select-Object -First 1
 if (!$sdk) { throw 'Windows SDK MakeAppx not installed' }
-$store = (Resolve-Path "$PSScriptRoot/StoreBridge.cpp").Path
-Push-Location $Work
-try {
-    & cl /nologo /EHsc /MT /LD /std:c++20 $store /link windowsapp.lib OLE32.lib /OUT:pictureshow-store.dll
-} finally { Pop-Location }
 Copy-Item "$Work/pictureshow-store.dll" "$image/pictureshow-store.dll"
 $cfg = "$image/app/Pictureshow.cfg"
 $config = (Get-Content -LiteralPath $cfg -Raw).Replace('[JavaOptions]', "[JavaOptions]`njava-options=-Dpictureshow.windows.store.library=`$APPDIR/../pictureshow-store.dll")

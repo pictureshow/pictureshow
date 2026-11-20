@@ -44,5 +44,6 @@ Fontconfig and GnuTLS. The AppImage runtime is pinned separately in
 
 The AppImage's outer type-2 runtime is MIT and contains static musl, squashfuse,
 libfuse3, zlib, zstd and mimalloc. The pinned runtime source archive includes the
-upstream license and the dependency build recipe. The media libraries inside
+upstream license and the dependency build recipe. The exact libfuse and
+squashfuse source archives and licenses are included. The media libraries inside
 the AppImage are separate shared ELF files.

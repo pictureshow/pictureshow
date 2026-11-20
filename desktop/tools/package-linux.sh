@@ -10,12 +10,26 @@ version=${PICTURESHOW_VERSION:-1.0}
 app_id=app.pictureshow.Pictureshow
 mkdir -p "$output"
 output=$(cd "$output" && pwd)
+if [[ -e "$output/flatpak" || -e "$output/Pictureshow-$version-x86_64.AppImage" ]]; then
+  echo 'Choose a fresh output directory for a new build.' >&2
+  exit 2
+fi
 work=$(mktemp -d)
-trap 'python3 -c "import shutil,sys; shutil.rmtree(sys.argv[1])" "$work"' EXIT
 build="$work/native"
 prefix="$build/prefix"
 evidence="$output/evidence"
 mkdir -p "$build/source" "$work/input" "$evidence"
+cleanup() {
+  local status=$?
+  if ((status)); then
+    [[ ! -f "$build/ffmpeg-build.log" ]] || cp "$build/ffmpeg-build.log" "$evidence/"
+    for log in "$build"/*-build/meson-logs/meson-log.txt; do
+      [[ ! -f "$log" ]] || cp "$log" "$evidence/$(basename "$(dirname "$(dirname "$log")")").log"
+    done
+  fi
+  python3 -c 'import shutil,sys; shutil.rmtree(sys.argv[1])' "$work"
+}
+trap cleanup EXIT
 export SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH:-$(git show -s --format=%ct HEAD)}
 export PKG_CONFIG_PATH="$prefix/lib/pkgconfig:$prefix/share/pkgconfig"
 export LD_LIBRARY_PATH="$prefix/lib"
@@ -45,7 +59,7 @@ jpackage --type app-image --name Pictureshow --dest "$work" --input "$work/input
   --java-options '-Dcompose.accessibility.enable=true' \
   --java-options '-Dpictureshow.playback.sources=$APPDIR/PlaybackSources'
 app="$work/Pictureshow"
-grep -Eq '(^|[ "])jdk.httpserver([ "]|$)' "$app/lib/runtime/release"
+grep -Eq '(^|[ "])jdk\.httpserver([ "]|$)' "$app/lib/runtime/release"
 offer="$app/lib/app/PlaybackSources"
 stage_source_offer "$build" "$offer"
 cp desktop/tools/macos/render-sources.tsv "$offer/"
@@ -83,7 +97,11 @@ cp "$offer/"{library-imports.json,ffmpeg-runtime-config.json,mpv-buildoptions.js
 packaging_input appimagetool "$work"
 packaging_input appimage-runtime "$work"
 packaging_input appimage-runtime-source.tar.gz "$offer"
+packaging_input appimage-fuse-source.tar.xz "$offer"
+packaging_input appimage-squashfuse-source.tar.gz "$offer"
 tar -xOf "$offer/appimage-runtime-source.tar.gz" type2-runtime-20251108/LICENSE > "$offer/AppImage-runtime-LICENSE"
+tar -xOf "$offer/appimage-fuse-source.tar.xz" fuse-3.15.0/LICENSE > "$offer/AppImage-fuse-LICENSE"
+tar -xOf "$offer/appimage-squashfuse-source.tar.gz" squashfuse-0.5.2/LICENSE > "$offer/AppImage-squashfuse-LICENSE"
 chmod +x "$work/appimagetool"
 ARCH=x86_64 APPIMAGE_EXTRACT_AND_RUN=1 "$work/appimagetool" --runtime-file "$work/appimage-runtime" \
   "$app" "$output/Pictureshow-$version-x86_64.AppImage"

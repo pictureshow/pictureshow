@@ -11,6 +11,7 @@ import com.sun.jna.Pointer
 import com.sun.jna.WString
 import java.awt.Window
 import java.util.concurrent.atomic.AtomicReference
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -30,6 +31,7 @@ private data class WindowsStoreReply(
 )
 
 internal class WindowsSupporterStore(private val transport: suspend (Int, String) -> String) : StoreKitBridge {
+    override val supporterProductId = WINDOWS_SUPPORTER_PRODUCT
     private val updates = MutableSharedFlow<StoreEntitlement>(extraBufferCapacity = 1)
     override val transactionUpdates = updates.asSharedFlow()
 
@@ -39,9 +41,15 @@ internal class WindowsSupporterStore(private val transport: suspend (Int, String
         require(productId == WINDOWS_SUPPORTER_PRODUCT)
         val result = checkNotNull(request(1).purchase)
         if (result == StorePurchase.PURCHASED) {
-            // An account may take a moment to receive its new license. The caller
-            // can also refresh on its next visit using currentEntitlements().
-            currentEntitlements().forEach { updates.tryEmit(it) }
+            // A completed purchase can precede the license update. Let the
+            // screen report the outcome and refresh again if the read fails.
+            try {
+                currentEntitlements().forEach { updates.tryEmit(it) }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: IllegalStateException) {
+                // A catalog or license service error must not undo a purchase.
+            }
         }
         return result
     }

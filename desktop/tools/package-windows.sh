@@ -11,15 +11,18 @@ mkdir -p "$output"
 output=$(cd "$output" && pwd)
 work=$(mktemp -d "$output/work-XXXXXX")
 export SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH:-$(git show -s --format=%ct HEAD)}
+packaging_input temurin-windows.zip "$work"
+unzip -q "$work/temurin-windows.zip" -d "$work"
+packaging_input temurin-sources.tar.gz "$output"
+packaging_input windows-libass.tar.xz "$work"
+MSYS2_ARG_CONV_EXCL='*' pwsh -NoProfile -File desktop/tools/windows/build-store.ps1 -Work "$(cygpath -m "$work")"
+
 bash desktop/tools/windows/build-native.sh "$work/native"
 stage_source_offer "$work/native" "$work/PlaybackSources"
 cp desktop/tools/windows/ucrt64-sources.tsv "$work/PlaybackSources/"
 # The pinned libass binary package omits its upstream license file.
-packaging_input windows-libass.tar.xz "$work/PlaybackSources"
-tar -xOf "$work/PlaybackSources/windows-libass.tar.xz" libass-0.17.5/COPYING > "$work/PlaybackSources/libass-0.17.5-COPYING"
-packaging_input temurin-windows.zip "$work"
-unzip -q "$work/temurin-windows.zip" -d "$work"
-packaging_input temurin-sources.tar.gz "$output"
+cp "$work/windows-libass.tar.xz" "$work/PlaybackSources/"
+tar -xOf "$work/windows-libass.tar.xz" libass-0.17.5/COPYING > "$work/PlaybackSources/libass-0.17.5-COPYING"
 MSYS2_ARG_CONV_EXCL='*' pwsh -NoProfile -File desktop/tools/windows/assemble.ps1 \
   -Work "$(cygpath -m "$work")" -Output "$(cygpath -m "$output")" -Jdk "$(cygpath -m "$work/jdk-$sdk_version")" \
   -Modules "$java_modules"

@@ -24,4 +24,4 @@ unset PKG_CONFIG_PATH
 export CC=gcc CXX=g++ AR=gcc-ar
 ffmpeg_and_dav1d "$build" "$prefix" windows
 build_mpv "$build" "$prefix" -Dshaderc=enabled -Dspirv-cross=enabled -Dd3d11=enabled \
-  -Dwasapi=enabled -Dgl=disabled -Dwin32-threads=enabled
+  -Dwasapi=enabled -Dgl=disabled -Dwin32-threads=enabled -Dd3d-hwaccel=enabled -Dd3d9-hwaccel=enabled

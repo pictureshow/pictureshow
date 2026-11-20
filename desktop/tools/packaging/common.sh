@@ -19,7 +19,7 @@ packaging_input() {
   local wanted=$1 directory=$2 filename digest url
   while IFS=$'\t' read -r filename digest url; do
     if [[ "$filename" == "$wanted" ]]; then
-      fetch_pin "$filename" "$digest" "$url" "$directory"
+      fetch_pin "$filename" "$digest" "${url%$'\r'}" "$directory"
       return
     fi
   done < desktop/tools/packaging/inputs.tsv
@@ -32,7 +32,7 @@ ffmpeg_and_dav1d() {
   local tls platform_opts=()
   case "$system" in
     linux) tls=--enable-gnutls ;;
-    windows) tls=--enable-schannel; platform_opts+=(--target-os=mingw32 --arch=x86_64) ;;
+    windows) tls=--enable-schannel; platform_opts+=(--target-os=mingw32 --arch=x86_64 --enable-d3d11va --enable-dxva2) ;;
   esac
   fetch_pin dav1d.tar.xz "$dav1d_sha256" "$dav1d_url" "$build/source"
   fetch_pin ffmpeg.tar.xz "$ffmpeg_sha256" "$ffmpeg_url" "$build/source"

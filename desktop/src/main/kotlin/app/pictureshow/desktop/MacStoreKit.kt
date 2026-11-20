@@ -35,6 +35,7 @@ internal enum class StoreFailure { PAYMENTS_RESTRICTED, PRODUCT_UNAVAILABLE, NET
 internal class StoreRequestException(message: String, val failure: StoreFailure?) : IllegalStateException(message)
 
 internal interface StoreKitBridge {
+    val supporterProductId: String get() = MAC_SUPPORTER_PRODUCT
     suspend fun products(): List<StoreProduct>
     suspend fun purchase(productId: String): StorePurchase
     suspend fun currentEntitlements(): List<StoreEntitlement>

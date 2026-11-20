@@ -7,3 +7,5 @@ wayland-protocols.tar.gz	83afedde1e63751578ba51b5f6c36052802f85634ed68be41ecfcc3
 weston.tar.gz	789d1254ccc6a7c04cd25be717eba1bdd7d14f14d43cff980a5536d60cdf25a5	https://gitlab.freedesktop.org/wayland/weston/-/archive/16.0.2/weston-16.0.2.tar.gz
 appimage-runtime-source.tar.gz	4c4f6df4647c9f01f871d7edd3716d8aeeffda9d22ffbebe3fccd95a6ab52c95	https://codeload.github.com/AppImage/type2-runtime/tar.gz/refs/tags/20251108
 windows-libass.tar.xz	2dca25c0e0c837ddf00b52011b3f82cac1e4ddd3ad018227806b0c2288864acc	https://github.com/libass/libass/releases/download/0.17.5/libass-0.17.5.tar.xz
+appimage-fuse-source.tar.xz	70589cfd5e1cff7ccd6ac91c86c01be340b227285c5e200baa284e401eea2ca0	https://github.com/libfuse/libfuse/releases/download/fuse-3.15.0/fuse-3.15.0.tar.xz
+appimage-squashfuse-source.tar.gz	db0238c5981dabbd80ee09ae15387f390091668ca060a7bc38047912491443d3	https://github.com/vasi/squashfuse/archive/0.5.2.tar.gz

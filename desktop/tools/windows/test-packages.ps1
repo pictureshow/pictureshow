@@ -8,10 +8,12 @@ $evidence = "$Output/evidence"
 $msix = Get-ChildItem $Output -Filter '*.msix' | Select-Object -First 1
 $msi = Get-ChildItem $Output -Filter '*.msi' | Select-Object -First 1
 if (!$msix -or !$msi) { throw 'Build both Windows installers first.' }
-foreach ($file in $msix, $msi) {
-    if ((Get-AuthenticodeSignature $file.FullName).Status -ne 'NotSigned') {
-        throw "Expected an unsigned output: $($file.Name)"
-    }
+$archive = [System.IO.Compression.ZipFile]::OpenRead($msix.FullName)
+try {
+    if ($archive.GetEntry('AppxSignature.p7x')) { throw 'Expected an unsigned MSIX output' }
+} finally { $archive.Dispose() }
+if ((Get-AuthenticodeSignature $msi.FullName).Status -ne 'NotSigned') {
+    throw 'Expected an unsigned MSI output'
 }
 $temporary = New-Item -ItemType Directory (Join-Path $env:RUNNER_TEMP ('pictureshow-packages-' + [guid]::NewGuid()))
 $sdk = Get-ChildItem "${env:ProgramFiles(x86)}/Windows Kits/10/bin" -Directory |
@@ -44,17 +46,6 @@ try {
     $package | Select-Object Name, Version, Architecture, PackageFullName | ConvertTo-Json |
         Set-Content "$evidence/msix-installed.json"
 
-    $appcert = "${env:ProgramFiles(x86)}/Windows Kits/10/App Certification Kit/appcert.exe"
-    if (!(Test-Path $appcert)) { throw 'Windows App Certification Kit is missing from the hosted SDK' }
-    & $appcert reset
-    & $appcert test -packagefullname $package.PackageFullName -reportoutputpath "$evidence/wack.xml"
-    if (!(Test-Path "$evidence/wack.xml")) { throw 'Windows App Certification Kit produced no verdict' }
-    [xml]$report = Get-Content -LiteralPath "$evidence/wack.xml"
-    $verdict = $report.SelectSingleNode('//*[local-name()="APPRESULT"]')
-    if (!$verdict -or ($verdict.InnerText -notmatch '^\s*PASS\s*$' -and $verdict.GetAttribute('RESULT') -ne 'PASS')) {
-        throw 'Windows App Certification Kit did not pass the package. See wack.xml.'
-    }
-
     $env:PATH = "C:\ProgramData\chocolatey\bin;$env:PATH"
     $env:SPIKE_NULL_AUDIO = '1'
     $env:SPIKE_SOFTWARE_GPU = '1'
@@ -64,20 +55,41 @@ try {
     $env:PICTURESHOW_SMOKE_WINDOW_X = [string]$screen.x
     $env:PICTURESHOW_SMOKE_WINDOW_Y = [string]$screen.y
     $env:PICTURESHOW_SMOKE_WINDOWS_STORE = '1'
-    & python desktop/tools/app-smoke/run.py --launcher "$($package.InstallLocation)/Pictureshow.exe" `
-        --work "$temporary/store-smoke" --evidence "$evidence/store-smoke" --timeout 420
+    $validationErrors = [System.Collections.Generic.List[string]]::new()
+    try {
+        & python desktop/tools/app-smoke/run.py --launcher "$($package.InstallLocation)/Pictureshow.exe" `
+            --work "$temporary/store-smoke" --evidence "$evidence/store-smoke" --timeout 420
+    } catch { $validationErrors.Add("MSIX smoke: $_") }
 
-    $process = Start-Process msiexec.exe -ArgumentList @('/i', ('"' + $msi.FullName + '"'), '/qn', '/norestart') -Wait -PassThru
-    if ($process.ExitCode -ne 0) { throw "Direct MSI installation returned $($process.ExitCode)" }
-    $msiInstalled = $true
-    $programs = [Environment]::GetFolderPath('Programs')
-    $shortcut = Get-ChildItem $programs -Filter 'Pictureshow.lnk' -Recurse | Select-Object -First 1
-    if (!$shortcut) { throw 'The direct installer registered no Start menu shortcut' }
-    $launcher = (New-Object -ComObject WScript.Shell).CreateShortcut($shortcut.FullName).TargetPath
-    if (!(Test-Path -LiteralPath $launcher)) { throw 'The direct Start menu shortcut target is missing' }
-    $env:PICTURESHOW_SMOKE_WINDOWS_STORE = '0'
-    & python desktop/tools/app-smoke/run.py --launcher $launcher `
-        --work "$temporary/direct-smoke" --evidence "$evidence/direct-smoke" --timeout 420
+    try {
+        $process = Start-Process msiexec.exe -ArgumentList @('/i', ('"' + $msi.FullName + '"'), '/qn', '/norestart') -Wait -PassThru
+        if ($process.ExitCode -ne 0) { throw "Direct MSI installation returned $($process.ExitCode)" }
+        $msiInstalled = $true
+        $programs = [Environment]::GetFolderPath('Programs')
+        $shortcut = Get-ChildItem $programs -Filter 'Pictureshow.lnk' -Recurse | Select-Object -First 1
+        if (!$shortcut) { throw 'The direct installer registered no Start menu shortcut' }
+        $launcher = (New-Object -ComObject WScript.Shell).CreateShortcut($shortcut.FullName).TargetPath
+        if (!(Test-Path -LiteralPath $launcher)) { throw 'The direct Start menu shortcut target is missing' }
+        $env:PICTURESHOW_SMOKE_WINDOWS_STORE = '0'
+        & python desktop/tools/app-smoke/run.py --launcher $launcher `
+            --work "$temporary/direct-smoke" --evidence "$evidence/direct-smoke" --timeout 420
+    } catch { $validationErrors.Add("Direct MSI smoke: $_") }
+
+    try {
+        $appcert = "${env:ProgramFiles(x86)}/Windows Kits/10/App Certification Kit/appcert.exe"
+        if (!(Test-Path $appcert)) { throw 'Windows App Certification Kit is missing from the hosted SDK' }
+        & $appcert reset
+        & $appcert test -packagefullname $package.PackageFullName -reportoutputpath "$evidence/wack.xml"
+        if (!(Test-Path "$evidence/wack.xml")) { throw 'Windows App Certification Kit produced no verdict' }
+        [xml]$report = Get-Content -LiteralPath "$evidence/wack.xml"
+        $verdict = $report.DocumentElement.GetAttribute('OVERALL_RESULT')
+        if ($verdict -ne 'PASS') {
+            throw "Windows App Certification Kit returned '$verdict'. See wack.xml."
+        }
+        Write-Host "Windows App Certification Kit: $verdict"
+    } catch { $validationErrors.Add("Store certification: $_") }
+    if ($validationErrors.Count) { throw ($validationErrors -join [Environment]::NewLine) }
+
 } finally {
     if (Test-Path $mode) { & "$temporary/windows-screen.exe" --restore $mode }
     if ($msiInstalled) {

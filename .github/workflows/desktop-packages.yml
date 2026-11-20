@@ -45,6 +45,7 @@ jobs:
             mingw-w64-ucrt-x86_64-nasm
             mingw-w64-ucrt-x86_64-pkgconf
       - name: Assemble MSI and Store MSIX
+        id: windows-assembly
         shell: msys2 {0}
         run: bash desktop/tools/package-windows.sh
       - name: Certify the signed test copy and smoke both installed launchers
@@ -63,6 +64,7 @@ jobs:
             desktop/build/windows-package/work-*/native/ffmpeg-build.log
             desktop/build/windows-package/work-*/native/*-build/meson-logs/meson-log.txt
       - uses: actions/upload-artifact@v7
+        if: always() && steps.windows-assembly.outcome == 'success'
         with:
           name: pictureshow-windows-unsigned-x64
           retention-days: 3
@@ -75,7 +77,9 @@ jobs:
 
   linux:
     if: github.repository == 'pictureshow/pictureshow'
-    runs-on: ubuntu-latest
+    # Keep packaged glibc and libstdc++ requirements within the Flatpak SDK
+    # baseline even as ubuntu-latest advances. Smoke still uses ubuntu-latest.
+    runs-on: ubuntu-24.04
     timeout-minutes: 65
     steps:
       - uses: actions/checkout@v7
@@ -83,15 +87,13 @@ jobs:
       - name: Install the Linux build and smoke tools
         run: |
           sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=35 -o Acquire::https::Timeout=35 update
-          sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=35 -o Acquire::https::Timeout=35 install -y --no-install-recommends build-essential meson ninja-build pkgconf curl xz-utils automake \
-            libfontconfig1-dev libasound2-dev libpulse-dev libgnutls28-dev libgl-dev libegl-dev libgles2-mesa-dev \
-            libgbm-dev libudev-dev libwayland-dev wayland-protocols libdrm-dev libinput-dev libevdev-dev libxkbcommon-dev \
-            libpixman-1-dev liblcms2-dev libcairo2-dev libpango1.0-dev libjpeg-dev libwebp-dev libpng-dev hwdata \
-            edid-decode nasm python3 ffmpeg libgl1-mesa-dri xvfb xauth patchelf desktop-file-utils \
-            appstream imagemagick flatpak flatpak-builder
+          sudo apt-get install -y --no-install-recommends build-essential meson ninja-build pkgconf curl xz-utils automake \
+            libfontconfig1-dev libasound2-dev libpulse-dev libgnutls28-dev libgl-dev libegl-dev libwayland-dev \
+            nasm python3 patchelf desktop-file-utils appstream imagemagick flatpak flatpak-builder
       - name: Assemble the AppImage and Flatpak build input
         run: bash desktop/tools/package-linux.sh
       - name: Build and validate the Flatpak from the same payload
+        shell: bash
         run: |
           output="$PWD/desktop/build/linux-package"
           app_id=app.pictureshow.Pictureshow
@@ -100,17 +102,14 @@ jobs:
           flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
           flatpak install --user --noninteractive -y flathub org.freedesktop.Sdk//25.08 org.freedesktop.Platform//25.08
           flatpak-builder --user --disable-download --repo="$output/flatpak-repo" "$output/flatpak-build" "$output/flatpak/$app_id.yml"
+          flatpak-builder --run "$output/flatpak-build" "$output/flatpak/$app_id.yml" sh -eu -c '
+            ldd /app/lib/pictureshow/lib/pictureshow/libpictureshow_wayland.so
+            ldd /app/lib/pictureshow/lib/pictureshow/libmpv.so.2
+          ' | tee "$output/evidence/flatpak-runtime-libraries.txt"
+          if grep -F 'not found' "$output/evidence/flatpak-runtime-libraries.txt"; then exit 1; fi
           flatpak build-bundle "$output/flatpak-repo" "$output/Pictureshow-x86_64.flatpak" "$app_id"
           cd "$output"
           sha256sum Pictureshow-x86_64.flatpak >> SHA256SUMS
-      - name: Smoke the AppImage on Xvfb and the owned Wayland compositor
-        run: |
-          PICTURESHOW_WESTON_ONLY=1 bash desktop/tools/hdr/linux_build.sh
-          PICTURESHOW_WESTON_PREFIX="$PWD/desktop/build/hdr-linux/prefix" \
-            APPIMAGE_EXTRACT_AND_RUN=1 PICTURESHOW_SMOKE_FORCE_QUALITY=1 \
-            bash desktop/tools/app-smoke/linux-run.sh \
-              --launcher desktop/build/linux-package/Pictureshow-1.0-x86_64.AppImage \
-              --work desktop/build/disposable-appimage-smoke --evidence desktop-evidence/appimage-smoke
       - uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -119,7 +118,6 @@ jobs:
           if-no-files-found: ignore
           path: |
             desktop/build/linux-package/evidence/**
-            desktop-evidence/**
       - uses: actions/upload-artifact@v7
         with:
           name: pictureshow-linux-unsigned-x86_64
@@ -130,3 +128,39 @@ jobs:
             desktop/build/linux-package/*.flatpak
             desktop/build/linux-package/temurin-sources.tar.gz
             desktop/build/linux-package/SHA256SUMS
+
+
+  linux-smoke:
+    needs: linux
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: pictureshow-linux-unsigned-x86_64
+          path: desktop/build/linux-package
+      - name: Install the compositor and fixture tools
+        run: |
+          sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=35 -o Acquire::https::Timeout=35 update
+          sudo apt-get install -y --no-install-recommends build-essential meson ninja-build pkgconf curl xz-utils \
+            libgl-dev libegl-dev libgles2-mesa-dev libgbm-dev libudev-dev libwayland-dev \
+            libdrm-dev libinput-dev libevdev-dev libxkbcommon-dev libpixman-1-dev liblcms2-dev \
+            libcairo2-dev libpango1.0-dev libjpeg-dev libwebp-dev libpng-dev hwdata \
+            edid-decode ffmpeg libgl1-mesa-dri libfontconfig1 libasound2t64 libpulse0 libgnutls30t64 xvfb xauth
+      - name: Smoke the AppImage on Xvfb and the owned Wayland compositor
+        run: |
+          chmod +x desktop/build/linux-package/Pictureshow-1.0-x86_64.AppImage
+          PICTURESHOW_WESTON_ONLY=1 bash desktop/tools/hdr/linux_build.sh
+          PICTURESHOW_WESTON_PREFIX="$PWD/desktop/build/hdr-linux/prefix" \
+            APPIMAGE_EXTRACT_AND_RUN=1 PICTURESHOW_SMOKE_FORCE_QUALITY=1 \
+            bash desktop/tools/app-smoke/linux-run.sh \
+              --launcher desktop/build/linux-package/Pictureshow-1.0-x86_64.AppImage \
+              --work desktop/build/disposable-appimage-smoke --evidence desktop-evidence/appimage-smoke
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: pictureshow-linux-smoke-evidence
+          retention-days: 3
+          if-no-files-found: ignore
+          path: desktop-evidence/**

@@ -103,6 +103,12 @@ def stage(windows, prefix, supplemental, binary, target, evidence):
 
 
 def verify(target, evidence):
+    options = {option["name"]: option["value"] for option in
+               json.loads((evidence / "mpv-buildoptions.json").read_text())}
+    required = {"gpl": False, "libmpv": True, "default_library": "shared", "prefer_static": False}
+    for name, value in required.items():
+        if options.get(name) != value:
+            raise SystemExit(f"libmpv must be built with {name}={value!r}")
     windows = os.name == "nt"
     # Keep the Windows directory cookie alive for the lifetime of the loads.
     dll_search = os.add_dll_directory(str(target)) if windows else None
