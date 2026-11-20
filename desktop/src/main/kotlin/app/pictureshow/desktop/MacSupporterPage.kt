@@ -63,15 +63,19 @@ internal fun MacSupporterPage(bridge: StoreKitBridge) {
             Text(product.name)
             Text("${product.displayPrice} / month", style = MaterialTheme.typography.headlineSmall)
             Text("Renews monthly until cancelled. Cancel anytime in the App Store.")
-            Button(
-                onClick = { scope.launch { model.purchase() } },
-                modifier = Modifier.controlFocus().probe("supporter:purchase"),
-                enabled = model.operation == null && !model.loading
-            ) { Text("Become a supporter") }
+            if (model.notice == PENDING && model.operation == null) {
+                Text(PENDING, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+            } else {
+                Button(
+                    onClick = { scope.launch { model.purchase() } },
+                    modifier = Modifier.controlFocus().probe("supporter:purchase"),
+                    enabled = model.operation == null && !model.loading
+                ) { Text("Become a supporter") }
+            }
         } else {
             Text(if (model.loading) CHECKING else model.offerMessage ?: CHECKING)
         }
-        (model.operation ?: model.notice)?.let {
+        (model.operation ?: model.notice?.takeUnless { it == PENDING && product != null })?.let {
             Text(it, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
         }
         OutlinedButton(

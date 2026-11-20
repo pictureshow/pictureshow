@@ -6,7 +6,6 @@
 package app.pictureshow.desktop
 
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.runComposeUiTest
@@ -22,8 +21,13 @@ class MacSupporterPageTest {
         onNodeWithText("Become a supporter").performClick()
         onNodeWithText("Waiting for the App Store to confirm your payment.").assertExists()
         onNodeWithText("Thank you for supporting Pictureshow!").assertDoesNotExist()
-        onNodeWithText("Become a supporter").assertIsEnabled()
+        onNodeWithText("Become a supporter").assertDoesNotExist()
         assertEquals(listOf(MAC_SUPPORTER_PRODUCT), bridge.purchases)
+
+        onNodeWithText("Restore Purchases").performClick()
+        onNodeWithText("No active Supporter subscription was found for this Apple Account.").assertExists()
+        onNodeWithText("Become a supporter").performClick()
+        onNodeWithText("Waiting for the App Store to confirm your payment.").assertExists()
 
         runOnIdle { bridge.update(active = true) }
         onNodeWithText("Thank you for supporting Pictureshow!").assertExists()
@@ -35,9 +39,10 @@ class MacSupporterPageTest {
         runOnIdle { bridge.update(active = false) }
         onNodeWithText("Thank you for supporting Pictureshow!").assertDoesNotExist()
         onNodeWithText("Become a supporter").assertExists()
+        runOnIdle { bridge.restoreGrantsSupport = true }
         onNodeWithText("Restore Purchases").performClick()
         onNodeWithText("Thank you for supporting Pictureshow!").assertExists()
-        assertEquals(1, bridge.restores)
+        assertEquals(2, bridge.restores)
     }
 
     @Test fun noBridgeKeepsTheNonStoreInformationScreen() = runComposeUiTest {
@@ -55,6 +60,7 @@ class MacSupporterPageTest {
             private set
         var restores = 0
             private set
+        var restoreGrantsSupport = false
 
         override suspend fun products() = listOf(StoreProduct(MAC_SUPPORTER_PRODUCT, "Supporter", "$2.99"))
         override suspend fun currentEntitlements() = listOf(entitlement)
@@ -71,7 +77,7 @@ class MacSupporterPageTest {
 
         override suspend fun restore() {
             restores++
-            entitlement = entitlement.copy(active = true)
+            entitlement = entitlement.copy(active = restoreGrantsSupport)
         }
 
         fun update(active: Boolean) {

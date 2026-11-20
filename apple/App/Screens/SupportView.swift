@@ -19,10 +19,13 @@ struct SupportView: View {
             if let code = supporter.supporterCode {
                 Section {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("Thank you for supporting Pictureshow!").font(.headline)
-                        LabeledContent("Your supporter code") {
+                        Label("Thank you for supporting Pictureshow!", systemImage: "checkmark.seal.fill")
+                            .font(.headline)
+                            .accessibilityAddTraits(.isHeader)
+                        HStack(alignment: .firstTextBaseline, spacing: 12) {
+                            Text("Your supporter code")
                             Text(code)
-                                .monospacedDigit()
+                                .font(.body.monospaced().weight(.semibold))
                                 #if os(iOS)
                                 .textSelection(.enabled)
                                 #endif
@@ -72,7 +75,7 @@ struct SupportView: View {
                     }
                 }
                 #if os(tvOS)
-                .prefersDefaultFocus(supporter.offer == nil, in: supportFocus)
+                .prefersDefaultFocus(supporter.offer == nil || supporter.notice == .pending, in: supportFocus)
                 #else
                 .disabled(supporter.activity != nil)
                 #endif
@@ -105,6 +108,7 @@ struct SupportView: View {
             if hasOffer { resetFocus(in: supportFocus) }
         }
         .onChange(of: supporter.supporterCode != nil) { _, _ in resetFocus(in: supportFocus) }
+        .onChange(of: supporter.notice == .pending) { _, _ in resetFocus(in: supportFocus) }
         #endif
         .task { await supporter.refreshOffer() }
         .onChange(of: scenePhase) { _, phase in
@@ -125,22 +129,30 @@ struct SupportView: View {
             .accessibilityElement(children: .combine)
             .focusable()
             #endif
-            Button {
-                Task {
-                    await supporter.purchase { product in try await purchaseProduct(product) }
+            if supporter.notice == .pending {
+                Label("Waiting for the App Store to confirm your payment.", systemImage: "clock")
+                    #if os(tvOS)
+                    .focusable()
+                    #endif
+            } else {
+                Button {
+                    Task {
+                        await supporter.purchase { product in try await purchaseProduct(product) }
+                    }
+                } label: {
+                    if supporter.activity == .purchasing {
+                        ProgressView { Text("Waiting for the App Store to confirm your payment.") }
+                    } else {
+                        Text("Become a supporter")
+                    }
                 }
-            } label: {
-                if supporter.activity == .purchasing {
-                    ProgressView { Text("Waiting for the App Store to confirm your payment.") }
-                } else {
-                    Text("Become a supporter")
-                }
+                .primaryAction()
+                #if os(tvOS)
+                .prefersDefaultFocus(true, in: supportFocus)
+                #else
+                .disabled(supporter.activity != nil || supporter.loading)
+                #endif
             }
-            #if os(tvOS)
-            .prefersDefaultFocus(true, in: supportFocus)
-            #else
-            .disabled(supporter.activity != nil || supporter.loading)
-            #endif
         } else if let failure = supporter.offerFailure, !supporter.loading {
             Text(failure.message)
                 #if os(tvOS)
@@ -164,7 +176,7 @@ struct SupportView: View {
 
     private var status: LocalizedStringKey? {
         switch supporter.notice {
-        case .pending: "Waiting for the App Store to confirm your payment."
+        case .pending: supporter.offer == nil ? "Waiting for the App Store to confirm your payment." : nil
         case .restoredNothing: "No active Supporter subscription was found for this Apple Account."
         case .failed(let error): error.message
         case nil: nil

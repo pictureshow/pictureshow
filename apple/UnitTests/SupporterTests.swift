@@ -43,17 +43,23 @@ final class SupporterTests: XCTestCase {
     }
 
     @MainActor
-    func testStoreKitExpiryRemovesVerifiedSupporter() async throws {
+    func testStoreKitExpiryRemovesSupporterOnScreenRefresh() async throws {
         let session = try testSession()
         defer { session.clearTransactions() }
+        session.timeRate = .oneRenewalEveryTwoSeconds
         let model = SupporterModel(store: StoreKitSupporter())
         model.startObserving()
         await model.refreshOffer()
         try await purchase(model)
         _ = try XCTUnwrap(model.supporterCode)
 
-        try session.expireSubscription(productIdentifier: StoreKitSupporter.productID)
-        await waitForNoEntitlement(model)
+        let id = try XCTUnwrap(session.allTransactions().first?.identifier)
+        try session.disableAutoRenewForTransaction(identifier: id)
+        // Use elapsed StoreKit time so the signed transaction expires.
+        for _ in 0..<50 where model.supporterCode != nil {
+            try await Task.sleep(for: .milliseconds(100))
+            await model.refreshEntitlement()
+        }
         XCTAssertNil(model.supporterCode)
     }
 
