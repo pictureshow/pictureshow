@@ -139,6 +139,7 @@ internal class DesktopOfflineEngine(
     }
     internal val files = OfflineFiles(storageBase)
     private val mutex = Mutex()
+    private val trashMutex = Mutex()
     private val mutableLibraries = MutableStateFlow(emptyMap<String, OfflineLibrary>())
 
     /** The attempt in charge of each download. [liveAttempts] also has the ones that were told to stop and haven't yet. */
@@ -215,7 +216,7 @@ internal class DesktopOfflineEngine(
 
     /** However much is in there, deleting it holds nobody up: a cold start offline waits on nothing here. */
     private fun emptyTrashSoon() {
-        scope.launch { trashCleaner(files) }
+        scope.launch { trashMutex.withLock { trashCleaner(files) } }
     }
 
     /**
