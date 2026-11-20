@@ -222,7 +222,7 @@ internal class DesktopOfflineEngine(
     private suspend fun observeAccounts() {
         accounts.snapshots.collect { snapshot ->
             val keys = snapshot.downloadOwners()
-            mutex.withLock {
+            val removed = mutex.withLock {
                 val gone = lastAccountKeys - keys
                 lastAccountKeys = keys
                 endedDownloadOwners += gone
@@ -230,9 +230,10 @@ internal class DesktopOfflineEngine(
                 synchronized(progressStores) { signedOut.removeAll(keys) }
                 (keys - mutableLibraries.value.keys).forEach { loadLocked(it) }
                 pumpLocked()
+                gone.isNotEmpty()
             }
             // Remote logout can stall. Keep observing account changes so every viewer's local purge can proceed.
-            revocationRequests.trySend(Unit)
+            if (removed) revocationRequests.trySend(Unit)
         }
     }
 
@@ -668,7 +669,7 @@ internal class DesktopOfflineEngine(
                 unreachable.clear()
                 applyNetworkLocked()
             }
-            if (networkState() != OfflineNetwork.none) syncAll()
+            if (networkState() != OfflineNetwork.none) syncSoon()
         }
     }
 
@@ -700,12 +701,12 @@ internal class DesktopOfflineEngine(
     }
 
     fun syncSoon() {
-        scope.launch { if (networkState() != OfflineNetwork.none) syncAll() }
+        revocationRequests.trySend(Unit)
+        scope.launch { if (networkState() != OfflineNetwork.none) syncProgress() }
     }
 
     /** Dirty progress only, with the viewer's own session. */
-    private suspend fun syncAll() {
-        revocationRequests.trySend(Unit)
+    private suspend fun syncProgress() {
         val remote = OfflineApiProgressRemote(api())
         val viewers = mutex.withLock { lastAccountKeys.mapNotNull(::account).filterNot(Account::expired) }
         viewers.forEach { current ->

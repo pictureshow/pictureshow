@@ -71,6 +71,8 @@ class DesktopOfflineEngineTest {
     @Volatile private var network = OfflineNetwork.unmetered
     @Volatile private var cutAt: Int? = null
     @Volatile private var hold = false
+    @Volatile private var holdRanges = false
+    private val heldRange = CompletableDeferred<String>()
     @Volatile private var slow = false
     @Volatile private var quickConnect = true
     @Volatile private var logoutStatus = 204
@@ -233,6 +235,10 @@ class DesktopOfflineEngineTest {
         if (portalAfterNextCut) portal = true
         if (hold) return MockResponse().setSocketPolicy(SocketPolicy.NO_RESPONSE)
         val range = request.getHeader("Range")
+        if (range != null && holdRanges) {
+            heldRange.complete(range)
+            return MockResponse().setSocketPolicy(SocketPolicy.NO_RESPONSE)
+        }
         val start = range?.removePrefix("bytes=")?.removeSuffix("-")?.toInt() ?: 0
         val headers = MockResponse().setHeader("Last-Modified", "Mon").setHeader("Accept-Ranges", "bytes")
         if (range != null) headers.setResponseCode(206).setHeader("Content-Range", "bytes $start-${media.size - 1}/${media.size}")
@@ -397,18 +403,18 @@ class DesktopOfflineEngineTest {
     fun `a killed process resumes with a validated range and exact bytes`() = runBlocking<Unit> {
         signIn(viewerA)
         cutAt = 400_000
-        offAfterNextCut = true
-        restMs = 60_000
+        holdRanges = true
         val first = started()
         first.enqueue(viewerA, item("1"), choice("1"))
-        first.awaitPhase(viewerA, "1", OfflinePhase.waitingNetwork)
+        val rangeBeforeDeath = withTimeout(20_000) { heldRange.await() }
+        assertEquals(OfflinePhase.transferring, first.entry(viewerA, "1")?.job?.phase)
         stopScopes()
         val partial = File(mediaFile(first, viewerA, "1").path + OFFLINE_PART_SUFFIX).length()
         assertTrue("Expected an incomplete file from the old process", partial in 1 until media.size.toLong())
+        assertEquals("bytes=$partial-", rangeBeforeDeath)
         requests.clear()
-        offAfterNextCut = false
+        holdRanges = false
         cutAt = null
-        serverOff = false
         val second = started()
         second.awaitPhase(viewerA, "1", OfflinePhase.ready)
         assertArrayEquals(media, mediaFile(second, viewerA, "1").readBytes())
@@ -605,7 +611,8 @@ class DesktopOfflineEngineTest {
         engine.awaitPhase(viewerA, "1", OfflinePhase.ready)
         val bytes = mediaFile(engine, viewerA, "1")
         accounts.expire(viewerA.key, viewerA.accessToken)
-        delay(200)
+        signIn(viewerB)
+        withTimeout(10_000) { engine.libraries.first { viewerB.key in it } }
         assertTrue(viewerA.key in engine.libraries.value)
         assertTrue(bytes.exists())
     }
@@ -1429,7 +1436,7 @@ class DesktopOfflineEngineTest {
         engine.awaitPhase(viewerA, "1", OfflinePhase.ready)
         val forB = desktopOffline(engine, viewerB).also { it.start() }
         val forA = desktopOffline(engine, viewerA).also { it.start() }
-        withTimeout(10_000) { while (forA.state.value.readyFor("1") == null) delay(10) }
+        withTimeout(10_000) { forA.state.first { it.readyFor("1") != null } }
         assertTrue(forA.readyFor(viewerA))
         assertFalse(forB.readyFor(viewerB))
         assertTrue(forB.state.value.library.manifest.entries.isEmpty())
@@ -1453,7 +1460,7 @@ class DesktopOfflineEngineTest {
             assertEquals(DESKTOP_ROOT_DOWNLOADS, c.state.value.root)
             assertEquals(viewerA.key, c.state.value.account?.key)
             assertTrue(c.offline.state.value.serverUnreachable)
-            withTimeout(10_000) { while (c.offline.state.value.readyFor("1") == null) delay(10) }
+            withTimeout(10_000) { c.offline.state.first { it.readyFor("1") != null } }
         }
     }
 
