@@ -39,7 +39,7 @@ struct Surface {
  mpv_render_context*render=nullptr;mpv_handle*mpv=nullptr;std::atomic<bool>update{true};
  bool legacy=false;bool configured=false,fullscreen=false,closed=false,ready=false,hdr=false,pq=false,bt2020=false,parametric=false;
  std::atomic<int> width{960},height{640};int uiw=0,uih=0;std::atomic<bool>running{true};std::atomic<int>renderFailure{0};std::thread renderThread;std::mutex metrics; double px=0,py=0;std::vector<int>input;
- unsigned frames=0,redraws=0;double renderMs=0,swapMs=0;int redBits=0,greenBits=0,blueBits=0,alphaBits=0;int renderFd=-1;
+ unsigned frames=0,redraws=0;bool videoFramePresented=false;double renderMs=0,swapMs=0;int redBits=0,greenBits=0,blueBits=0,alphaBits=0;int renderFd=-1;
  std::vector<Buffer*>buffers;FILE*log=nullptr;int capw=0,caph=0;uint32_t capformat=0;int capdone=0;
 };
 static void note(Surface*s,const char*t){if(s->log){fprintf(s->log,"%s\n",t);fflush(s->log);}}
@@ -98,7 +98,7 @@ int ps_wayland_preflight(int hdr){
  bool supported=rc>=0&&s.c&&s.sc&&s.wm&&s.shm&&(!hdr||(s.cm&&s.pq&&s.bt2020&&s.parametric));
  wl_display_disconnect(s.d);return supported?0:-2;
 }
-void*ps_wayland_create(mpv_handle*mpv,const char*receipt,int hdr){
+static void*create_surface(mpv_handle*mpv,const char*receipt,int hdr,bool fullscreenProbe){
  auto*s=new Surface;s->mpv=mpv;s->hdr=hdr;s->legacy=getenv("SPIKE_WAYLAND_LEGACY_PACING")!=nullptr;s->log=fopen(receipt,"w");s->d=wl_display_connect(nullptr);check(s->d,"wl_display_connect");
  auto*r=wl_display_get_registry(s->d);static const wl_registry_listener l={global,[](void*,wl_registry*,uint32_t){}};wl_registry_add_listener(r,&l,s);check(wl_display_roundtrip(s->d)>=0,"registry");check(wl_display_roundtrip(s->d)>=0,"capabilities");
  check(s->c&&s->sc&&s->wm&&s->shm,"required Wayland globals");
@@ -112,7 +112,10 @@ void*ps_wayland_create(mpv_handle*mpv,const char*receipt,int hdr){
   wl_display_roundtrip(s->d);wl_display_roundtrip(s->d);check(s->ready,"PQ/BT2020 image description accepted");s->cms=wp_color_manager_v1_get_surface(s->cm,s->video);wp_color_management_surface_v1_set_image_description(s->cms,s->desc,WP_COLOR_MANAGER_V1_RENDER_INTENT_PERCEPTUAL);
  }
  s->ui=wl_compositor_create_surface(s->c);s->sub=wl_subcompositor_get_subsurface(s->sc,s->ui,s->video);wl_subsurface_set_desync(s->sub);wl_subsurface_place_above(s->sub,s->video);
+ // Allocate the probe's EGL drawable at its final size before the first GL draw.
+ if(fullscreenProbe)xdg_toplevel_set_fullscreen(s->top,s->output);
  wl_surface_commit(s->video);while(!s->configured)check(wl_display_dispatch(s->d)>=0,"initial configure");
+ if(fullscreenProbe)check(s->fullscreen,"initial fullscreen configure");
  s->ed=eglGetDisplay((EGLNativeDisplayType)s->d);EGLint major,minor;check(eglInitialize(s->ed,&major,&minor),"eglInitialize");check(eglBindAPI(EGL_OPENGL_API),"eglBindAPI");
  EGLint attrs[]={EGL_SURFACE_TYPE,EGL_WINDOW_BIT,EGL_RENDERABLE_TYPE,EGL_OPENGL_BIT,EGL_RED_SIZE,hdr?10:8,EGL_GREEN_SIZE,hdr?10:8,EGL_BLUE_SIZE,hdr?10:8,EGL_ALPHA_SIZE,0,EGL_NONE};EGLConfig config;EGLint n;check(eglChooseConfig(s->ed,attrs,&config,1,&n)&&n,"EGL 10-bit window config");
  eglGetConfigAttrib(s->ed,config,EGL_RED_SIZE,&s->redBits);eglGetConfigAttrib(s->ed,config,EGL_GREEN_SIZE,&s->greenBits);eglGetConfigAttrib(s->ed,config,EGL_BLUE_SIZE,&s->blueBits);
@@ -125,15 +128,23 @@ void*ps_wayland_create(mpv_handle*mpv,const char*receipt,int hdr){
  if(s->renderFd<0) params[3]={MPV_RENDER_PARAM_INVALID,nullptr};
  check(mpv_render_context_create(&s->render,mpv,params)>=0,"mpv_render_context_create");mpv_render_context_set_update_callback(s->render,[](void*d){((Surface*)d)->update=true;},s);
  eglMakeCurrent(s->ed,EGL_NO_SURFACE,EGL_NO_SURFACE,EGL_NO_CONTEXT);
- s->renderThread=std::thread([s]{
+ s->renderThread=std::thread([s,fullscreenProbe]{
   eglMakeCurrent(s->ed,s->es,s->es,s->ec);int lastw=s->width,lasth=s->height;auto next=std::chrono::steady_clock::now();
+  bool probeFrameSubmitted=false;
   while(s->running){
    if(s->legacy||s->update.exchange(false)){
     auto flags=mpv_render_context_update(s->render);int w=s->width,h=s->height;
     if((flags&MPV_RENDER_UPDATE_FRAME)||s->legacy||w!=lastw||h!=lasth){
      if(w!=lastw||h!=lasth){wl_egl_window_resize(s->ew,w,h,0,0);lastw=w;lasth=h;}
-     mpv_opengl_fbo fbo{0,w,h,s->hdr?GL_RGB10_A2:GL_RGBA8};int flip=1,block=s->legacy?1:0;mpv_render_param params[]={{MPV_RENDER_PARAM_OPENGL_FBO,&fbo},{MPV_RENDER_PARAM_FLIP_Y,&flip},{MPV_RENDER_PARAM_BLOCK_FOR_TARGET_TIME,&block},{MPV_RENDER_PARAM_INVALID,nullptr}};
+     mpv_render_frame_info frame{};
+     if(fullscreenProbe&&!probeFrameSubmitted)mpv_render_context_get_info(s->render,{MPV_RENDER_PARAM_NEXT_FRAME_INFO,&frame});
+     const bool decodedFrame=(frame.flags&MPV_RENDER_FRAME_INFO_PRESENT)&&
+                             !(frame.flags&(MPV_RENDER_FRAME_INFO_REDRAW|MPV_RENDER_FRAME_INFO_REPEAT));
+     // Drain mpv's redraw requests without replacing the captured fixture buffer.
+     int skip=fullscreenProbe&&!decodedFrame;
+     mpv_opengl_fbo fbo{0,w,h,s->hdr?GL_RGB10_A2:GL_RGBA8};int flip=1,block=s->legacy?1:0;mpv_render_param params[]={{MPV_RENDER_PARAM_OPENGL_FBO,&fbo},{MPV_RENDER_PARAM_FLIP_Y,&flip},{MPV_RENDER_PARAM_BLOCK_FOR_TARGET_TIME,&block},{MPV_RENDER_PARAM_SKIP_RENDERING,&skip},{MPV_RENDER_PARAM_INVALID,nullptr}};
      double a=seconds();int rc=mpv_render_context_render(s->render,params);double b=seconds();if(rc<0){s->renderFailure=rc;break;}
+     if(skip)continue;
      if(const char *path=getenv("SPIKE_HDR_APP_SAMPLES")) {
       // Explicit finite diagnostic only: this boundary precedes Wayland composition.
       FILE *out=fopen(path,"w");
@@ -179,6 +190,16 @@ void*ps_wayland_create(mpv_handle*mpv,const char*receipt,int hdr){
       for(int i=0;i<4;i++)glPixelStorei(packNames[i],packValues[i]);
       if(glGetError()!=GL_NO_ERROR || diagnosticError!=GL_NO_ERROR){s->renderFailure=-5;break;}
      }
+     if(fullscreenProbe){
+      glFinish();
+      auto*callback=wl_surface_frame(s->video);
+      static const wl_callback_listener listener={[](void*d,wl_callback*callback,uint32_t){
+       ((Surface*)d)->videoFramePresented=true;
+       wl_callback_destroy(callback);
+      }};
+      wl_callback_add_listener(callback,&listener,s);
+      probeFrameSubmitted=true;
+     }
      if(!eglSwapBuffers(s->ed,s->es)){s->renderFailure=-2;break;}double c=seconds();mpv_render_context_report_swap(s->render);
      {std::lock_guard<std::mutex> lock(s->metrics);s->frames++;s->renderMs+=(b-a)*1000;s->swapMs+=(c-b)*1000;}
     }
@@ -188,6 +209,8 @@ void*ps_wayland_create(mpv_handle*mpv,const char*receipt,int hdr){
   mpv_render_context_set_update_callback(s->render,nullptr,nullptr);mpv_render_context_free(s->render);s->render=nullptr;eglMakeCurrent(s->ed,EGL_NO_SURFACE,EGL_NO_SURFACE,EGL_NO_CONTEXT);
  });return s;
 }
+void*ps_wayland_create(mpv_handle*mpv,const char*receipt,int hdr){return create_surface(mpv,receipt,hdr,false);}
+void*ps_wayland_create_fullscreen_probe(mpv_handle*mpv,const char*receipt,int hdr){return create_surface(mpv,receipt,hdr,true);}
 int ps_wayland_pump(void*p){auto*s=(Surface*)p;
  while(wl_display_prepare_read(s->d)!=0)if(wl_display_dispatch_pending(s->d)<0)return -1;
  wl_display_flush(s->d);pollfd fd{wl_display_get_fd(s->d),POLLIN,0};int rc=poll(&fd,1,0);if(rc>0){if(wl_display_read_events(s->d)<0)return -1;wl_display_dispatch_pending(s->d);}else wl_display_cancel_read(s->d);
@@ -195,6 +218,7 @@ int ps_wayland_pump(void*p){auto*s=(Surface*)p;
  return s->closed?-3:0;
 }
 int ps_wayland_width(void*p){return ((Surface*)p)->width;}int ps_wayland_height(void*p){return ((Surface*)p)->height;}int ps_wayland_fullscreen(void*p){return ((Surface*)p)->fullscreen;}
+int ps_wayland_video_frame_presented(void*p){return ((Surface*)p)->videoFramePresented;}
 void ps_wayland_fullscreen_set(void*p,int fs){auto*s=(Surface*)p;if(fs)xdg_toplevel_set_fullscreen(s->top,nullptr);else xdg_toplevel_unset_fullscreen(s->top);wl_display_flush(s->d);}
 void ps_wayland_title(void*p,const char*title){auto*s=(Surface*)p;xdg_toplevel_set_title(s->top,title);wl_display_flush(s->d);}
 void ps_wayland_resize(void*p,int w,int h){auto*s=(Surface*)p;check(!s->fullscreen,"resize while fullscreen");s->width=w;s->height=h;s->update=true;}

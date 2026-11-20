@@ -22,7 +22,7 @@ concurrency:
 
 jobs:
   web:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     defaults:
       run:
@@ -53,35 +53,36 @@ jobs:
         if: steps.web-source.outputs.available == 'true'
         run: npm ci
 
+      - name: Prepare reports
+        if: steps.web-source.outputs.available == 'true'
+        run: mkdir -p artifacts
+
+      - name: Install Playwright system dependencies
+        if: steps.web-source.outputs.available == 'true'
+        timeout-minutes: 20
+        run: |
+          # Let apt resume slow downloads and retry failed requests without restarting the package transaction.
+          sudo tee /etc/apt/apt.conf.d/90-pictureshow-ci > /dev/null <<'APT'
+          DPkg::Lock::Timeout "120";
+          Acquire::Retries "3";
+          Acquire::http::Timeout "60";
+          Acquire::https::Timeout "60";
+          APT
+          npx --no-install playwright install-deps chromium webkit
+
       - name: Ensure ffmpeg is available for generated media fixtures
-        if: steps.web-source.outputs.available == 'true' && steps.npm-deps.outcome == 'success'
+        if: steps.web-source.outputs.available == 'true'
         run: |
           if ! command -v ffmpeg >/dev/null 2>&1; then
-            sudo apt-get update
             sudo apt-get install -y --no-install-recommends ffmpeg
           fi
 
-      - name: Prepare reports and install Playwright browsers
+      - name: Install Playwright browsers
         id: browsers
         if: steps.web-source.outputs.available == 'true'
-        timeout-minutes: 25
+        timeout-minutes: 10
         run: |
-          mkdir -p artifacts
-          # A stalled download used to hold the job until its 60-minute limit; give up early and try again.
-          # Killing npx can leave its apt running with the dpkg lock, which then fails every retry at once. Wait for a lock
-          # a moment (apt's timeout covers an apt the image started itself), and between attempts end whatever holds it.
-          echo 'DPkg::Lock::Timeout "120";' | sudo tee /etc/apt/apt.conf.d/90-pictureshow-lock-timeout > /dev/null
-          for attempt in 1 2 3; do
-            timeout -k 15 420 npx playwright install --with-deps chromium webkit && exit 0
-            echo "Playwright install attempt $attempt failed or stalled"
-            if [[ $attempt -lt 3 ]]; then
-              sudo fuser -k -TERM /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/cache/apt/archives/lock /var/lib/apt/lists/lock || true
-              sleep 5
-              sudo fuser -k -KILL /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/cache/apt/archives/lock /var/lib/apt/lists/lock || true
-              sudo timeout 60 dpkg --configure -a || true
-            fi
-          done
-          exit 1
+          npx --no-install playwright install chromium webkit
 
       - name: Unit tests
         if: always() && steps.web-source.outputs.available == 'true' && steps.npm-deps.outcome == 'success'

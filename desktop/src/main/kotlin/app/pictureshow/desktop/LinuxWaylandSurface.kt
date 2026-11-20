@@ -23,10 +23,12 @@ import org.jetbrains.skia.EncodedImageFormat
 
 private interface WaylandNative:Library {
  fun ps_wayland_create(mpv:Pointer,receipt:String,hdr:Int):Pointer
+ fun ps_wayland_create_fullscreen_probe(mpv:Pointer,receipt:String,hdr:Int):Pointer
  fun ps_wayland_pump(ctx:Pointer):Int
  fun ps_wayland_width(ctx:Pointer):Int
  fun ps_wayland_height(ctx:Pointer):Int
  fun ps_wayland_fullscreen(ctx:Pointer):Int
+ fun ps_wayland_video_frame_presented(ctx:Pointer):Int
  fun ps_wayland_fullscreen_set(ctx:Pointer,value:Int)
  fun ps_wayland_resize(ctx:Pointer,width:Int,height:Int)
  fun ps_wayland_ui(ctx:Pointer,data:ByteArray,width:Int,height:Int)
@@ -47,13 +49,18 @@ fun waylandMain(args:Array<String>) {
  val out=File(args[1]).apply{mkdirs()}
  val seconds=args.firstOrNull{it.startsWith("--sustain=")}?.substringAfter('=')?.toInt()?:0
  val hdr=!args.contains("--sdr")
+ val numeric=args.contains("--hdr-numeric")
  val native=Native.load(System.getenv("SPIKE_WAYLAND_BRIDGE")?:"pictureshow_wayland",WaylandNative::class.java)
  val mpv=Mpv(out)
- mpv.option("vo","libmpv");mpv.option("loop-file",if(args.contains("--hdr-numeric")) "inf" else "no");mpv.option("hwdec","auto-safe")
+ mpv.option("vo","libmpv");mpv.option("loop-file","no");mpv.option("hwdec","auto-safe")
+ if(numeric) mpv.option("pause","yes")
  mpv.option("video-timing-offset","0")
  if(hdr){mpv.option("target-trc","pq");mpv.option("target-prim","bt.2020");mpv.option("target-peak","10000");mpv.option("fbo-format","rgba16f");mpv.option("dither-depth","10")}
  mpv.initialize()
- val context=native.ps_wayland_create(mpv.handle,File(out,"native.txt").absolutePath,if(hdr)1 else 0)
+ val receipt=File(out,"native.txt").absolutePath
+ val outputHdr=if(hdr) 1 else 0
+ val context=if(numeric) native.ps_wayland_create_fullscreen_probe(mpv.handle,receipt,outputHdr)
+             else native.ps_wayland_create(mpv.handle,receipt,outputHdr)
  var clicks by mutableStateOf(0)
  var wantExit=false
  var scene:ImageComposeScene?=null
@@ -95,24 +102,22 @@ fun waylandMain(args:Array<String>) {
  fun waitFor(ms:Long,condition:()->Boolean={false}){val end=System.nanoTime()+ms*1_000_000;while(!condition()&&System.nanoTime()<end&&!wantExit)pump()}
  fun stage(name:String){waitFor(1000);native.ps_wayland_receipt(context,File(out,"$name-native.txt").absolutePath);check(native.ps_wayland_capture(context,File(out,"$name.ppm").absolutePath)==0){"Compositor screenshot failed"};mpv.dump(name,"Wayland actual=${width}x$height; fullscreen=${native.ps_wayland_fullscreen(context)}; overlayClicks=$clicks")}
  try {
-  updateUi();mpv.command("loadfile",media)
-  waitFor(20000){mpv.get("vo-configured")=="yes"&&mpv.get("time-pos")!=null};check(mpv.get("vo-configured")=="yes")
-  if(args.contains("--hdr-numeric")){
-   // Dedicated generated fixture gate: no seeking, subtitle assumptions or UI injection.
-   // Keep the decoded static frame available after the two-frame file reaches EOF.
-   native.ps_wayland_fullscreen_set(context,1)
-   waitFor(5000){native.ps_wayland_fullscreen(context)==1}
-   check(native.ps_wayland_fullscreen(context)==1)
-   // The static fixture loops so shader compilation cannot consume the whole file.
-   // Warm up multiple complete cycles before pausing; time-pos alone is not proof
-   // that a one-fps frame survived initial software shader compilation.
-   waitFor(8000)
-   mpv.set("pause","yes")
-   stage("numeric")
+  updateUi()
+  if(numeric){
+   // The static, paused fixture stays attached through capture after Weston's frame callback.
+   mpv.command("loadfile",media)
+   fun framePresented() = native.ps_wayland_video_frame_presented(context)==1
+   waitFor(20000){framePresented()}
+   check(framePresented()){"No Wayland frame callback for the decoded fixture"}
    check(mpv.get("video-params/primaries") == if(media.endsWith("pq.mkv")) "bt.2020" else "bt.709")
-   File(out,"sequence.txt").writeText("numeric=true\nactualCompositorFramebuffer=true\n")
+   native.ps_wayland_receipt(context,File(out,"numeric-native.txt").absolutePath)
+   check(native.ps_wayland_capture(context,File(out,"numeric.ppm").absolutePath)==0){"Compositor screenshot failed"}
+   mpv.dump("numeric","Captured after the decoded fixture's Wayland frame callback; fullscreen=${width}x$height")
+   File(out,"sequence.txt").writeText("numeric=true\nvideoFrameCallback=true\nactualCompositorFramebuffer=true\n")
    return
   }
+  mpv.command("loadfile",media)
+  waitFor(20000){mpv.get("vo-configured")=="yes"&&mpv.get("time-pos")!=null};check(mpv.get("vo-configured")=="yes")
   stage("01-window")
   mpv.set("pause","yes");native.ps_wayland_resize(context,740,500);stage("03-resize");check(mpv.get("pause")=="yes");mpv.set("pause","no")
   native.ps_wayland_fullscreen_set(context,1);waitFor(5000){native.ps_wayland_fullscreen(context)==1};stage("04-fullscreen")

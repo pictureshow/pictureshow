@@ -345,6 +345,34 @@ test("paused DirectPlay end waits for explicit Play, then advances to chronologi
     await page.keyboard.press("ArrowRight");
     await page.keyboard.press("ArrowRight");
     await page.keyboard.press("ArrowRight");
+    await expect
+        .poll(() =>
+            page.locator("video").evaluate((v: HTMLVideoElement) => ({
+                paused: v.paused,
+                seeking: v.seeking,
+                ended: v.ended,
+                insideFinalFrames:
+                    v.currentTime < v.duration &&
+                    v.duration - v.currentTime <= 0.5 &&
+                    v.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA,
+            })),
+        )
+        .toEqual({
+            paused: true,
+            seeking: false,
+            ended: false,
+            insideFinalFrames: true,
+        });
+    await expect
+        .poll(() =>
+            f.reports.some(
+                (r) =>
+                    r.path === "/Sessions/Playing/Progress" &&
+                    r.body.IsPaused === true &&
+                    r.body.PositionTicks === current.RunTimeTicks,
+            ),
+        )
+        .toBe(true);
     await expect(
         page.getByRole("button", { name: "Play", exact: true }),
     ).toBeVisible();
@@ -357,9 +385,9 @@ test("paused DirectPlay end waits for explicit Play, then advances to chronologi
     await expect(
         page.getByRole("heading", { name: "The Next Morning", exact: true }),
     ).toBeVisible();
-    expect(f.reports.filter((r) => r.path.endsWith("/Stopped"))).toHaveLength(
-        1,
-    );
+    const stopped = f.reports.filter((r) => r.path.endsWith("/Stopped"));
+    expect(stopped).toHaveLength(1);
+    expect(stopped[0].body.PositionTicks).toBe(current.RunTimeTicks);
     await page.getByRole("button", { name: "Stop and go back" }).click();
 });
 

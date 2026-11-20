@@ -12,6 +12,7 @@ import java.nio.file.Files
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.test.*
 import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.Channel
 
 /** Stream C2 (AUTH-15/16/18/19, SEERR-01..07, INFO-01..08) without native code or Compose. */
 class DesktopAccountsStreamTest {
@@ -30,16 +31,16 @@ class DesktopAccountsStreamTest {
 
     private class Clock(var now: Long = 1_000_000L)
 
-    /** Core saves memory first, then disk: a restart reads the file once it holds what [ready] expects. */
-    private fun restart(d: File, clock: Clock, logs: MutableList<String> = mutableListOf(), ready: (ProfileLock?) -> Boolean): DesktopProfileLock {
-        val end = System.currentTimeMillis() + 10_000
-        while (true) {
-            val lock = DesktopProfileLock(d, scope, { clock.now }, log = { logs += it })
-            runBlocking { lock.load() }
-            if (ready(lock.lock(ana.key))) return lock
-            if (System.currentTimeMillis() > end) fail("the PIN file never caught up")
-            Thread.sleep(20)
+    /** The settings-change receipt follows the atomic disk write. An early reader can block replacement on Windows. */
+    private class PinSaves(private val log: (String) -> Unit = {}) {
+        private val saved = Channel<Unit>(Channel.UNLIMITED)
+
+        fun record(message: String) {
+            log(message)
+            if (message == "pin settings changed") saved.trySend(Unit)
         }
+
+        suspend fun await() = withTimeout(10_000) { saved.receive() }
     }
 
     /** Sets [pin] for [account] through the Settings flow (first PIN needs no current PIN). */
@@ -54,11 +55,14 @@ class DesktopAccountsStreamTest {
 
     @Test fun pinIsHashedOnDiskAndNeverLogged() = runBlocking {
         val d = dir(); val logs = CopyOnWriteArrayList<String>(); val clock = Clock()
-        val lock = DesktopProfileLock(d, scope, { clock.now }, log = { logs += it })
+        val saves = PinSaves { logs += it }
+        val lock = DesktopProfileLock(d, scope, { clock.now }, log = saves::record)
         lock.load()
         setPin(lock, ana, "48151623")
+        saves.await()
         // A fresh start asks (Ask when Pictureshow opens is on by default); a wrong try is refused and clears the pad.
-        val restarted = restart(d, clock, logs) { it != null }
+        val restarted = DesktopProfileLock(d, scope, { clock.now }, log = { logs += it })
+        restarted.load()
         val disk = File(d, "profile-locks.json").readText()
         assertFalse("48151623" in disk, "the PIN itself is never stored")
         restarted.viewerChanged(ana)
@@ -75,26 +79,30 @@ class DesktopAccountsStreamTest {
 
     @Test fun askWhenOpensOffMeansOnlySwitchingAsks() = runBlocking {
         val d = dir(); val clock = Clock()
-        val lock = DesktopProfileLock(d, scope, { clock.now })
+        val saves = PinSaves()
+        val lock = DesktopProfileLock(d, scope, { clock.now }, log = saves::record)
         lock.load(); setPin(lock, ana, "2468")
+        saves.await()
         lock.setAskOnStart(ana, false)
         assertEquals(DesktopPinPurpose.CONFIRM_ASK_OFF, lock.state.value.prompt?.purpose, "turning off the start question asks for the PIN")
         lock.submit("2468")
-        await("ask off") { lock.state.value.locks[ana.key]?.askOnStart == false }
-        val restarted = restart(d, clock) { it?.askOnStart == false }
+        saves.await()
+        val restarted = DesktopProfileLock(d, scope, { clock.now })
+        restarted.load()
+        assertEquals(false, restarted.lock(ana.key)?.askOnStart)
         restarted.viewerChanged(ana)
         assertNull(restarted.state.value.gate, "Ask when Pictureshow opens is off")
         // Switching from Ben back to Ana asks for Ana's PIN; nothing switches until it is right.
         restarted.viewerChanged(ben)
         assertTrue(restarted.neededOnSwitch(ana.key, ben.key))
-        var switched = false
-        restarted.askBeforeSwitch(ana) { switched = true }
+        val switched = CompletableDeferred<Unit>()
+        restarted.askBeforeSwitch(ana) { switched.complete(Unit) }
         assertEquals(DesktopPinPurpose.SWITCH, restarted.state.value.prompt?.purpose)
         restarted.submit("1357")
         await("wrong") { restarted.state.value.prompt?.note == DesktopPinNote.WRONG }
-        assertFalse(switched)
+        assertFalse(switched.isCompleted)
         restarted.submit("2468")
-        await("switched") { switched }
+        withTimeout(10_000) { switched.await() }
         assertNull(restarted.state.value.prompt)
     }
 

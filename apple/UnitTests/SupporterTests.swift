@@ -46,20 +46,29 @@ final class SupporterTests: XCTestCase {
     func testStoreKitExpiryRemovesSupporterOnScreenRefresh() async throws {
         let session = try testSession()
         defer { session.clearTransactions() }
-        session.timeRate = .oneRenewalEveryTwoSeconds
         let model = SupporterModel(store: StoreKitSupporter())
-        model.startObserving()
+        let productID = StoreKitSupporter.productID
         await model.refreshOffer()
-        try await purchase(model)
-        _ = try await verifiedSupporterCode(model)
+        let active = try await session.buyProduct(identifier: productID)
+        XCTAssertEqual(active.environment, .xcode)
+        await active.finish()
+        try await waitForStoreKitEntitlement(transactionID: active.id)
+        await model.refreshEntitlement()
+        XCTAssertEqual(model.supporterCode, String(active.originalID))
 
-        let id = try XCTUnwrap(session.allTransactions().first?.identifier)
-        try session.disableAutoRenewForTransaction(identifier: id)
-        // Use elapsed StoreKit time so the signed transaction expires.
-        for _ in 0..<50 where model.supporterCode != nil {
-            try await Task.sleep(for: .milliseconds(100))
-            await model.refreshEntitlement()
-        }
+        // Seed expired purchase history with a signed expiration date already in the past.
+        session.clearTransactions()
+        let threeMonthsAgo = Date.now.addingTimeInterval(-90 * 24 * 60 * 60)
+        let expired = try await session.buyProduct(
+            identifier: productID,
+            options: [.purchaseDate(threeMonthsAgo, renewalBehavior: .cancelImmediately)]
+        )
+        let latest = await Transaction.latest(for: productID)
+        XCTAssertEqual(try latest?.payloadValue.id, expired.id)
+        XCTAssertLessThan(try XCTUnwrap(expired.expirationDate), Date.now)
+        XCTAssertNil(expired.revocationDate)
+        XCTAssertEqual(model.supporterCode, String(active.originalID))
+        await model.refreshOffer()
         XCTAssertNil(model.supporterCode)
     }
 
@@ -145,6 +154,21 @@ final class SupporterTests: XCTestCase {
 
     private enum TestSetupError: Error {
         case localStoreUnavailable
+        case activePurchaseNotPublished
+    }
+
+    private func waitForStoreKitEntitlement(transactionID: UInt64) async throws {
+        // A successful test purchase can precede publication in the entitlement feed.
+        let deadline = ContinuousClock.now + .seconds(5)
+        while ContinuousClock.now < deadline {
+            for await result in Transaction.currentEntitlements {
+                if case .verified(let transaction) = result, transaction.id == transactionID {
+                    return
+                }
+            }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        throw TestSetupError.activePurchaseNotPublished
     }
 
     @MainActor

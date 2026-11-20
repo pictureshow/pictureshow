@@ -4,7 +4,10 @@
 mpv 0.41/FFmpeg 8 stack on a disposable Ubuntu 24.04 runner. It uses Mesa softpipe and stock Weston's FP16 shadow-buffer composition path,
 preserves the full PQ domain (`target-peak=10000`) for the compositor to adapt,
 plays the generated CC0 PQ and SDR HEVC fixtures through Pictureshow's actual
-Compose/Wayland app, and captures Weston's composited framebuffer. The numeric-only mode loops the static fixture and warms up multiple cycles before pausing, so initial software shader compilation cannot consume the entire two-frame file. An isolated diagnostic module also
+Compose/Wayland app, and captures Weston's composited framebuffer. The numeric
+probe configures fullscreen before allocating the EGL surface, loads each static
+fixture paused, and captures after the compositor's callback for the decoded frame.
+An isolated diagnostic module also
 observes `output.frame_signal`, emitted by stock Weston's GL renderer after it
 paints the final output FBO. That observer samples the bound output FBO
 synchronously and records its handle, viewport and GL error state. It changes no

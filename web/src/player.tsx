@@ -213,6 +213,28 @@ const clock = (s: number) =>
     `${Math.floor(Math.max(0, s) / 60)}:${String(Math.floor(Math.max(0, s) % 60)).padStart(2, "0")}`;
 const plausibleDuration = (n: number) =>
     Number.isFinite(n) && n > 0 && n <= 86400;
+const frameReady = (el: HTMLVideoElement) =>
+    !el.seeking && el.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA;
+// A media endpoint is exclusive. Keep the decoder inside the final buffered
+// frames while retaining the logical end for the transport and reports.
+function decoderPositionBeforeEnd(
+    el: HTMLVideoElement,
+    end: number,
+    canUseTail: boolean,
+) {
+    let target = Math.max(0, end - 0.1);
+    if (canUseTail && el.buffered.length) {
+        const last = el.buffered.length - 1;
+        const tail = el.buffered.end(last);
+        const beginning = el.buffered.start(last);
+        if (target >= tail - 0.1 && end - tail <= 0.5)
+            target = Math.max(
+                beginning,
+                tail - Math.min(0.1, (tail - beginning) / 2),
+            );
+    }
+    return target;
+}
 function usableSegment(s: Segment) {
     const max = ["Intro", "Recap", "Preview"].includes(s.Type)
         ? 600
@@ -648,7 +670,7 @@ export function Player({
             !d ||
             replacing.current ||
             pendingSeek.current !== undefined ||
-            (pausedAtPhysicalEnd.current && pauseIntent.current)
+            pausedAtPhysicalEnd.current
         )
             return pendingSeek.current ?? s.position;
         // Browser HLS masters and direct media both expose the full item clock.
@@ -897,10 +919,21 @@ export function Player({
             setPosition(at);
             return;
         }
-        if (viewing.current.decision?.method === "Transcode")
+        const method = viewing.current.decision?.method;
+        if (method === "Transcode")
             change(desired.current.audio, desired.current.subtitle, at);
         else if (video.current) {
-            video.current.currentTime = at;
+            const el = video.current;
+            // WebKit can seek to the exclusive endpoint while paused without
+            // setting ended. Playing from there can stall on an empty buffer.
+            pausedAtPhysicalEnd.current =
+                pauseIntent.current &&
+                method === "DirectPlay" &&
+                plausibleDuration(el.duration) &&
+                at >= el.duration;
+            el.currentTime = pausedAtPhysicalEnd.current
+                ? decoderPositionBeforeEnd(el, el.duration, true)
+                : at;
             viewing.current.position = at;
             setPosition(at);
             report("progress");
@@ -1020,7 +1053,8 @@ export function Player({
         const el = video.current;
         if (!el || replacing.current) return;
         if (!pauseIntent.current && (el.ended || pausedAtPhysicalEnd.current)) {
-            void physicalEndRef.current();
+            if (!pausedAtPhysicalEnd.current || frameReady(el))
+                void physicalEndRef.current();
             return;
         }
         if (pauseIntent.current) pauseDecoder(el);
@@ -1612,12 +1646,21 @@ export function Player({
                 if (!disposed) fail(true);
             }, 45000);
         }
+        function settleHeldEndpoint() {
+            if (
+                pausedAtPhysicalEnd.current &&
+                !pauseIntent.current &&
+                frameReady(el)
+            )
+                void physicalEndRef.current();
+        }
         function update() {
             if (disposed || !current) return;
             if (replacing.current) {
                 settleEndpoint();
                 return;
             }
+            settleHeldEndpoint();
             sample();
             setPaused(transportPaused());
             const advanced = el.currentTime > lastPlaybackClock;
@@ -1659,36 +1702,22 @@ export function Player({
         const atLogicalEnd = () =>
             fullDuration() > 0 && request.position >= fullDuration() - 0.001;
         const decoderStart = () => {
-            const end = fullDuration(),
-                logical = logicalStart();
             // HLS has an exclusive physical endpoint. Keep the bounded logical
             // target while decoding its last available frame, including a stale
             // resume position beyond the authoritative duration.
-            if (!atLogicalEnd()) return logical;
+            if (!atLogicalEnd()) return logicalStart();
             // A packet's end is not a presentation timestamp. A 1ms inset can
             // leave WebKit seeking forever even with HAVE_ENOUGH_DATA; keep a
             // small frame window inside the buffer, while reports retain EOF.
-            let target = Math.max(0, Math.min(logical, end - 0.1));
             // The final encoded A/V intersection can end before the playlist's
             // declared duration. For MSE use the completed final fragment; native
             // HLS exposes no completion flag and can stay NETWORK_LOADING while
             // seeking beyond its final packet, so require its bounded tail below.
-            if (
-                (finalFragmentBuffered || hls?.bufferedToEnd || !hls) &&
-                el.buffered.length
-            ) {
-                const last = el.buffered.length - 1;
-                const tail = el.buffered.end(last),
-                    beginning = el.buffered.start(last);
-                // Native idle can mean partial preload, not EOF. A final
-                // frame substitution must remain within the endpoint window.
-                if (target >= tail - 0.1 && end - tail <= 0.5)
-                    target = Math.max(
-                        beginning,
-                        tail - Math.min(0.1, (tail - beginning) / 2),
-                    );
-            }
-            return target;
+            return decoderPositionBeforeEnd(
+                el,
+                fullDuration(),
+                finalFragmentBuffered || !!hls?.bufferedToEnd || !hls,
+            );
         };
         function settleEndpoint() {
             if (
@@ -1715,8 +1744,7 @@ export function Player({
             // Metadata is not an acknowledgement of a requested seek. All
             // browser engines must actually reach the full-timeline target.
             if (
-                el.seeking ||
-                el.readyState < HTMLMediaElement.HAVE_CURRENT_DATA ||
+                !frameReady(el) ||
                 Math.abs(el.currentTime - decoderStart()) >= 0.5
             )
                 return false;
@@ -1904,20 +1932,23 @@ export function Player({
         };
         const seeked = () => {
             lastPlaybackClock = el.currentTime;
+            if (disposed) return;
             if (replacing.current) {
                 publishReady();
                 return;
             }
             if (
-                !disposed &&
                 current &&
-                Math.abs(
-                    el.currentTime - (pendingSeek.current ?? el.currentTime),
-                ) < 0.5
+                (pausedAtPhysicalEnd.current ||
+                    Math.abs(
+                        el.currentTime -
+                            (pendingSeek.current ?? el.currentTime),
+                    ) < 0.5)
             ) {
                 pendingSeek.current = undefined;
                 sample();
             }
+            settleHeldEndpoint();
         };
         el.addEventListener("seeking", seeking);
         el.addEventListener("seeked", seeked);

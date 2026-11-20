@@ -846,24 +846,46 @@ test("rc28 full-timeline HLS seeks to resume, owns caption boundaries, and resto
         .toBeGreaterThanOrEqual(2);
     // PlaybackInfo's master has no start query: its decoder clock must seek to
     // the requested 10s instead of adding a fictitious UI/subtitle offset.
+    await playing(page);
+    await page.getByRole("button", { name: "Pause", exact: true }).click();
     await expect
-        .poll(() => video.evaluate((v: HTMLVideoElement) => v.currentTime))
-        .toBeGreaterThanOrEqual(10);
-    await video.evaluate((v: HTMLVideoElement) => {
-        v.pause();
-        v.currentTime = 10;
-    });
-    const active = () =>
-        video.evaluate((v: HTMLVideoElement) =>
-            [...(v.textTracks[0].activeCues ?? [])].map(
-                (c) => (c as VTTCue).text,
-            ),
-        );
-    await expect.poll(active).toEqual(["Current"]);
-    await video.evaluate((v: HTMLVideoElement) => {
-        v.currentTime = 11;
-    });
-    await expect.poll(active).toEqual(["Next"]);
+        .poll(() => video.evaluate((v: HTMLVideoElement) => v.paused))
+        .toBe(true);
+    const activeAt = async (time: number, text: string) => {
+        await video.evaluate((v: HTMLVideoElement, target) => {
+            v.currentTime = target;
+        }, time);
+        await expect
+            .poll(() =>
+                video.evaluate((v: HTMLVideoElement, target) => {
+                    if (v.seeking || Math.abs(v.currentTime - target) > 0.1)
+                        return [];
+                    return [...(v.textTracks[0].activeCues ?? [])].map(
+                        (cue) => (cue as VTTCue).text,
+                    );
+                }, time),
+            )
+            .toEqual([text]);
+    };
+    // Adjacent cues end 1 ms early so the arriving cue owns the boundary.
+    // Sample inside each cue so native frame rounding cannot cross that boundary.
+    expect(
+        await video.evaluate((v: HTMLVideoElement) =>
+            [...(v.textTracks[0].cues ?? [])]
+                .slice(1)
+                .map((cue) => [
+                    (cue as VTTCue).text,
+                    cue.startTime,
+                    cue.endTime,
+                ]),
+        ),
+    ).toEqual([
+        ["Expired", 9, 9.999],
+        ["Current", 10, 10.999],
+        ["Next", 11, 40],
+    ]);
+    await activeAt(10.25, "Current");
+    await activeAt(11.25, "Next");
     await page.getByRole("button", { name: "Subtitles", exact: true }).click();
     // A negative delay moves the early cue before native zero. Its immutable
     // original must return when delay is reset, without another subtitle fetch.
