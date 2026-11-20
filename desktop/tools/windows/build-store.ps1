@@ -8,5 +8,5 @@ $env:PATH = "$msvc;$env:PATH"
 $store = (Resolve-Path "$PSScriptRoot/StoreBridge.cpp").Path
 Push-Location $Work
 try {
-    & cl /nologo /EHsc /MT /LD /std:c++20 $store /link windowsapp.lib OLE32.lib /OUT:pictureshow-store.dll
+    & cl /nologo /EHsc /MT /LD /std:c++20 $store /link windowsapp.lib ole32.lib user32.lib /OUT:pictureshow-store.dll
 } finally { Pop-Location }
