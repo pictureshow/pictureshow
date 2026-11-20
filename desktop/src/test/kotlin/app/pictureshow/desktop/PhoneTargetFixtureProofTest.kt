@@ -42,7 +42,7 @@ class PhoneTargetFixtureProofTest {
                 controller.state.first { state ->
                     val connected = state.controller
                     connected?.phase == "attached" && connected.command?.fresh == true &&
-                        connected.target?.device == phone && matches(connected.target.now)
+                        connected.target?.device == phone && matches(connected.target?.now)
                 }
             }
             println("PASS Desktop $label")
@@ -62,7 +62,7 @@ class PhoneTargetFixtureProofTest {
                 it != null && it.item == title && it.canSeek && !it.paused && it.positionTicks >= 110_000_000
             }
             controller.pause()
-            observed("Pause reached phone playback") { it?.item == title && it.paused }
+            observed("Pause reached phone playback") { it != null && it.item == title && it.paused }
             controller.seekTo(450_000_000)
             observed("Seek moved paused playback to 45 seconds") {
                 it != null && it.item == title && it.paused && abs(it.positionTicks - 450_000_000) <= 10_000_000
