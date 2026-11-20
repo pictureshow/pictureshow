@@ -4,6 +4,8 @@ runtime: org.freedesktop.Platform
 runtime-version: '25.08'
 sdk: org.freedesktop.Sdk
 command: pictureshow
+build-options:
+  no-debuginfo: true
 finish-args:
   - --share=network
   - --share=ipc

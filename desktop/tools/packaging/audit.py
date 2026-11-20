@@ -17,7 +17,7 @@ FFMPEG = ("avcodec", "avfilter", "avformat", "avutil", "swresample", "swscale")
 # These form the Linux desktop platform interface. The package owns the pinned
 # media libraries. Mesa, Wayland, fonts, audio and libc follow the host/runtime.
 LINUX_PLATFORM = re.compile(
-    r"(?:ld-linux-x86-64|lib(?:c|dl|m|pthread|rt|gcc_s|stdc\+\+|resolv|"
+    r"(?:ld-linux-x86-64|lib(?:c|dl|m|mvec|pthread|rt|gcc_s|stdc\+\+|resolv|"
     r"EGL|GL|GLX|GLdispatch|OpenGL|wayland-client|wayland-egl|"
     r"X11|Xau|Xdmcp|Xext|xcb|bsd|md|drm|gbm|"
     r"asound|pulse(?:common|-simple)?(?:-[0-9.]+)?|sndfile|FLAC|vorbis(?:enc)?|opus|ogg|"
@@ -68,8 +68,11 @@ def stage(windows, prefix, supplemental, binary, target, evidence):
         if name in graph:
             continue
         dependencies = imports(path)
-        shutil.copy2(path, target / path.name)
-        graph[name] = {"imports": dependencies, "sha256": digest(path)}
+        staged = target / path.name
+        shutil.copy2(path, staged)
+        if not windows:
+            subprocess.run(["patchelf", "--set-rpath", "$ORIGIN", staged], check=True)
+        graph[name] = {"imports": dependencies, "sha256": digest(staged)}
         if name in origins:
             archive = origins[name]
             packages.add(archive)
@@ -89,8 +92,13 @@ def stage(windows, prefix, supplemental, binary, target, evidence):
         destination.mkdir(parents=True)
         for name in (".PKGINFO", ".BUILDINFO"):
             shutil.copy2(archive / name, destination / name.removeprefix("."))
-        for notice in (archive / "ucrt64/share/licenses").iterdir():
-            shutil.copytree(notice, destination / notice.name, dirs_exist_ok=True)
+        notices = archive / "ucrt64/share/licenses"
+        if notices.is_dir():
+            for notice in notices.iterdir():
+                shutil.copytree(notice, destination / notice.name, dirs_exist_ok=True)
+        elif not (archive.name.startswith("mingw-w64-ucrt-x86_64-libass-0.17.5-") and
+                  (evidence / "libass-0.17.5-COPYING").is_file()):
+            raise SystemExit(f"No license files provided for {archive.name}")
     (evidence / "library-imports.json").write_text(json.dumps(graph, indent=2) + "\n")
 
 

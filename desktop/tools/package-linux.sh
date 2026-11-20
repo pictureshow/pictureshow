@@ -61,9 +61,6 @@ cp "$build/source/weston-16.0.2/COPYING" "$offer/weston-COPYING"
 cp "$app/lib/runtime/legal/java.base/LICENSE" "$offer/Temurin-LICENSE"
 python3 desktop/tools/packaging/audit.py --target "$app/lib/pictureshow" --evidence "$offer" --prefix "$prefix/lib" \
   --binary "$build/surface/libpictureshow_wayland.so"
-for binary in "$app/lib/pictureshow/"*.so*; do
-  patchelf --set-rpath '$ORIGIN' "$binary"
-done
 LD_LIBRARY_PATH="$app/lib/pictureshow" python3 desktop/tools/packaging/audit.py --target "$app/lib/pictureshow" --evidence "$offer"
 # AppDir and Flatpak read the same executable, libraries, desktop entry and icon.
 install -Dm755 desktop/tools/linux/AppRun "$app/AppRun"
@@ -85,6 +82,8 @@ cp "$app/lib/runtime/release" "$evidence/java-runtime-modules.txt"
 cp "$offer/"{library-imports.json,ffmpeg-runtime-config.json,mpv-buildoptions.json} "$evidence/"
 packaging_input appimagetool "$work"
 packaging_input appimage-runtime "$work"
+packaging_input appimage-runtime-source.tar.gz "$offer"
+tar -xOf "$offer/appimage-runtime-source.tar.gz" type2-runtime-20251108/LICENSE > "$offer/AppImage-runtime-LICENSE"
 chmod +x "$work/appimagetool"
 ARCH=x86_64 APPIMAGE_EXTRACT_AND_RUN=1 "$work/appimagetool" --runtime-file "$work/appimage-runtime" \
   "$app" "$output/Pictureshow-$version-x86_64.AppImage"

@@ -14,7 +14,8 @@ if ($version -notmatch '^[1-9][0-9]*\.[0-9]+\.[0-9]+$' -or $build -ne '0') {
     throw 'Use a three-part Pictureshow version. The Store reserves the fourth field, which must be zero.'
 }
 $env:JAVA_HOME = $Jdk
-$env:PATH = "$Jdk/bin;$env:PATH"
+$msvc = Join-Path $env:VCToolsInstallDir 'bin/Hostx64/x64'
+$env:PATH = "$Jdk/bin;$msvc;$env:PATH"
 & ./gradlew.bat --no-daemon :desktop:spikeRuntime
 
 # Generate native installer and Store artwork from the same source icon.

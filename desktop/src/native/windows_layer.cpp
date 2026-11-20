@@ -106,8 +106,9 @@ API Layer *ps_create(void *window,void *mpv) {
     wchar_t configured[32768];
     const DWORD length = GetEnvironmentVariableW(L"MPV_LIBRARY", configured, _countof(configured));
     if (length > 0 && length < _countof(configured)) {
-        const auto path = std::filesystem::absolute(configured);
-        s->lib = LoadLibraryExW(path.c_str(), nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
+        std::error_code error;
+        const auto path = std::filesystem::absolute(configured, error);
+        if (!error) s->lib = LoadLibraryExW(path.c_str(), nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
     } else {
         // The application launcher and its media DLLs are siblings.
         s->lib = LoadLibraryExW(L"libmpv-2.dll", nullptr,

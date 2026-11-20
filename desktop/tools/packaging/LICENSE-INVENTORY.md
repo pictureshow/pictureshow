@@ -41,3 +41,8 @@ adapter's protocol bindings, with accompanying notices. Standard system librarie
 provide the Linux ABI, Wayland/EGL and desktop graphics driver, audio,
 Fontconfig and GnuTLS. The AppImage runtime is pinned separately in
 `inputs.tsv`; the Flatpak uses the Freedesktop platform runtime.
+
+The AppImage's outer type-2 runtime is MIT and contains static musl, squashfuse,
+libfuse3, zlib, zstd and mimalloc. The pinned runtime source archive includes the
+upstream license and the dependency build recipe. The media libraries inside
+the AppImage are separate shared ELF files.
