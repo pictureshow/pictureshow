@@ -104,7 +104,7 @@ import PictureshowCore
     func testExtraSubtitleNamesKindAndLength() {
         var extra = MediaItem(id: "x", name: "Making of", type: "Video", runTimeTicks: 4_320_900_000)
         extra.extraType = "BehindTheScenes"
-        XCTAssertEqual(ExtrasShelf.subtitle(extra), "Behind the scenes · 7m")
+        XCTAssertEqual(ExtrasShelf.subtitle(extra), "Behind the scenes · 7m 12s")
         extra.runTimeTicks = 310_000_000
         XCTAssertEqual(ExtrasShelf.subtitle(extra), "Behind the scenes · 31 s")
     }
