@@ -98,7 +98,20 @@ jobs:
           output="$PWD/desktop/build/linux-package"
           app_id=app.pictureshow.Pictureshow
           desktop-file-validate "$output/flatpak/payload/share/applications/$app_id.desktop"
-          appstreamcli validate --no-net "$output/flatpak/payload/share/metainfo/$app_id.metainfo.xml"
+          report="$output/evidence/appstream-validation.txt"
+          validation=0
+          LC_ALL=C appstreamcli validate --no-net --no-color \
+            "$output/flatpak/payload/share/metainfo/$app_id.metainfo.xml" > "$report" 2>&1 || validation=$?
+          cat "$report"
+          if (( validation != 0 )); then
+            # Keep the approved source URL in the description. Any other issue remains fatal.
+            mapfile -t issues < <(grep -E '^[EW]:' "$report")
+            expected='^W: app\.pictureshow\.Pictureshow:[0-9]+: description-has-plaintext-url p$'
+            if [[ $validation != 3 || ${#issues[@]} != 1 || ! ${issues[0]:-} =~ $expected ]]; then
+              exit "$validation"
+            fi
+            echo "Accepted the plaintext source URL warning for the approved description."
+          fi
           flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
           flatpak install --user --noninteractive -y flathub org.freedesktop.Sdk//25.08 org.freedesktop.Platform//25.08
           flatpak-builder --user --disable-download --repo="$output/flatpak-repo" "$output/flatpak-build" "$output/flatpak/$app_id.yml"
