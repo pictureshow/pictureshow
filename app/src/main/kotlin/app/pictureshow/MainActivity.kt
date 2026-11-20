@@ -97,7 +97,6 @@ import app.pictureshow.core.playback.PassthroughEncoding
 import app.pictureshow.core.serverLabel
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import org.koin.androidx.compose.koinViewModel
@@ -516,50 +515,8 @@ internal fun Pictureshow(
     }) { navigatePlaybackEntry(nav, it) }
     val sync: SyncPlayHost = koinInject()
     val remoteTarget: RemoteTargetHost = koinInject()
+    RemoteTargetBinding(state.snapshot.currentAccount, catalog, nav, remoteTarget)
     val music: MusicHost = koinInject()
-    val playbackPreferences: PlaybackPreferencesStore = koinInject()
-    val remotePolicy by remember(playbackPreferences) {
-        playbackPreferences.values.map<PlaybackPreferences, String?> { it.remoteReceiver }
-    }.collectAsStateWithLifecycle(null)
-    LaunchedEffect(state.snapshot.currentAccount, remotePolicy) {
-        remotePolicy?.let { remoteTarget.bind(state.snapshot.currentAccount, it) }
-    }
-    val remoteAccount by rememberUpdatedState(state.snapshot.currentAccount)
-    val remoteCatalog by rememberUpdatedState(catalog)
-    LaunchedEffect(remoteTarget) {
-        launch {
-            remoteTarget.opens.collect { effect ->
-                val account = remoteAccount?.takeUnless { it.expired }
-                val item = effect.items.getOrNull(effect.index ?: 0)
-                if (account != null && item != null && music.openFromRemote(account, effect.items, effect.index ?: 0)) {
-                    remoteTarget.resolved(effect.generation, true)
-                    return@collect
-                }
-                val resolved = if (account != null && item != null) {
-                    resolvePlaybackEntry(PlaybackEntry(item, effect.ticks?.div(10_000)), account, remoteCatalog)
-                } else {
-                    ResolvedPlaybackEntry.Unavailable
-                }
-                val open = resolved as? ResolvedPlaybackEntry.Open
-                if (remoteTarget.resolved(effect.generation, open != null)) {
-                    navigatePlaybackEntry(nav, requireNotNull(open))
-                } else if (open == null) {
-                    Toast.makeText(context, ENTRY_UNAVAILABLE, Toast.LENGTH_SHORT).show()
-                }
-            }
-        }
-        remoteTarget.navigation.collect { name ->
-            val code = remoteKeyCode(name)
-            if (code != null) {
-                (context as? android.app.Activity)?.pressRemoteKey(code)
-            } else if (name == "GoHome" && remoteAccount?.expired == false) {
-                nav.navigate("home") {
-                    popUpTo(nav.graph.id) { inclusive = true }
-                    launchSingleTop = true
-                }
-            }
-        }
-    }
     val accessibleNavigation = rememberAssistiveServiceInUse()
     val musicState by music.state.collectAsStateWithLifecycle()
     val tvRoute = backStackEntry?.destination?.route

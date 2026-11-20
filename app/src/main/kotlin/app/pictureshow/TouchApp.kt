@@ -112,6 +112,7 @@ internal fun TouchPictureshow(
             launchSingleTop = true
         }
     }) { navigatePlaybackEntry(nav, it) }
+    val remoteTarget: RemoteTargetHost = koinInject()
     val remote: RemoteControllerHost = koinInject()
     val remoteState by remote.state.collectAsStateWithLifecycle()
     LaunchedEffect(state.snapshot.currentAccount) { remote.bind(state.snapshot.currentAccount) }
@@ -264,6 +265,7 @@ internal fun TouchPictureshow(
             if (destination.startsWith("search?")) navigateSearchEntry(nav, query)
             consumeSearchEntry()
         }
+        RemoteTargetBinding(state.snapshot.currentAccount, catalog, nav, remoteTarget)
         NavHost(navController = nav, startDestination = "waiting") {
             offlineTouchScreens(nav, { state.snapshot.currentAccount }, { catalog }, music::beforeVideo)
             seerrTouchScreens(nav) { state.snapshot.currentAccount?.takeUnless { it.expired } }
@@ -476,6 +478,7 @@ internal fun TouchPictureshow(
                     val vm: SearchViewModel = koinViewModel(parameters = { parametersOf(account, catalog) })
                     val screen by vm.state.collectAsStateWithLifecycle()
                     LaunchedEffect(entry) { vm.initialize(entry.savedStateHandle, entry.arguments?.getString("query").orEmpty()) }
+                    RemoteTextDestination(remoteTarget::setSearchField) { vm.query(it, immediate = true) }
                     val offers = rememberSeerrOffers(account, screen)
                     TouchSearchScreen(
                         screen,

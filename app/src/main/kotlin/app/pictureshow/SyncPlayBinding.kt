@@ -22,6 +22,8 @@ import app.pictureshow.core.Account
 import app.pictureshow.core.SegmentMode
 import app.pictureshow.core.SegmentType
 import app.pictureshow.core.sync.syncSourceEligible
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import org.koin.compose.koinInject
 
 internal val LocalSyncOpen = staticCompositionLocalOf<SyncOpen?> { null }
@@ -46,10 +48,12 @@ internal fun SyncPlayCoordinator(
     val latestAccount by rememberUpdatedState(account)
     val latestOpen by rememberUpdatedState(open)
     val latestMusicOpen by rememberUpdatedState(onMusicOpen)
-    LaunchedEffect(account) {
-        sync.bind(account)
-        remote.bind(account, preferences.read().remoteReceiver)
-        remote.requireSyncSocket(account?.expired == false)
+    LaunchedEffect(account) { sync.bind(account) }
+    LaunchedEffect(account, remote, preferences) {
+        preferences.values.map { it.remoteReceiver }.distinctUntilChanged().collect { policy ->
+            remote.bind(account, policy)
+            remote.requireSyncSocket(account?.expired == false)
+        }
     }
     DisposableEffect(sync, remote, lifecycle) {
         fun subscription(generation: Long, rotate: Boolean) {
