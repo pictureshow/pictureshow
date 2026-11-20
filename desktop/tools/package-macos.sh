@@ -161,10 +161,13 @@ fi
 jpackage --type app-image --name Pictureshow --dest "$work" --input "$input" --main-jar desktop.jar \
   --main-class app.pictureshow.desktop.PictureshowLauncherKt --app-version "$version" --mac-package-identifier "$bundle_id" \
   --vendor 'Legitimate LLC' --icon "$work/Pictureshow.icns" \
-  --add-modules java.se,jdk.charsets,jdk.crypto.ec,jdk.unsupported,jdk.localedata \
+  --add-modules java.se,jdk.charsets,jdk.crypto.ec,jdk.httpserver,jdk.unsupported,jdk.localedata \
   "${java_options[@]}" > "$evidence/jpackage.log" 2>&1
 
 app="$work/Pictureshow.app"
+# DesktopMediaProxy opens a loopback HTTP server for authenticated playback.
+cp "$app/Contents/runtime/Contents/Home/release" "$evidence/java-runtime-modules.txt"
+grep '^MODULES=' "$evidence/java-runtime-modules.txt" | tr ' "' '\n' | grep -x jdk.httpserver >/dev/null
 sources="$app/Contents/Resources/PlaybackSources"
 mkdir "$sources"
 cp "$native/source/ffmpeg.tar.xz" "$sources/ffmpeg-$ffmpeg_version.tar.xz"
