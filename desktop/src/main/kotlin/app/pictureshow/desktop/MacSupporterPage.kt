@@ -3,6 +3,7 @@
  */
 package app.pictureshow.desktop
 
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -20,6 +21,7 @@ import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontFamily
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
@@ -47,7 +49,8 @@ internal fun MacSupporterPage(bridge: StoreKitBridge) {
             Text("Thank you for supporting Pictureshow!", style = MaterialTheme.typography.titleLarge)
             val code = entitlement.supporterCode
             if (code != null) {
-                InfoLine("Your supporter code", code)
+                Text("Your supporter code", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                SelectionContainer { Text(code, fontFamily = FontFamily.Monospace) }
                 Text("Email info@legitimateapps.com with your request and supporter code.")
             } else {
                 Text("Reopen this screen later.")
@@ -57,7 +60,7 @@ internal fun MacSupporterPage(bridge: StoreKitBridge) {
                 modifier = Modifier.controlFocus().probe("supporter:manage")
             ) { Text("Manage or cancel in the App Store") }
             if (model.showManageInstructions) {
-                Text("To manage or cancel, open the App Store, then choose your name, Account Settings, and Subscriptions.")
+                Text("To manage or cancel, open the App Store, then choose your Apple Account name, Account Settings, and Subscriptions.")
             }
         } else if (product != null) {
             Text(product.name)
@@ -82,7 +85,7 @@ internal fun MacSupporterPage(bridge: StoreKitBridge) {
             onClick = { scope.launch { model.restore() } },
             modifier = Modifier.controlFocus().probe("supporter:restore"),
             enabled = model.operation == null
-        ) { Text("Restore Purchases") }
+        ) { Text("Restore purchases") }
         TextButton(onClick = { desktopOpenLink("https://www.apple.com/legal/internet-services/itunes/dev/stdeula/") },
             modifier = Modifier.controlFocus()) { Text("Terms of Use") }
         TextButton(onClick = { desktopOpenLink(PICTURESHOW_PRIVACY_URL) },

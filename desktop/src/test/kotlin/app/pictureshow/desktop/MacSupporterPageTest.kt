@@ -24,7 +24,7 @@ class MacSupporterPageTest {
         onNodeWithText("Become a supporter").assertDoesNotExist()
         assertEquals(listOf(MAC_SUPPORTER_PRODUCT), bridge.purchases)
 
-        onNodeWithText("Restore Purchases").performClick()
+        onNodeWithText("Restore purchases").performClick()
         onNodeWithText("No active Supporter subscription was found for this Apple Account.").assertExists()
         onNodeWithText("Become a supporter").performClick()
         onNodeWithText("Waiting for the App Store to confirm your payment.").assertExists()
@@ -40,7 +40,7 @@ class MacSupporterPageTest {
         onNodeWithText("Thank you for supporting Pictureshow!").assertDoesNotExist()
         onNodeWithText("Become a supporter").assertExists()
         runOnIdle { bridge.restoreGrantsSupport = true }
-        onNodeWithText("Restore Purchases").performClick()
+        onNodeWithText("Restore purchases").performClick()
         onNodeWithText("Thank you for supporting Pictureshow!").assertExists()
         assertEquals(2, bridge.restores)
     }
@@ -49,7 +49,7 @@ class MacSupporterPageTest {
         setContent { MaterialTheme { DesktopSupporterPage() } }
         onNodeWithText(DESKTOP_SUPPORTER_NO_PURCHASE).assertExists()
         onNodeWithText("Become a supporter").assertDoesNotExist()
-        onNodeWithText("Restore Purchases").assertDoesNotExist()
+        onNodeWithText("Restore purchases").assertDoesNotExist()
     }
 
     private class FakeStoreKit : StoreKitBridge {
