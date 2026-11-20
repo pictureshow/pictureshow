@@ -1,0 +1,10 @@
+#!/bin/sh
+# SPDX-License-Identifier: MPL-2.0
+# Copyright (c) Legitimate LLC.
+set -eu
+root=$(dirname "$(readlink -f "$0")")
+media="$root/lib/pictureshow"
+export MPV_LIBRARY="${MPV_LIBRARY:-$media/libmpv.so.2}"
+export SPIKE_WAYLAND_BRIDGE="${SPIKE_WAYLAND_BRIDGE:-$media/libpictureshow_wayland.so}"
+export LD_LIBRARY_PATH="$media${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+exec "$root/bin/Pictureshow" "$@"

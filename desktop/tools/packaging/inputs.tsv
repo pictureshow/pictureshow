@@ -1,0 +1,7 @@
+temurin-linux.tar.gz	d7f5d5cf865a2902b70ff549b97586a7d3f234e016f041ab447ea740c7d66d1c	https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.13%2B9/OpenJDK21U-jdk_x64_linux_hotspot_21.0.13_9.tar.gz
+temurin-windows.zip	a4dbaa05fca4bd89d84584e58c459bd732efebb1722af80ab13c6516832004f9	https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.13%2B9/OpenJDK21U-jdk_x64_windows_hotspot_21.0.13_9.zip
+temurin-sources.tar.gz	b5232c9980d8a0f0459676c084c41c6e2c771ed9e785890b03c6a438406ad1ca	https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.13%2B9/OpenJDK21U-jdk-sources_21.0.13_9.tar.gz
+appimagetool	ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0	https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage
+appimage-runtime	2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d	https://github.com/AppImage/type2-runtime/releases/download/20251108/runtime-x86_64
+wayland-protocols.tar.gz	83afedde1e63751578ba51b5f6c36052802f85634ed68be41ecfcc3a515ab03d	https://gitlab.freedesktop.org/wayland/wayland-protocols/-/archive/1.46/wayland-protocols-1.46.tar.gz
+weston.tar.gz	789d1254ccc6a7c04cd25be717eba1bdd7d14f14d43cff980a5536d60cdf25a5	https://gitlab.freedesktop.org/wayland/weston/-/archive/16.0.2/weston-16.0.2.tar.gz

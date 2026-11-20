@@ -6,10 +6,21 @@ set -euo pipefail
 build=${1:?Expected a native build directory}
 prefix="$build/prefix"
 source_dir="$build/source"
+system=${2:-macos}
 tools=$(cd "$(dirname "$0")" && pwd -P)
 export PKG_CONFIG_LIBDIR="$prefix/lib/pkgconfig:$prefix/share/pkgconfig"
 unset PKG_CONFIG_PATH PYTHONPATH
-export MACOSX_DEPLOYMENT_TARGET=15.0
+case "$system" in
+  macos)
+    export MACOSX_DEPLOYMENT_TARGET=15.0
+    font_backend=-Dcoretext=enabled
+    ;;
+  linux)
+    export PKG_CONFIG_LIBDIR="$PKG_CONFIG_LIBDIR:/usr/lib/$(cc -print-multiarch)/pkgconfig:/usr/lib/pkgconfig:/usr/share/pkgconfig"
+    font_backend=-Dfontconfig=enabled
+    ;;
+  *) echo "Unknown render dependency platform: $system" >&2; exit 2 ;;
+esac
 
 while IFS=$'\t' read -r folder archive sha url; do
   if [[ ! -f "$source_dir/$archive" ]]; then
@@ -43,5 +54,5 @@ meson_install harfbuzz-12.3.2 -Dfreetype=enabled -Dtests=disabled -Dutilities=di
   make -j2
   make install
 )
-meson_install libass-0.17.4 -Dcoretext=enabled -Dlibunibreak=enabled
+meson_install libass-0.17.4 "$font_backend" -Dlibunibreak=enabled
 meson_install libplacebo-7.387.0 -Ddemos=false -Dopengl=enabled

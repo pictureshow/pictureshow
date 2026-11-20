@@ -3,11 +3,13 @@
 # Copyright (c) Legitimate LLC.
 set -euo pipefail
 build="$PWD/desktop/build/app-native"
-prefix="$build/prefix"
-export LD_LIBRARY_PATH="$prefix/lib:$prefix/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH:-}"
-export MPV_LIBRARY="$prefix/lib/x86_64-linux-gnu/libmpv.so"
-[[ -f "$MPV_LIBRARY" ]] || export MPV_LIBRARY="$prefix/lib/libmpv.so"
-export SPIKE_WAYLAND_BRIDGE="$build/native/libpictureshow_wayland.so"
+prefix=${PICTURESHOW_WESTON_PREFIX:-"$build/prefix"}
+if [[ $# == 0 ]]; then
+ export LD_LIBRARY_PATH="$prefix/lib:$prefix/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH:-}"
+ export MPV_LIBRARY="$prefix/lib/x86_64-linux-gnu/libmpv.so"
+ [[ -f "$MPV_LIBRARY" ]] || export MPV_LIBRARY="$prefix/lib/libmpv.so"
+ export SPIKE_WAYLAND_BRIDGE="$build/native/libpictureshow_wayland.so"
+fi
 export SPIKE_NULL_AUDIO=1 SPIKE_SOFTWARE_GPU=1 SKIKO_RENDER_API=SOFTWARE LIBGL_ALWAYS_SOFTWARE=1 GALLIUM_DRIVER=softpipe
 export PICTURESHOW_SMOKE_WINDOW_X=0 PICTURESHOW_SMOKE_WINDOW_Y=0
 export XDG_RUNTIME_DIR
@@ -36,7 +38,7 @@ colorimetry-mode=bt2020rgb
 color-profile=auto:
 CONFIG
 env MESA_EXTENSION_OVERRIDE=-GL_EXT_shader_framebuffer_fetch_non_coherent \
- "$prefix/bin/weston" -B headless --renderer=gl --width=1920 --height=1080 \
+ env LD_LIBRARY_PATH="$prefix/lib:$prefix/lib/x86_64-linux-gnu" "$prefix/bin/weston" -B headless --renderer=gl --width=1920 --height=1080 \
  --socket="$WAYLAND_DISPLAY" --config="$XDG_RUNTIME_DIR/weston.ini" \
  --log="$PWD/desktop-evidence/compositor/weston.log" > desktop-evidence/compositor/console.log 2>&1 &
 compositor_pid=$!
@@ -46,6 +48,9 @@ for n in $(seq 1 600); do
  sleep .1
 done
 [[ -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ]]
+if [[ $# == 0 ]]; then
+ set -- --work desktop/build/disposable-app-smoke --evidence desktop-evidence/app-smoke
+fi
 # AWT shell uses its owned Xvfb; video uses the separate qualified Wayland surface.
 xvfb-run -a -s '-screen 0 1920x1080x24' python3 desktop/tools/app-smoke/run.py \
- --work desktop/build/disposable-app-smoke --evidence desktop-evidence/app-smoke --timeout 420
+ --timeout 420 "$@"

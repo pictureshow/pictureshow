@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>app.pictureshow.Pictureshow</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MPL-2.0</project_license>
+  <name>Pictureshow</name>
+  <summary>Jellyfin media player</summary>
+  <developer id="app.pictureshow"><name>Legitimate LLC</name></developer>
+  <description>
+    <p>Pictureshow plays media from a Jellyfin server.</p>
+  </description>
+  <launchable type="desktop-id">app.pictureshow.Pictureshow.desktop</launchable>
+  <url type="homepage">https://pictureshow.app/</url>
+  <url type="bugtracker">https://github.com/pictureshow/pictureshow/issues</url>
+  <content_rating type="oars-1.1" />
+</component>

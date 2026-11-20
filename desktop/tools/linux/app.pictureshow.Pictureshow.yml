@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: MPL-2.0
+app-id: app.pictureshow.Pictureshow
+runtime: org.freedesktop.Platform
+runtime-version: '25.08'
+sdk: org.freedesktop.Sdk
+command: pictureshow
+finish-args:
+  - --share=network
+  - --share=ipc
+  # AWT uses X11/XWayland, while the video surface speaks Wayland.
+  - --socket=x11
+  - --socket=wayland
+  - --socket=pulseaudio
+  - --device=dri
+modules:
+  - name: pictureshow
+    buildsystem: simple
+    build-commands:
+      - install -d /app/lib/pictureshow
+      - cp -a payload/. /app/lib/pictureshow/
+      - cp -a /app/lib/pictureshow/share /app/
+      - install -d /app/bin
+      - ln -s /app/lib/pictureshow/AppRun /app/bin/pictureshow
+    sources:
+      # package-linux.sh stages the checkout's same audited AppImage payload.
+      - type: dir
+        path: payload
+        dest: payload

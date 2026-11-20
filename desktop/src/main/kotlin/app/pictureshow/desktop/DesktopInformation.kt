@@ -28,11 +28,16 @@ internal fun desktopLicenseCatalog(loader: ClassLoader = DesktopLicense::class.j
         val sources = desktopPlaybackSources() ?: return libraries
         val lgpl = File(sources, "COPYING.LGPLv2.1").readText()
         val included = DesktopLicense(
-            "mac-playback", "mpv (libmpv) and FFmpeg", "mpv 0.42.0 · FFmpeg 8.0", "LGPL-2.1-or-later",
+            "bundled-playback", "mpv (libmpv) and FFmpeg", "mpv 0.42.0 · FFmpeg 8.0", "LGPL-2.1-or-later",
             "This copy of Pictureshow includes mpv and FFmpeg built without their GPL or nonfree parts. " +
                 "The source archives, changes and third-party notices are included in Playback Sources.\n\n$lgpl"
         )
-        (libraries.filterNot { it.id == "mpv-system" || it.id.startsWith("org.jogamp.") } + included).sortedBy { it.name.lowercase() }
+        val temurin = File(sources, "Temurin-LICENSE").takeIf(File::isFile)?.let {
+            DesktopLicense("temurin-jre", "Eclipse Temurin", "21.0.13+9", "GPL-2.0 with Classpath Exception",
+                "The runtime notices and matching source links are in Playback Sources.\n\n" + it.readText())
+        }
+        (libraries.filterNot { it.id == "mpv-system" || (com.sun.jna.Platform.isMac() && it.id.startsWith("org.jogamp.")) } +
+            listOfNotNull(included, temurin)).sortedBy { it.name.lowercase() }
     }
 
 internal fun desktopPlaybackSources(): File? = System.getProperty("pictureshow.playback.sources")

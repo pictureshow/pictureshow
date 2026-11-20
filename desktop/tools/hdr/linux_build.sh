@@ -28,6 +28,7 @@ meson setup "$build/weston-build" "$build/source/weston-16.0.2" --prefix="$prefi
  -Dbackend-drm=false -Dbackend-headless=true -Dbackend-pipewire=false -Dbackend-rdp=false -Dbackend-vnc=false -Dbackend-wayland=false -Dbackend-x11=false -Dbackend-default=headless -Drenderer-vulkan=false -Dxwayland=false -Dsystemd=false -Dshell-lua=false -Dshell-desktop=true -Dshell-ivi=false -Dshell-kiosk=false -Dcolor-management-lcms=true -Ddemo-clients=false '-Dsimple-clients=[]' -Dtools=info,debug -Dtests=false -Ddoc=false
 meson compile -C "$build/weston-build" -j2
 meson install -C "$build/weston-build"
+[[ "${PICTURESHOW_WESTON_ONLY:-0}" != 1 ]] || exit 0
 # Match leg133's Linux LGPL mpv0.41 rendering core; 0.42 needs a newer libplacebo.
 fetch https://ffmpeg.org/releases/ffmpeg-8.0.tar.xz b2751fccb6cc4c77708113cd78b561059b6fa904b24162fa0be2d60273d27b8e ffmpeg.tar.xz
 (

@@ -921,10 +921,15 @@ def copy_subtitle_failure_categories(playback: Path, evidence: Path):
 
 
 def run_app(args, viewer: API, password: str, ids: dict, evidence: Path):
-    command = [args.java, "--enable-native-access=ALL-UNNAMED"]
-    if platform.system() == "Darwin":
-        command += ["--add-exports=java.desktop/com.apple.eawt=ALL-UNNAMED"]
-    command += ["-Dcompose.interop.blending=true", "-Dcompose.accessibility.enable=true", "-cp", str(args.runtime.resolve() / "lib" / "*"), "app.pictureshow.desktop.MainKt", "app-smoke", viewer.url, "desktop-viewer", password, str(evidence.resolve())]
+    if args.launcher:
+        command = [str(args.launcher.resolve())]
+    else:
+        command = [args.java, "--enable-native-access=ALL-UNNAMED"]
+        if platform.system() == "Darwin":
+            command += ["--add-exports=java.desktop/com.apple.eawt=ALL-UNNAMED"]
+        command += ["-Dcompose.interop.blending=true", "-Dcompose.accessibility.enable=true", "-cp",
+                    str(args.runtime.resolve() / "lib" / "*"), "app.pictureshow.desktop.MainKt"]
+    command += ["app-smoke", viewer.url, "desktop-viewer", password, str(evidence.resolve())]
     environment = dict(os.environ)
     environment["PICTURESHOW_DATA_DIR"] = str(args.work.resolve() / "viewer-data")
     environment["SPIKE_NULL_AUDIO"] = "1"
@@ -1036,6 +1041,7 @@ def main():
     parser.add_argument("--evidence", type=Path, required=True)
     parser.add_argument("--runtime", type=Path, default=Path("desktop/build/spike-runtime"))
     parser.add_argument("--java", default="java")
+    parser.add_argument("--launcher", type=Path, help="Launch the assembled package instead of the Gradle runtime")
     parser.add_argument("--ffmpeg", default=shutil.which("ffmpeg"))
     parser.add_argument("--ffprobe", default=shutil.which("ffprobe"))
     parser.add_argument("--timeout", type=int, default=240)

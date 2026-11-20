@@ -1,0 +1,7 @@
+[Desktop Entry]
+Name=Pictureshow
+Exec=pictureshow
+Icon=app.pictureshow.Pictureshow
+Type=Application
+Categories=AudioVideo;Video;
+Terminal=false

@@ -103,7 +103,16 @@ static void placeHdrDiagnostic(HWND window) {
 API Layer *ps_create(void *window,void *mpv) {
     Layer *s=new Layer(); s->overlay=(HWND)window;
     placeHdrDiagnostic(s->overlay);
-    s->lib=LoadLibraryA(std::getenv("MPV_LIBRARY"));
+    wchar_t configured[32768];
+    const DWORD length = GetEnvironmentVariableW(L"MPV_LIBRARY", configured, _countof(configured));
+    if (length > 0 && length < _countof(configured)) {
+        const auto path = std::filesystem::absolute(configured);
+        s->lib = LoadLibraryExW(path.c_str(), nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
+    } else {
+        // The application launcher and its media DLLs are siblings.
+        s->lib = LoadLibraryExW(L"libmpv-2.dll", nullptr,
+            LOAD_LIBRARY_SEARCH_APPLICATION_DIR | LOAD_LIBRARY_SEARCH_SYSTEM32);
+    }
     if(!s->lib){delete s;return nullptr;}
     s->create=(decltype(s->create))GetProcAddress(s->lib,"mpv_render_context_create");
     s->draw=(decltype(s->draw))GetProcAddress(s->lib,"mpv_render_context_render");
