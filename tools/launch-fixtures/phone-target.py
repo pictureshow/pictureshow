@@ -38,9 +38,14 @@ def main():
         parser.error("fixture server name did not match")
     try:
         credential = json.loads(os.environ["SECRET"])
-        api.login({"username": credential["username"], "password": credential["password"]})
+        if "token" in credential:
+            api.device = credential["device"]
+            api.token = credential["token"]
+            api.user = api.ok("GET", "/Users/Me")["Id"]
+        else:
+            api.login({"username": credential["username"], "password": credential["password"]})
     except (KeyError, ValueError):
-        parser.error("inject a fixture username and password JSON in SECRET")
+        parser.error("inject a fixture username/password or issued device/token JSON in SECRET")
 
     def row():
         sessions = api.ok("GET", "/Sessions", query={"controllableByUserId": api.user})

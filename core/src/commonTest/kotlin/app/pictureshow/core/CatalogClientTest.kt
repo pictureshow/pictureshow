@@ -250,7 +250,7 @@ class CatalogClientTest {
         assertEquals("Resume from 2:03", resumeLabel(1230000000))
         assertEquals("Resume from 0:00", resumeLabel(-1))
         assertEquals("1h 2m", runtimeLabel(37230000000))
-        assertEquals("2m", runtimeLabel(1230000000))
+        assertEquals("2m 3s", runtimeLabel(1230000000))
         assertEquals("", runtimeLabel(null))
         val item = MediaItem("e", type = "Episode", indexNumber = 2, parentIndexNumber = 1)
         assertEquals("S1:E2", episodeLabel(item))

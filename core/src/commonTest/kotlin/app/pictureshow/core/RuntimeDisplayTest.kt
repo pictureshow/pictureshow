@@ -31,14 +31,14 @@ class RuntimeDisplayTest {
     }
 
     @Test
-    fun aClipUnderAMinuteNamesItsSecondsInsteadOfOneMinute() {
+    fun shortClipsKeepSecondsAndRoundAtTheMinuteBoundary() {
         assertEquals("31 s", runtimeLabel(310_000_000))
         assertEquals("31 s", runtimeLabel(312_000_000))
         assertEquals("1 s", runtimeLabel(2_000_000))
         assertEquals("59 s", runtimeLabel(594_000_000))
         assertEquals("1m", runtimeLabel(599_999_999))
         assertEquals("1m", runtimeLabel(600_000_000))
-        assertEquals("1m", runtimeLabel(1_190_000_000))
+        assertEquals("1m 59s", runtimeLabel(1_190_000_000))
     }
 
     @Test
