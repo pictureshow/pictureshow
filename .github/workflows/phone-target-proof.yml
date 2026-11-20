@@ -1,4 +1,4 @@
-name: TV remote target parity proof
+name: Android receiver parity proof
 on:
   push:
     branches: ['ci/remote-lows-phone-proof']
@@ -8,6 +8,20 @@ jobs:
   phone-target:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - surface: phone
+            api: 35
+            tag: google_apis
+            profile: pixel_6
+            leanback: 'false'
+          - surface: tv
+            api: 36
+            tag: android-tv
+            profile: tv_1080p
+            leanback: 'true'
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-java@v6
@@ -36,14 +50,14 @@ jobs:
       - name: Verify a separate Jellyfin controller opens, pauses, seeks and stops playback
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 34
-          target: android-tv
+          api-level: ${{ matrix.api }}
+          target: ${{ matrix.tag }}
           arch: x86_64
-          profile: tv_1080p
+          profile: ${{ matrix.profile }}
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-boot-anim -camera-back none -no-snapshot
           script: |
-            adb -s emulator-5554 shell pm has-feature android.software.leanback | grep -x true
+            adb -s emulator-5554 shell pm has-feature android.software.leanback | grep -x '${{ matrix.leanback }}'
             adb -s emulator-5554 reverse tcp:18097 tcp:18097
             adb -s emulator-5554 install app/build/outputs/apk/debug/app-debug.apk
             adb -s emulator-5554 shell wm dismiss-keyguard
@@ -54,7 +68,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: phone-target-proof
+          name: receiver-proof-${{ matrix.surface }}
           path: desktop/build/test-results/test/*PhoneTargetFixtureProofTest.xml
           retention-days: 5
           if-no-files-found: ignore
