@@ -24,6 +24,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 import app.pictureshow.core.Account
 import app.pictureshow.core.MediaItem
 import java.util.WeakHashMap
+import org.koin.compose.koinInject
 
 /** Touch owns presentation only; the same host as TV owns every playback transition. */
 @Composable
@@ -36,8 +37,9 @@ internal fun TouchPlayer(
     onExit: () -> Unit
 ) {
     TouchPlayerWindow()
+    val remote: RemoteTargetHost = koinInject()
     PlayerViewing(account, item, startMs, onCurrentItem) { current, start, onNext ->
-        val host = rememberPlaybackHost(account, current, start, catalog, onNext = onNext, onExit = onExit)
+        val host = rememberPlaybackHost(account, current, start, catalog, onNext = onNext, onExit = onExit, remote = remote)
         TouchPlayerContent(account, host)
     }
 }
