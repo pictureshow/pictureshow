@@ -103,6 +103,18 @@ jobs:
             -parallel-testing-enabled NO \
             build-for-testing CODE_SIGNING_ALLOWED=NO \
             2>&1 | tee apple-test-results/ios-build.log
+          # The first hosted process loads the local StoreKit fixture on a cold simulator.
+          # Starting checkout in that same process can leave StoreKit waiting for account sign-in.
+          xcodebuild \
+            -project apple/Pictureshow.xcodeproj \
+            -scheme Pictureshow-iOS \
+            -destination "$destination" \
+            -derivedDataPath "$RUNNER_TEMP/PictureshowDerivedData" \
+            -parallel-testing-enabled NO \
+            -test-timeouts-enabled YES -maximum-test-execution-time-allowance 60 \
+            -only-testing:Pictureshow-iOS-UnitTests/SupporterTests/testInitializeStoreKitTestSession \
+            test-without-building CODE_SIGNING_ALLOWED=NO \
+            2>&1 | tee apple-test-results/ios-storekit-setup.log
           xcodebuild \
             -project apple/Pictureshow.xcodeproj \
             -scheme Pictureshow-iOS \
@@ -133,6 +145,16 @@ jobs:
             -parallel-testing-enabled NO \
             build-for-testing CODE_SIGNING_ALLOWED=NO \
             2>&1 | tee apple-test-results/tvos-build.log
+          xcodebuild \
+            -project apple/Pictureshow.xcodeproj \
+            -scheme Pictureshow-tvOS \
+            -destination "$destination" \
+            -derivedDataPath "$RUNNER_TEMP/PictureshowDerivedData" \
+            -parallel-testing-enabled NO \
+            -test-timeouts-enabled YES -maximum-test-execution-time-allowance 60 \
+            -only-testing:Pictureshow-tvOS-UnitTests/SupporterTests/testInitializeStoreKitTestSession \
+            test-without-building CODE_SIGNING_ALLOWED=NO \
+            2>&1 | tee apple-test-results/tvos-storekit-setup.log
           xcodebuild \
             -project apple/Pictureshow.xcodeproj \
             -scheme Pictureshow-tvOS \

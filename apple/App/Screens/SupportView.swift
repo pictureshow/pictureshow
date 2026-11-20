@@ -22,24 +22,34 @@ struct SupportView: View {
                         Label("Thank you for supporting Pictureshow!", systemImage: "checkmark.seal.fill")
                             .font(.headline)
                             .accessibilityAddTraits(.isHeader)
-                        HStack(alignment: .firstTextBaseline, spacing: 12) {
-                            Text("Your supporter code")
-                            Text(code)
-                                .font(.body.monospaced().weight(.semibold))
-                                #if os(iOS)
-                                .textSelection(.enabled)
-                                #endif
+                        ViewThatFits(in: .horizontal) {
+                            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                                Text("Your supporter code")
+                                supporterCode(code)
+                            }
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Your supporter code")
+                                supporterCode(code)
+                            }
                         }
                         Text("Email info@legitimateapps.com with your request and supporter code.")
                         Text("Requests are not guaranteed to be built or delivered by a particular date.")
                             .foregroundStyle(.secondary)
+                        #if os(tvOS)
+                        managementInstructions
+                        #endif
                     }
                     #if os(tvOS)
                     .accessibilityElement(children: .combine)
                     .focusable()
                     .prefersDefaultFocus(true, in: supportFocus)
+                    #else
+                    .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
                     #endif
-                    management
+                    #if os(iOS)
+                    Button("Manage or cancel in the App Store") { showManagement = true }
+                    managementInstructions
+                    #endif
                 }
             } else {
                 Section {
@@ -100,6 +110,8 @@ struct SupportView: View {
         .navigationTitle("Support Pictureshow")
         #if os(iOS)
         .scrollContentBackground(.hidden)
+        .frame(maxWidth: 672)
+        .frame(maxWidth: .infinity)
         .pageBackground()
         .manageSubscriptionsSheet(isPresented: $showManagement)
         #else
@@ -124,17 +136,16 @@ struct SupportView: View {
                     .accessibilityAddTraits(.isHeader)
                 Text("Renews monthly until cancelled. Cancel anytime in the App Store.")
                     .foregroundStyle(.secondary)
+                if supporter.notice == .pending {
+                    Label("Waiting for the App Store to confirm your payment.", systemImage: "clock")
+                        .padding(.top, 6)
+                }
             }
             #if os(tvOS)
             .accessibilityElement(children: .combine)
             .focusable()
             #endif
-            if supporter.notice == .pending {
-                Label("Waiting for the App Store to confirm your payment.", systemImage: "clock")
-                    #if os(tvOS)
-                    .focusable()
-                    #endif
-            } else {
+            if supporter.notice != .pending {
                 Button {
                     Task {
                         await supporter.purchase { product in try await purchaseProduct(product) }
@@ -148,6 +159,7 @@ struct SupportView: View {
                 }
                 .primaryAction()
                 #if os(tvOS)
+                .listRowBackground(Color.clear)
                 .prefersDefaultFocus(true, in: supportFocus)
                 #else
                 .disabled(supporter.activity != nil || supporter.loading)
@@ -163,14 +175,23 @@ struct SupportView: View {
         }
     }
 
-    @ViewBuilder private var management: some View {
+    private func supporterCode(_ code: String) -> some View {
+        Text(code)
+            .font(.headline.monospaced())
+            .lineLimit(1)
+            .minimumScaleFactor(0.75)
+            #if os(iOS)
+            .textSelection(.enabled)
+            #endif
+    }
+
+    @ViewBuilder private var managementInstructions: some View {
         #if os(iOS)
-        Button("Manage or cancel in the App Store") { showManagement = true }
         Text("To manage or cancel, open Settings, tap your name, then tap Subscriptions.")
             .foregroundStyle(.secondary)
         #else
         Text("To manage or cancel, open Settings, choose your Apple Account profile, then select Subscriptions.")
-            .focusable()
+            .foregroundStyle(.secondary)
         #endif
     }
 
