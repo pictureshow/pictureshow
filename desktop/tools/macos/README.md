@@ -75,6 +75,8 @@ The button in the license viewer opens source archives inside the app. Publish t
 
 The release gate uses Apple's `spctl -t open --context context:primary-signature` assessment for disk images. The evidence also records the `-t install` assessment and its exit status. [Apple Technical Note TN2206](https://developer.apple.com/library/archive/technotes/tn2206/)
 
+For a local packaging run, `PICTURESHOW_MAC_RUNTIME` accepts the JAR directory from the macOS desktop CI artifact. Verify that the run built the same application source revision and architecture. Packaging records the input JAR digests.
+
 The hardened runtime allows HotSpot JIT. The package signs the runtime, the player and every Mach-O in the retained JVM archives using the same identity. App images with either signing channel can be verified with `codesign --verify --deep --strict`. See the package's `otool-dependencies.txt` for the native linkage audit and `LICENSE-INVENTORY.md` for sources and licensing.
 
 ### Mac App Store

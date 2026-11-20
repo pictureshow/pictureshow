@@ -114,10 +114,19 @@ verify_source "$ffmpeg_sha256" "$native/source/ffmpeg.tar.xz"
 verify_source "$mpv_sha256" "$native/mpv-source/mpv.tar.gz"
 verify_source "$dav1d_sha256" "$native/source/dav1d.tar.xz"
 
-./gradlew --no-daemon --max-workers=2 :desktop:spikeRuntime -Dorg.gradle.jvmargs=-Xmx2g > "$evidence/gradle.log" 2>&1
+runtime=${PICTURESHOW_MAC_RUNTIME:-}
+if [[ -z "$runtime" ]]; then
+  ./gradlew --no-daemon --max-workers=2 :desktop:spikeRuntime -Dorg.gradle.jvmargs=-Xmx2g > "$evidence/gradle.log" 2>&1
+  runtime="$repo/desktop/build/spike-runtime/lib"
+fi
+[[ -f "$runtime/desktop.jar" ]] || { echo 'Expected the desktop runtime JARs from :desktop:spikeRuntime.' >&2; exit 2; }
+(
+  cd "$runtime"
+  shasum -a 256 ./*.jar
+) > "$evidence/runtime-sha256.txt"
 input="$work/input"
 mkdir "$input"
-for jar in desktop/build/spike-runtime/lib/*.jar; do
+for jar in "$runtime"/*.jar; do
   # JOGL and GlueGen are used by stand-alone graphics probes. The installed
   # viewer uses the Objective-C libmpv surface instead.
   case "$(basename "$jar")" in jogl-*|gluegen-*) continue ;; esac
