@@ -1,0 +1,55 @@
+name: Phone remote target proof
+on:
+  push:
+    branches: ['ci/remote-lows-phone-proof']
+permissions:
+  contents: read
+jobs:
+  phone-target:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v6
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          sudo chmod 0666 /dev/kvm
+      - name: Start loopback-only Jellyfin fixture
+        shell: bash
+        run: |
+          set -eu
+          mkdir -p build-out/phone-fixture/media
+          cp .github/phone-target-proof/*.py build-out/phone-fixture/
+          docker run --rm --entrypoint /usr/lib/jellyfin-ffmpeg/ffmpeg -v "$PWD/build-out/phone-fixture/media:/media" jellyfin/jellyfin:10.10.7 -v error -f lavfi -i testsrc2=size=320x180:rate=24 -f lavfi -i sine=frequency=440:sample_rate=48000 -t 165 -c:v libx264 -preset ultrafast -c:a aac '/media/Remote Test Clip.mp4'
+          docker run -d --name pictureshow-phone-fixture -p 127.0.0.1:18097:8096 -v "$PWD/build-out/phone-fixture/media:/media:ro" jellyfin/jellyfin:10.10.7
+          curl --retry 30 --retry-delay 2 --retry-all-errors --fail --silent --output /dev/null http://127.0.0.1:18097/System/Info/Public
+          python3 -I build-out/phone-fixture/setup.py
+      - name: Build Pictureshow debug APK for the phone
+        run: ./gradlew :app:assembleDebug
+      - name: Verify a separate Jellyfin controller opens, pauses, seeks and stops playback
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-boot-anim -camera-back none -no-snapshot
+          script: |
+            adb -s emulator-5554 reverse tcp:18097 tcp:18097
+            adb -s emulator-5554 install app/build/outputs/apk/debug/app-debug.apk
+            adb -s emulator-5554 shell wm dismiss-keyguard
+            python3 -I build-out/phone-fixture/seed-phone.py
+            for i in $(seq 1 40); do python3 -I build-out/phone-fixture/pilot.py sessions | grep -q '"name": "Pictureshow test phone".*"remote": true' && break; sleep 2; done
+            python3 -I build-out/phone-fixture/pilot.py sessions
+            python3 -I build-out/phone-fixture/pilot.py drive 'Pictureshow test phone'
+      - name: Stop disposable Jellyfin
+        if: always()
+        run: docker stop pictureshow-phone-fixture
