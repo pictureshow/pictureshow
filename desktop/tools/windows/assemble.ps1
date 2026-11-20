@@ -83,7 +83,15 @@ $sdk = Get-ChildItem "${env:ProgramFiles(x86)}/Windows Kits/10/bin" -Directory |
 if (!$sdk) { throw 'Windows SDK MakeAppx not installed' }
 Copy-Item "$Work/pictureshow-store.dll" "$image/pictureshow-store.dll"
 $cfg = "$image/app/Pictureshow.cfg"
-$config = (Get-Content -LiteralPath $cfg -Raw).Replace('[JavaOptions]', "[JavaOptions]`njava-options=-Dpictureshow.windows.store.library=`$APPDIR/../pictureshow-store.dll")
+# MSIX redirects temporary files, which can make Java's AF_UNIX pipe bind
+# succeed and its connect fail. Use an existing file as the socket directory
+# so the bundled JDK takes its built-in TCP loopback fallback at bind time.
+$storeOptions = @'
+[JavaOptions]
+java-options=-Dpictureshow.windows.store.library=$APPDIR/../pictureshow-store.dll
+java-options=-Djdk.net.unixdomain.tmpdir=$APPDIR/Pictureshow.cfg
+'@
+$config = (Get-Content -LiteralPath $cfg -Raw).Replace('[JavaOptions]', $storeOptions)
 Set-Content -LiteralPath $cfg -Value $config
 [xml] $manifest = Get-Content "$PSScriptRoot/AppxManifest.xml"
 $identity = $manifest.Package.Identity

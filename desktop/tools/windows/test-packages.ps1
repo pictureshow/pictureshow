@@ -78,8 +78,11 @@ try {
     try {
         $appcert = "${env:ProgramFiles(x86)}/Windows Kits/10/App Certification Kit/appcert.exe"
         if (!(Test-Path $appcert)) { throw 'Windows App Certification Kit is missing from the hosted SDK' }
+        Remove-AppxPackage -Package $package.PackageFullName
+        if (Get-AppxPackage -Name $package.Name) { throw 'MSIX uninstall left the package registered' }
+        $package = $null
         & $appcert reset
-        & $appcert test -packagefullname $package.PackageFullName -reportoutputpath "$evidence/wack.xml"
+        & $appcert test -appxpackagepath $signed -reportoutputpath "$evidence/wack.xml"
         if (!(Test-Path "$evidence/wack.xml")) { throw 'Windows App Certification Kit produced no verdict' }
         [xml]$report = Get-Content -LiteralPath "$evidence/wack.xml"
         $verdict = $report.DocumentElement.GetAttribute('OVERALL_RESULT')
