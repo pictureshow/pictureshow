@@ -31,7 +31,7 @@ internal fun DesktopAccountsPage(state: DesktopState, c: DesktopController) = wh
     DesktopRoute.About -> DesktopAboutPage(c)
     DesktopRoute.Licenses -> DesktopLicensesPage(c)
     DesktopRoute.License -> DesktopLicensePage(c)
-    DesktopRoute.Supporter -> DesktopSupporterPage()
+    DesktopRoute.Supporter -> DesktopSupporterPage(remember(c) { c.packagedSupporterStore() })
     DesktopRoute.ThisComputer -> DesktopThisComputerPage(c)
     else -> Unit
 }
@@ -165,11 +165,11 @@ internal fun DesktopLicensePage(c: DesktopController) {
 
 internal const val DESKTOP_SUPPORTER_NO_PURCHASE = "Subscribing isn't available in Pictureshow for computers. On Android, Pictureshow offers the Supporter subscription through Google Play."
 
-/** INFO-06..08 on a computer: the honest explanation, no purchase, no outside payment links. */
+/** INFO-06..08 on a computer, with an offer when the package has a store provider. */
 @Composable
-internal fun DesktopSupporterPage(bridge: StoreKitBridge? = packagedStoreKit) {
+internal fun DesktopSupporterPage(bridge: StoreKitBridge?) {
     if (bridge != null) {
-        MacSupporterPage(bridge)
+        StoreSupporterPage(bridge)
         return
     }
     FormPage("Support Pictureshow", SUPPORTER_DESCRIPTION) {

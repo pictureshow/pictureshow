@@ -91,6 +91,14 @@ fun desktopMain(args: Array<String>) {
                     }
                 }
                 controller.attachWindow(window)
+                if (smoke) {
+                    System.getenv("PICTURESHOW_SMOKE_WINDOWS_STORE")?.let { expected ->
+                        val productId = controller.packagedSupporterStore()?.supporterProductId
+                        check(productId == if (expected == "1") WINDOWS_SUPPORTER_PRODUCT else null) {
+                            "Unexpected Windows Supporter provider for the installed package"
+                        }
+                    }
+                }
                 controller.start()
                 // Stream E: remote target and Watch together. The smoke starts them too, on its own disposable server, so a
                 // startup throw here (a missing Main dispatcher stopped the macOS app at launch, 2026-11-19) fails CI.

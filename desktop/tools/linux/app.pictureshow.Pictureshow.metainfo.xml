@@ -7,7 +7,16 @@
   <summary>Jellyfin media player</summary>
   <developer id="app.pictureshow"><name>Legitimate LLC</name></developer>
   <description>
-    <p>Pictureshow plays media from a Jellyfin server.</p>
+    <p>Pictureshow plays the movies and shows on your own Jellyfin server. It's free and open source, with no ads and no tracking. It's a third-party app, not an official Jellyfin client, and you need your own Jellyfin server to use it.</p>
+    <ul>
+      <li>Finds Jellyfin servers on your home network, or connects to any address you type</li>
+      <li>Sign in with a password or Quick Connect, with several users and servers</li>
+      <li>Continue watching, Next up, your libraries and what's new</li>
+      <li>Plays files directly with mpv, so the server only converts what it has to</li>
+      <li>Downloads for watching offline</li>
+      <li>Watch together with friends, and control playback from your phone</li>
+    </ul>
+    <p>Pictureshow is made by Legitimate LLC. The source code is at https://github.com/pictureshow/pictureshow</p>
   </description>
   <launchable type="desktop-id">app.pictureshow.Pictureshow.desktop</launchable>
   <url type="homepage">https://pictureshow.app/</url>

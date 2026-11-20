@@ -31,6 +31,7 @@ private data class WindowsStoreReply(
 )
 
 internal class WindowsSupporterStore(private val transport: suspend (Int, String) -> String) : StoreKitBridge {
+    override val store = SupporterStore.MICROSOFT
     override val supporterProductId = WINDOWS_SUPPORTER_PRODUCT
     private val updates = MutableSharedFlow<StoreEntitlement>(extraBufferCapacity = 1)
     override val transactionUpdates = updates.asSharedFlow()
@@ -56,6 +57,11 @@ internal class WindowsSupporterStore(private val transport: suspend (Int, String
 
     override suspend fun currentEntitlements() = request(2).entitlements.orEmpty()
 
+    // The page re-reads the Microsoft account's add-on licenses after restore.
+    override suspend fun restore() = Unit
+
+    override suspend fun manage() = false
+
     private suspend fun request(command: Int) =
         Json.decodeFromString<WindowsStoreReply>(transport(command, WINDOWS_SUPPORTER_PRODUCT)).also {
             it.error?.let { message -> error(message) }
@@ -76,8 +82,6 @@ private val windowsStoreNative: WindowsStoreNative? by lazy {
         ?.let { Native.load(it, WindowsStoreNative::class.java) }
     else null
 }
-
-internal fun windowsStorePackaged() = windowsStoreNative?.ps_windows_store_has_identity() == 1
 
 /** Call with the real, realized Pictureshow window from the shared Supporter screen. */
 internal fun windowsSupporterStore(owner: Window): StoreKitBridge? {

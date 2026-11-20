@@ -35,7 +35,8 @@ internal enum class StoreFailure { PAYMENTS_RESTRICTED, PRODUCT_UNAVAILABLE, NET
 internal class StoreRequestException(message: String, val failure: StoreFailure?) : IllegalStateException(message)
 
 internal interface StoreKitBridge {
-    val supporterProductId: String get() = MAC_SUPPORTER_PRODUCT
+    val store: SupporterStore
+    val supporterProductId: String
     suspend fun products(): List<StoreProduct>
     suspend fun purchase(productId: String): StorePurchase
     suspend fun currentEntitlements(): List<StoreEntitlement>
@@ -74,6 +75,8 @@ private interface StoreStorageNative : Library {
 }
 
 internal class MacStoreKit(private val native: StoreKitNative) : StoreKitBridge {
+    override val store = SupporterStore.APPLE
+    override val supporterProductId = MAC_SUPPORTER_PRODUCT
     private val nextId = AtomicLong()
     private val inflight = ConcurrentHashMap<Long, CompletableDeferred<StoreReply>>()
     private val mutableUpdates = MutableSharedFlow<StoreEntitlement>(replay = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)

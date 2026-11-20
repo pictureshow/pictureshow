@@ -24,15 +24,15 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 75
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: '3.12'
-      - uses: gradle/actions/setup-gradle@v6
-      - uses: ilammy/msvc-dev-cmd@v1
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6
+      - uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1
         with:
           arch: x64
-      - uses: msys2/setup-msys2@v2
+      - uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e # v2
         with:
           msystem: UCRT64
           path-type: inherit
@@ -53,7 +53,7 @@ jobs:
         run: |
           choco install ffmpeg --no-progress -y
           ./desktop/tools/windows/test-packages.ps1
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: always()
         with:
           name: pictureshow-windows-package-evidence
@@ -63,7 +63,7 @@ jobs:
             desktop/build/windows-package/evidence/**
             desktop/build/windows-package/work-*/native/ffmpeg-build.log
             desktop/build/windows-package/work-*/native/*-build/meson-logs/meson-log.txt
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: always() && steps.windows-assembly.outcome == 'success'
         with:
           name: pictureshow-windows-unsigned-x64
@@ -82,8 +82,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 65
     steps:
-      - uses: actions/checkout@v7
-      - uses: gradle/actions/setup-gradle@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6
       - name: Install the Linux build and smoke tools
         run: |
           sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=35 -o Acquire::https::Timeout=35 update
@@ -110,7 +110,7 @@ jobs:
           flatpak build-bundle "$output/flatpak-repo" "$output/Pictureshow-x86_64.flatpak" "$app_id"
           cd "$output"
           sha256sum Pictureshow-x86_64.flatpak >> SHA256SUMS
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: always()
         with:
           name: pictureshow-linux-package-evidence
@@ -118,7 +118,7 @@ jobs:
           if-no-files-found: ignore
           path: |
             desktop/build/linux-package/evidence/**
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: pictureshow-linux-unsigned-x86_64
           retention-days: 3
@@ -135,8 +135,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/download-artifact@v8
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: pictureshow-linux-unsigned-x86_64
           path: desktop/build/linux-package
@@ -157,7 +157,7 @@ jobs:
             bash desktop/tools/app-smoke/linux-run.sh \
               --launcher desktop/build/linux-package/Pictureshow-1.0-x86_64.AppImage \
               --work desktop/build/disposable-appimage-smoke --evidence desktop-evidence/appimage-smoke
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: always()
         with:
           name: pictureshow-linux-smoke-evidence

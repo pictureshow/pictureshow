@@ -13,10 +13,5 @@ fun main(args: Array<String>) {
     // Start listening for verified App Store transaction updates at launch.
     packagedStoreKit
     val smoke = args.firstOrNull() == "app-smoke" && System.getenv("PICTURESHOW_SMOKE") == "1"
-    if (smoke) {
-        System.getenv("PICTURESHOW_SMOKE_WINDOWS_STORE")?.let { expected ->
-            check(windowsStorePackaged() == (expected == "1")) { "Unexpected Microsoft Store package identity" }
-        }
-    }
     desktopMain(if (smoke) args else emptyArray())
 }
