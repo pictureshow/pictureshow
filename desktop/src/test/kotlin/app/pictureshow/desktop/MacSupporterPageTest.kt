@@ -8,6 +8,7 @@ package app.pictureshow.desktop
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.assertDoesNotExist
 import androidx.compose.ui.test.assertExists
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.runComposeUiTest
@@ -23,7 +24,7 @@ class MacSupporterPageTest {
         onNodeWithText("Become a supporter").performClick()
         onNodeWithText("Waiting for the App Store to confirm your payment.").assertExists()
         onNodeWithText("Thank you for supporting Pictureshow!").assertDoesNotExist()
-        onNodeWithText("Become a supporter").assertDoesNotExist()
+        onNodeWithText("Become a supporter").assertIsEnabled()
         assertEquals(listOf(MAC_SUPPORTER_PRODUCT), bridge.purchases)
 
         runOnIdle { bridge.update(active = true) }
@@ -42,7 +43,7 @@ class MacSupporterPageTest {
     }
 
     @Test fun noBridgeKeepsTheNonStoreInformationScreen() = runComposeUiTest {
-        setContent { MaterialTheme { DesktopSupporterPage(bridge = null) } }
+        setContent { MaterialTheme { DesktopSupporterPage() } }
         onNodeWithText(DESKTOP_SUPPORTER_NO_PURCHASE).assertExists()
         onNodeWithText("Become a supporter").assertDoesNotExist()
         onNodeWithText("Restore Purchases").assertDoesNotExist()

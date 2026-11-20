@@ -6,6 +6,7 @@ import SwiftUI
 struct SupportView: View {
     @EnvironmentObject private var supporter: SupporterModel
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.purchase) private var purchaseProduct
     #if os(tvOS)
     @Environment(\.resetFocus) private var resetFocus
     @Namespace private var supportFocus
@@ -17,24 +18,37 @@ struct SupportView: View {
         Form {
             if let code = supporter.supporterCode {
                 Section {
-                    Text("Thank you for supporting Pictureshow!").font(.headline)
-                    LabeledContent("Your supporter code") {
-                        Text(code)
-                            .monospacedDigit()
-                            #if os(iOS)
-                            .textSelection(.enabled)
-                            #endif
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Thank you for supporting Pictureshow!").font(.headline)
+                        LabeledContent("Your supporter code") {
+                            Text(code)
+                                .monospacedDigit()
+                                #if os(iOS)
+                                .textSelection(.enabled)
+                                #endif
+                        }
+                        Text("Email info@legitimateapps.com with your request and supporter code.")
+                        Text("Requests are not guaranteed to be built or delivered by a particular date.")
+                            .foregroundStyle(.secondary)
                     }
-                    Text("Email info@legitimateapps.com with your request and supporter code.")
-                    Text("Requests are not guaranteed to be built or delivered by a particular date.")
-                        .foregroundStyle(.secondary)
+                    #if os(tvOS)
+                    .accessibilityElement(children: .combine)
+                    .focusable()
+                    .prefersDefaultFocus(true, in: supportFocus)
+                    #endif
                     management
                 }
             } else {
                 Section {
-                    Text("Pictureshow is free and open source. Supporters pay monthly to have their feature requests read and considered first.")
-                    Text("Requests are not guaranteed to be built or delivered by a particular date.")
-                        .foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Pictureshow is free and open source. Supporters pay monthly to have their feature requests read and considered first.")
+                        Text("Requests are not guaranteed to be built or delivered by a particular date.")
+                            .foregroundStyle(.secondary)
+                    }
+                    #if os(tvOS)
+                    .accessibilityElement(children: .combine)
+                    .focusable()
+                    #endif
                 }
                 Section {
                     offer
@@ -57,9 +71,10 @@ struct SupportView: View {
                         Text("Restore Purchases")
                     }
                 }
-                .disabled(supporter.activity != nil)
                 #if os(tvOS)
                 .prefersDefaultFocus(supporter.offer == nil, in: supportFocus)
+                #else
+                .disabled(supporter.activity != nil)
                 #endif
             }
 
@@ -68,8 +83,14 @@ struct SupportView: View {
                 Link("Terms of Use", destination: Self.terms)
                 Link("Privacy Policy", destination: Self.privacy)
                 #else
-                LabeledContent("Terms of Use", value: Self.terms.absoluteString)
-                LabeledContent("Privacy Policy", value: Self.privacy.absoluteString)
+                ForEach([("Terms of Use", Self.terms), ("Privacy Policy", Self.privacy)], id: \.0) { label, url in
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(LocalizedStringKey(label))
+                        Text(url.absoluteString).foregroundStyle(.secondary)
+                    }
+                    .accessibilityElement(children: .combine)
+                    .focusable()
+                }
                 #endif
             }
         }
@@ -83,6 +104,7 @@ struct SupportView: View {
         .onChange(of: supporter.offer != nil) { _, hasOffer in
             if hasOffer { resetFocus(in: supportFocus) }
         }
+        .onChange(of: supporter.supporterCode != nil) { _, _ in resetFocus(in: supportFocus) }
         #endif
         .task { await supporter.refreshOffer() }
         .onChange(of: scenePhase) { _, phase in
@@ -96,24 +118,29 @@ struct SupportView: View {
                 Text(offer.name).font(.subheadline)
                 Text("\(offer.displayPrice) / month").font(.title2.weight(.semibold))
                     .accessibilityAddTraits(.isHeader)
+                Text("Renews monthly until cancelled. Cancel anytime in the App Store.")
+                    .foregroundStyle(.secondary)
             }
-            Text("Renews monthly until cancelled. Cancel anytime in the App Store.")
-                .foregroundStyle(.secondary)
-            if supporter.notice != .pending {
-                Button {
-                    Task { await supporter.purchase() }
-                } label: {
-                    if supporter.activity == .purchasing {
-                        ProgressView { Text("Waiting for the App Store to confirm your payment.") }
-                    } else {
-                        Text("Become a supporter")
-                    }
+            #if os(tvOS)
+            .accessibilityElement(children: .combine)
+            .focusable()
+            #endif
+            Button {
+                Task {
+                    await supporter.purchase { product in try await purchaseProduct(product) }
                 }
-                .disabled(supporter.activity != nil || supporter.loading)
-                #if os(tvOS)
-                .prefersDefaultFocus(true, in: supportFocus)
-                #endif
+            } label: {
+                if supporter.activity == .purchasing {
+                    ProgressView { Text("Waiting for the App Store to confirm your payment.") }
+                } else {
+                    Text("Become a supporter")
+                }
             }
+            #if os(tvOS)
+            .prefersDefaultFocus(true, in: supportFocus)
+            #else
+            .disabled(supporter.activity != nil || supporter.loading)
+            #endif
         } else if let failure = supporter.offerFailure, !supporter.loading {
             Text(failure.message)
                 #if os(tvOS)
@@ -132,7 +159,6 @@ struct SupportView: View {
         #else
         Text("To manage or cancel, open Settings, choose your Apple Account profile, then select Subscriptions.")
             .focusable()
-            .prefersDefaultFocus(true, in: supportFocus)
         #endif
     }
 

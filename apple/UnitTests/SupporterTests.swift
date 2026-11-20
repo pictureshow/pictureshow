@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) Legitimate LLC.
 import StoreKitTest
+import StoreKit
+import UIKit
 import XCTest
 #if os(tvOS)
 @testable import Pictureshow_tvOS
@@ -24,8 +26,10 @@ final class SupporterTests: XCTestCase {
         XCTAssertEqual(model.offer, .init(name: "Supporter", displayPrice: "$2.99"))
         XCTAssertNil(model.supporterCode)
 
-        await model.purchase()
+        try await purchase(model)
         let code = try XCTUnwrap(model.supporterCode)
+        let result = await Transaction.latest(for: StoreKitSupporter.productID)
+        XCTAssertEqual(try result?.payloadValue.environment, .xcode)
         XCTAssertEqual(session.allTransactions().count, 1)
         XCTAssertNil(model.notice)
 
@@ -43,8 +47,10 @@ final class SupporterTests: XCTestCase {
         let session = try testSession()
         defer { session.clearTransactions() }
         let model = SupporterModel(store: StoreKitSupporter())
+        let observer = Task { await model.observeChanges() }
+        defer { observer.cancel() }
         await model.refreshOffer()
-        await model.purchase()
+        try await purchase(model)
         _ = try XCTUnwrap(model.supporterCode)
 
         try session.expireSubscription(productIdentifier: StoreKitSupporter.productID)
@@ -57,8 +63,10 @@ final class SupporterTests: XCTestCase {
         let session = try testSession()
         defer { session.clearTransactions() }
         let model = SupporterModel(store: StoreKitSupporter())
+        let observer = Task { await model.observeChanges() }
+        defer { observer.cancel() }
         await model.refreshOffer()
-        await model.purchase()
+        try await purchase(model)
         _ = try XCTUnwrap(model.supporterCode)
 
         let id = try XCTUnwrap(session.allTransactions().first?.identifier)
@@ -68,18 +76,20 @@ final class SupporterTests: XCTestCase {
     }
 
     @MainActor
-    func testPendingNeverGrantsSupportAndBlocksRepeatPurchaseUntilVerifiedUpdate() async {
+    func testPendingNeverGrantsSupportAndAllowsRetryOrRestore() async {
         let store = FakeSupporterStore()
         let model = SupporterModel(store: store)
         await model.refreshOffer()
         await model.purchase()
+        XCTAssertEqual(model.notice, .pending)
+        store.purchaseResult = .cancelled
         await model.purchase()
-        XCTAssertEqual(store.purchases, 1)
+        XCTAssertEqual(store.purchases, 2)
         XCTAssertEqual(model.notice, .pending)
         XCTAssertNil(model.supporterCode)
         await model.restore()
         XCTAssertEqual(store.restores, 1)
-        XCTAssertEqual(model.notice, .pending)
+        XCTAssertEqual(model.notice, .restoredNothing)
 
         store.code = "123456"
         await model.observeChanges()
@@ -135,9 +145,14 @@ final class SupporterTests: XCTestCase {
     }
 
     @MainActor
+    private func purchase(_ model: SupporterModel) async throws {
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        await model.purchase { product in try await product.purchase(confirmIn: scene) }
+    }
+
+    @MainActor
     private func waitForNoEntitlement(_ model: SupporterModel) async {
         for _ in 0..<50 {
-            await model.refreshEntitlement()
             if model.supporterCode == nil { return }
             try? await Task.sleep(for: .milliseconds(100))
         }
@@ -159,7 +174,7 @@ private final class FakeSupporterStore: SupporterStore {
 
     func currentSupporterCode() async -> String? { code }
 
-    func purchase() async throws -> SupporterPurchase {
+    func purchase(confirm: ConfirmSupporterPurchase) async throws -> SupporterPurchase {
         purchases += 1
         return purchaseResult
     }

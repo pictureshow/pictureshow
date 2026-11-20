@@ -70,7 +70,13 @@ public func storeRequest(_ id: Int64, _ command: Int32, _ product: UnsafePointer
                     send(StoreReply(error: "The Supporter subscription is unavailable.", failure: "PRODUCT_UNAVAILABLE"), id: id, to: callback)
                     return
                 }
-                switch try await product.purchase() {
+                let result: Product.PurchaseResult
+                if #available(macOS 15.2, *), let window = NSApp.keyWindow ?? NSApp.mainWindow {
+                    result = try await product.purchase(confirmIn: window)
+                } else {
+                    result = try await product.purchase()
+                }
+                switch result {
                 case .success(.verified(let transaction)):
                     await transaction.finish()
                     reply = StoreReply(purchase: "PURCHASED")
@@ -104,6 +110,7 @@ public func storeRequest(_ id: Int64, _ command: Int32, _ product: UnsafePointer
         } catch {
             let failure: String?
             switch error {
+            case Product.PurchaseError.purchaseNotAllowed: failure = "PAYMENTS_RESTRICTED"
             case StoreKitError.notAvailableInStorefront: failure = "PRODUCT_UNAVAILABLE"
             case StoreKitError.networkError, is URLError: failure = "NETWORK"
             case StoreKitError.userCancelled: failure = "CANCELLED"

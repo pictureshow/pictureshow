@@ -11,12 +11,15 @@ struct SupporterOffer: Equatable {
 
 enum SupporterPurchase: Equatable { case purchased, pending, cancelled }
 
+typealias ConfirmSupporterPurchase = @MainActor (Product) async throws -> Product.PurchaseResult
+
 enum SupporterStoreFailure: Error, Equatable {
     case paymentsRestricted, productUnavailable, network, other
 
     init(_ error: Error) {
         switch error {
         case let failure as Self: self = failure
+        case Product.PurchaseError.purchaseNotAllowed: self = .paymentsRestricted
         case StoreKitError.notAvailableInStorefront: self = .productUnavailable
         case StoreKitError.networkError, is URLError: self = .network
         default: self = .other
@@ -36,7 +39,7 @@ enum SupporterStoreFailure: Error, Equatable {
 @MainActor
 protocol SupporterStore {
     func offer() async throws -> SupporterOffer
-    func purchase() async throws -> SupporterPurchase
+    func purchase(confirm: ConfirmSupporterPurchase) async throws -> SupporterPurchase
     func currentSupporterCode() async -> String?
     func restore() async throws
     func observeChanges(_ refresh: @escaping @MainActor () async -> Void) async
@@ -51,9 +54,9 @@ struct StoreKitSupporter: SupporterStore {
         return SupporterOffer(name: product.displayName, displayPrice: product.displayPrice)
     }
 
-    func purchase() async throws -> SupporterPurchase {
+    func purchase(confirm: ConfirmSupporterPurchase) async throws -> SupporterPurchase {
         let product = try await monthlyProduct()
-        switch try await product.purchase() {
+        switch try await confirm(product) {
         case .success(.verified(let transaction)) where transaction.productID == Self.productID:
             await transaction.finish()
             return .purchased
@@ -121,6 +124,7 @@ final class SupporterModel: ObservableObject {
 
     private let store: any SupporterStore
     private var entitlementRead = 0
+    private var observing = false
 
     init(store: any SupporterStore) {
         self.store = store
@@ -147,21 +151,24 @@ final class SupporterModel: ObservableObject {
         }
     }
 
-    func purchase() async {
-        guard activity == nil, notice != .pending, offer != nil, supporterCode == nil else { return }
+    func purchase(confirm: ConfirmSupporterPurchase = { try await $0.purchase() }) async {
+        guard activity == nil, offer != nil, supporterCode == nil else { return }
+        let previousNotice = notice == .pending ? notice : nil
         activity = .purchasing
         notice = nil
         defer { activity = nil }
         await refreshEntitlement()
         guard supporterCode == nil else { return }
         do {
-            switch try await store.purchase() {
-            case .purchased: await refreshEntitlement()
+            switch try await store.purchase(confirm: confirm) {
+            case .purchased:
+                await refreshEntitlement()
+                if supporterCode == nil { notice = .pending }
             case .pending: if supporterCode == nil { notice = .pending }
-            case .cancelled: break
+            case .cancelled: if supporterCode == nil { notice = previousNotice }
             }
         } catch {
-            notice = SupporterStoreFailure.isCancellation(error) ? nil : .failed(.init(error))
+            notice = SupporterStoreFailure.isCancellation(error) ? previousNotice : .failed(.init(error))
         }
     }
 
@@ -174,14 +181,17 @@ final class SupporterModel: ObservableObject {
         do {
             try await store.restore()
             await refreshEntitlement()
-            if supporterCode == nil { notice = wasPending ? .pending : .restoredNothing }
+            if supporterCode == nil { notice = .restoredNothing }
             await loadOffer()
         } catch {
-            notice = wasPending ? .pending : SupporterStoreFailure.isCancellation(error) ? nil : .failed(.init(error))
+            notice = SupporterStoreFailure.isCancellation(error) ? (wasPending ? .pending : nil) : .failed(.init(error))
         }
     }
 
     func observeChanges() async {
+        guard !observing else { return }
+        observing = true
+        defer { observing = false }
         await store.observeChanges { [weak self] in await self?.refreshEntitlement() }
     }
 

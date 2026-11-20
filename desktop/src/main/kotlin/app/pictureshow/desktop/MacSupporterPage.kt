@@ -36,7 +36,7 @@ internal fun MacSupporterPage(bridge: StoreKitBridge) {
     val model = remember(bridge) { MacSupporter(bridge) }
     val scope = rememberCoroutineScope()
     val focused = LocalWindowInfo.current.isWindowFocused
-    LaunchedEffect(model, focused) { model.load() }
+    LaunchedEffect(model, focused) { if (focused || model.product == null) model.load() }
     LaunchedEffect(model) { model.observe() }
 
     FormPage("Support Pictureshow", SUPPORTER_DESCRIPTION) {
@@ -45,9 +45,12 @@ internal fun MacSupporterPage(bridge: StoreKitBridge) {
         val product = model.product
         if (entitlement != null) {
             Text("Thank you for supporting Pictureshow!", style = MaterialTheme.typography.titleLarge)
-            entitlement.supporterCode?.let { code ->
+            val code = entitlement.supporterCode
+            if (code != null) {
                 InfoLine("Your supporter code", code)
                 Text("Email info@legitimateapps.com with your request and supporter code.")
+            } else {
+                Text("Reopen this screen later.")
             }
             OutlinedButton(
                 onClick = { scope.launch { model.manage() } },
@@ -60,13 +63,11 @@ internal fun MacSupporterPage(bridge: StoreKitBridge) {
             Text(product.name)
             Text("${product.displayPrice} / month", style = MaterialTheme.typography.headlineSmall)
             Text("Renews monthly until cancelled. Cancel anytime in the App Store.")
-            if (model.notice != PENDING) {
-                Button(
-                    onClick = { scope.launch { model.purchase() } },
-                    modifier = Modifier.controlFocus().probe("supporter:purchase"),
-                    enabled = model.operation == null && !model.loading
-                ) { Text("Become a supporter") }
-            }
+            Button(
+                onClick = { scope.launch { model.purchase() } },
+                modifier = Modifier.controlFocus().probe("supporter:purchase"),
+                enabled = model.operation == null && !model.loading
+            ) { Text("Become a supporter") }
         } else {
             Text(if (model.loading) CHECKING else model.offerMessage ?: CHECKING)
         }
@@ -114,19 +115,22 @@ private class MacSupporter(private val bridge: StoreKitBridge) {
             throw cancelled
         } catch (failure: Exception) {
             product = null
-            offerMessage = failure.messageForSupporter()
+            offerMessage = failure.messageForSupporter() ?: FAILURE
         } finally {
             loading = false
         }
     }
 
     suspend fun purchase() {
-        if (operation != null || notice == PENDING || product == null || entitlement != null) return
+        if (operation != null || product == null || entitlement != null) return
         runStoreOperation(PENDING) {
             refreshEntitlement()
             if (entitlement == null) {
                 when (bridge.purchase(MAC_SUPPORTER_PRODUCT)) {
-                    StorePurchase.PURCHASED -> refreshEntitlement()
+                    StorePurchase.PURCHASED -> {
+                        refreshEntitlement()
+                        if (entitlement == null) notice = PENDING
+                    }
                     StorePurchase.PENDING -> if (entitlement == null) notice = PENDING
                     StorePurchase.CANCELLED -> Unit
                 }
@@ -137,7 +141,7 @@ private class MacSupporter(private val bridge: StoreKitBridge) {
     suspend fun restore() = runStoreOperation(RESTORING) {
         bridge.restore()
         refreshEntitlement()
-        if (entitlement == null && notice != PENDING) {
+        if (entitlement == null) {
             notice = "No active Supporter subscription was found for this Apple Account."
         }
     }
@@ -153,19 +157,20 @@ private class MacSupporter(private val bridge: StoreKitBridge) {
     }
 
     suspend fun observe() {
-        bridge.transactionUpdates.collect { refreshEntitlement() }
+        bridge.transactionUpdates.collect {
+            try {
+                refreshEntitlement()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                if (operation == null) notice = failure.messageForSupporter()
+            }
+        }
     }
 
     private suspend fun refreshEntitlement() {
         val read = ++entitlementRead
-        val result = try {
-            bridge.currentEntitlements()
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (_: Exception) {
-            // Fail closed and avoid using an earlier success after a store read failure.
-            emptyList()
-        }
+        val result = bridge.currentEntitlements()
         if (read != entitlementRead) return
         entitlement = result.firstOrNull { it.productId == MAC_SUPPORTER_PRODUCT && it.active }
         if (entitlement != null) notice = null
@@ -180,7 +185,8 @@ private class MacSupporter(private val bridge: StoreKitBridge) {
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (failure: Exception) {
-            if (notice != PENDING) notice = failure.messageForSupporter()
+            val message = failure.messageForSupporter()
+            if (message != null) notice = message
         } finally {
             operation = null
         }
