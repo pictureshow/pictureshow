@@ -47,7 +47,11 @@ interface JellyfinService {
     suspend fun logout(account: Account): ClientResult<Unit>
 }
 
-class JellyfinClient(private val client: HttpClient, private val identity: ClientIdentity) :
+class JellyfinClient(
+    private val client: HttpClient,
+    private val identity: ClientIdentity,
+    private val probeConnectionHint: (String, Throwable) -> String? = { _, _ -> null }
+) :
     JellyfinService,
     CatalogService by CatalogClient(client, identity),
     SearchService by SearchClient(client, identity),
@@ -64,8 +68,11 @@ class JellyfinClient(private val client: HttpClient, private val identity: Clien
         // A fully specified endpoint can be slow; only automatic port discovery needs short probes.
         val probeTimeout = if (candidates.size == 1) ApiTimeouts.REQUEST_MILLIS else ApiTimeouts.PROBE_MILLIS
         var error = ClientError(ErrorKind.NETWORK, "Could not reach the server. Check its address and connection.")
+        var hint: String? = null
         for (url in candidates) {
-            val result = request(url, "System/Info/Public", timeoutMillis = probeTimeout) { text ->
+            val result = request(url, "System/Info/Public", timeoutMillis = probeTimeout, onNetworkFailure = { failure ->
+                hint = hint ?: probeConnectionHint(url, failure)
+            }) { text ->
                 val info = json.parseToJsonElement(text).jsonObject
                 if (info.string("ProductName") != "Jellyfin Server") {
                     throw ProtocolFailure(ErrorKind.NOT_JELLYFIN, "This address is not a Jellyfin server.")
@@ -91,7 +98,7 @@ class JellyfinClient(private val client: HttpClient, private val identity: Clien
                 }
             }
         }
-        return ClientResult.Failure(error)
+        return ClientResult.Failure(hint?.takeIf { error.kind == ErrorKind.NETWORK }?.let { error.copy(message = it) } ?: error)
     }
 
     override suspend fun publicUsers(server: Server): ClientResult<List<User>> = request(server.url, "Users/Public") { text ->
@@ -293,6 +300,7 @@ class JellyfinClient(private val client: HttpClient, private val identity: Clien
         secret: String? = null,
         expiryStatus: Boolean = false,
         timeoutMillis: Long = ApiTimeouts.REQUEST_MILLIS,
+        onNetworkFailure: (Throwable) -> Unit = {},
         decode: (String) -> T
     ): ClientResult<T> = try {
         withTimeoutOrNull(timeoutMillis) {
@@ -337,7 +345,8 @@ class JellyfinClient(private val client: HttpClient, private val identity: Clien
         failure(ErrorKind.INVALID_RESPONSE, "The server returned an incomplete response.")
     } catch (_: ClassCastException) {
         failure(ErrorKind.INVALID_RESPONSE, "The server returned an unexpected response.")
-    } catch (_: Exception) {
+    } catch (error: Exception) {
+        onNetworkFailure(error)
         failure(ErrorKind.NETWORK, "Could not reach the server. Check your connection and try again.")
     }
 

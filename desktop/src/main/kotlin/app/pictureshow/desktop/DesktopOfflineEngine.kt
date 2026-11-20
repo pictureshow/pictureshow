@@ -124,7 +124,8 @@ internal class DesktopOfflineEngine(
     private val networkPollMs: Long = 15_000L,
     private val trashCleaner: (OfflineFiles) -> Unit = OfflineFiles::emptyTrash,
     private val restartTrustedBytes: (Long) -> Long = ::offlineDurableOffset,
-    scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
+    storageBase: File = base
 ) {
     private var api: DesktopOfflineApi? = api
     private val http: DesktopOfflineHttp = http ?: DesktopOfflineHttp { url, headers, range, onCall -> api().open(url, headers, range, onCall) }
@@ -136,7 +137,7 @@ internal class DesktopOfflineEngine(
         if (error is Error) throw error
         log("offline work-ended kind=${error.javaClass.simpleName}")
     }
-    internal val files = OfflineFiles(base)
+    internal val files = OfflineFiles(storageBase)
     private val mutex = Mutex()
     private val mutableLibraries = MutableStateFlow(emptyMap<String, OfflineLibrary>())
 

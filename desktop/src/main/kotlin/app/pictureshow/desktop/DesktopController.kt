@@ -34,8 +34,10 @@ class DesktopController(
     internal val mutable = MutableStateFlow(DesktopState())
     val state: StateFlow<DesktopState> = mutable.asStateFlow()
     private val settingsStore = DesktopSettingsStore(File(directory, "settings.properties"))
-    private val identity = ClientIdentity("Pictureshow Desktop", installationId())
-    internal val client = JellyfinClient(http, identity)
+    private val identity = ClientIdentity("Pictureshow Desktop", installationId()).let {
+        System.getProperty("jpackage.app-version")?.let { version -> it.copy(version = version) } ?: it
+    }
+    internal val client = JellyfinClient(http, identity) { url, failure -> macLocalNetworkHint(url, failure) }
     /** Stream C1 (catalog): Home preferences, queues, filters and the landing view (DesktopCatalogStream.kt). */
     internal val catalogSession by lazy { DesktopCatalogSession(HomePreferencesStore(client, store)) }
     private val playbackClient = PlaybackClient(http, identity)
@@ -59,7 +61,8 @@ class DesktopController(
     private val subtitleClient = app.pictureshow.core.subtitles.RemoteSubtitleClient(http, identity)
     private val offlineApi = DesktopOfflineApi(identity)
     /** OFF-01..12: downloads and offline viewing, under this computer's own data directory (OFF-10). */
-    internal val offline = DesktopOffline(DesktopOfflineEngine(directory, store, identity, { line -> events.log(line) }, api = offlineApi, scope = scope),
+    internal val offline = DesktopOffline(DesktopOfflineEngine(directory, store, identity, { line -> events.log(line) }, api = offlineApi,
+        scope = scope, storageBase = MacStoreStorage.packaged?.downloadFolder ?: directory),
         offlineApi, scope, state.map { it.account }, { mutable.value.account })
     private var pageJob: Job? = null
     private var discoveryJob: Job? = null

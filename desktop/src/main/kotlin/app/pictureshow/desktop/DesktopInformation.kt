@@ -24,8 +24,20 @@ private data class DesktopLicenseCatalog(val libraries: List<DesktopLicense>)
 /** INFO-04: the catalog generated from the real runtime classpath at build time; null when the resource is missing. */
 internal fun desktopLicenseCatalog(loader: ClassLoader = DesktopLicense::class.java.classLoader): List<DesktopLicense>? =
     loader.getResourceAsStream("licenses/catalog.json")?.use { stream ->
-        Json { ignoreUnknownKeys = true }.decodeFromString<DesktopLicenseCatalog>(stream.readBytes().toString(Charsets.UTF_8)).libraries
+        val libraries = Json { ignoreUnknownKeys = true }.decodeFromString<DesktopLicenseCatalog>(stream.readBytes().toString(Charsets.UTF_8)).libraries
+        val sources = desktopPlaybackSources() ?: return libraries
+        val lgpl = File(sources, "COPYING.LGPLv2.1").readText()
+        val inventory = File(sources, "LICENSE-INVENTORY.md").readText()
+        val included = DesktopLicense(
+            "mac-playback", "mpv (libmpv) and FFmpeg", "mpv 0.42.0 · FFmpeg 8.0", "LGPL-2.1-or-later",
+            "This copy of Pictureshow includes mpv and FFmpeg built without their GPL or nonfree parts. " +
+                "The source archives, changes and third-party notices are included in Playback Sources.\n\n$inventory\n\n$lgpl"
+        )
+        (libraries.filterNot { it.id == "mpv-system" || it.id.startsWith("org.jogamp.") } + included).sortedBy { it.name.lowercase() }
     }
+
+internal fun desktopPlaybackSources(): File? = System.getProperty("pictureshow.playback.sources")
+    ?.let(::File)?.takeIf { it.isDirectory }
 
 internal fun desktopOwnLicense(loader: ClassLoader = DesktopLicense::class.java.classLoader): String? =
     loader.getResourceAsStream("licenses/MPL-2.0.txt")?.use { it.readBytes().toString(Charsets.UTF_8) }

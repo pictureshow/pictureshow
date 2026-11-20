@@ -1,19 +1,28 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: MPL-2.0
 # Copyright (c) Legitimate LLC.
-# Smoke dependency build, not a redistributable/signable release package.
+# Shared source build for CI smoke and the macOS release package.
 set -euo pipefail
-build="$PWD/desktop/build/app-native"
+build="${PICTURESHOW_NATIVE_BUILD:-$PWD/desktop/build/app-native}"
+evidence="${PICTURESHOW_NATIVE_EVIDENCE:-$PWD/desktop-evidence/native-build}"
+release="${PICTURESHOW_MAC_NATIVE_RELEASE:-0}"
 prefix="$build/prefix"
-mkdir -p "$build/source" "$prefix" desktop-evidence/native-build
+mkdir -p "$build/source" "$prefix" "$evidence"
 case "$(uname -s)" in
  Darwin) os=mac ;;
  Linux) os=linux ;;
  *) echo 'Use the pinned Windows LGPL archive in the workflow.' >&2; exit 2 ;;
 esac
+if [[ "$release" == 1 ]]; then
+ [[ "$os" == mac ]] || { echo 'The release native build is macOS only.' >&2; exit 2; }
+ # Resolve third-party libraries from the pinned prefix, without Homebrew dependencies.
+ export PKG_CONFIG_LIBDIR="$prefix/lib/pkgconfig:$prefix/share/pkgconfig"
+ unset PKG_CONFIG_PATH
+ export MACOSX_DEPLOYMENT_TARGET=15.0
+fi
 fetch() {
  local url=$1 digest=$2 filename=$3
- curl --fail --location --retry 2 "$url" -o "$build/source/$filename"
+ curl --fail --location --retry 2 --silent --show-error "$url" -o "$build/source/$filename"
  python3 - "$build/source/$filename" "$digest" <<'PY'
 import hashlib,pathlib,sys
 p=pathlib.Path(sys.argv[1])
@@ -22,6 +31,7 @@ if hashlib.sha256(p.read_bytes()).hexdigest()!=sys.argv[2]:
 PY
  tar -xf "$build/source/$filename" -C "$build/source"
 }
+source desktop/tools/macos/native-sources.sh
 export PKG_CONFIG_PATH="$prefix/share/pkgconfig:$prefix/lib/pkgconfig:$prefix/lib/x86_64-linux-gnu/pkgconfig:${PKG_CONFIG_PATH:-}"
 export LD_LIBRARY_PATH="$prefix/lib:$prefix/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH:-}"
 if [[ "$os" == linux ]]; then
@@ -32,36 +42,44 @@ if [[ "$os" == linux ]]; then
  export PKG_CONFIG_PATH="$prefix/share/pkgconfig:$prefix/lib/pkgconfig:$prefix/lib/x86_64-linux-gnu/pkgconfig:${PKG_CONFIG_PATH:-}"
  export LD_LIBRARY_PATH="$prefix/lib:$prefix/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH:-}"
 fi
-fetch https://ffmpeg.org/releases/ffmpeg-8.0.tar.xz b2751fccb6cc4c77708113cd78b561059b6fa904b24162fa0be2d60273d27b8e ffmpeg.tar.xz
+if [[ "$release" == 1 ]]; then
+ fetch "$dav1d_url" "$dav1d_sha256" dav1d.tar.xz
+ meson setup "$build/dav1d-build" "$build/source/dav1d-$dav1d_version" --prefix="$prefix" --libdir=lib \
+  --buildtype=release -Ddefault_library=shared -Denable_tools=false -Denable_tests=false
+ meson compile -C "$build/dav1d-build" -j2
+ meson install -C "$build/dav1d-build"
+fi
+fetch "$ffmpeg_url" "$ffmpeg_sha256" ffmpeg.tar.xz
 extra=()
 if [[ "$os" == mac ]]; then
  extra+=(--enable-videotoolbox --enable-audiotoolbox --enable-securetransport)
 else
  extra+=(--enable-gnutls)
 fi
+if [[ "$release" == 0 ]]; then
+ extra+=(--disable-everything --enable-protocol=file,http,https,tcp,tls,crypto,data,httpproxy
+  --enable-decoders --enable-demuxers --enable-parsers --disable-decoder=ffv1
+  --enable-filter=buffer,buffersink,format,null,scale)
+fi
 (
- cd "$build/source/ffmpeg-8.0"
+ cd "$build/source/ffmpeg-$ffmpeg_version"
  ./configure --prefix="$prefix" --disable-gpl --disable-nonfree --enable-shared --disable-static \
-  --disable-programs --disable-doc --disable-debug --disable-autodetect --disable-everything \
-  --enable-protocol=file,http,https,tcp,tls,crypto,data,httpproxy --enable-network \
-  --enable-decoders --enable-demuxers --enable-parsers --enable-libdav1d --disable-decoder=ffv1 \
-  --enable-filter=buffer,buffersink,format,null,scale \
-  --enable-swscale --enable-swresample "${extra[@]}"
+  --disable-programs --disable-doc --disable-debug --disable-autodetect \
+  --enable-network --enable-libdav1d --enable-swscale --enable-swresample "${extra[@]}"
  make -j2
  make install
-) > desktop-evidence/native-build/ffmpeg-build.log 2>&1
-cp "$build/source/ffmpeg-8.0/config.h" desktop-evidence/native-build/ffmpeg-config.h
-cat > desktop-evidence/native-build/smoke-only-decoder-omissions.json <<'JSON'
+) > "$evidence/ffmpeg-build.log" 2>&1
+cp "$build/source/ffmpeg-$ffmpeg_version/config.h" "$evidence/ffmpeg-config.h"
+if [[ "$release" == 0 ]]; then
+cat > "$evidence/smoke-only-decoder-omissions.json" <<'JSON'
 {"omittedDecoders":["ffv1"],"scope":"isolated smoke dependency build only","reason":"Exercise genuine unavailable-decoder conversion without restricting the production device profile"}
 JSON
+fi
 if [[ "$os" == mac ]]; then
+ if [[ "$release" == 1 ]]; then
+  bash desktop/tools/macos/build-render-deps.sh "$build"
+ fi
  sh desktop/tools/macos/build-mpv.sh "$prefix" "$build/mpv-source"
- python3 - "$build/mpv-source/mpv.tar.gz" <<'PY'
-import hashlib,pathlib,sys
-expected='bcfebbfa2b65a6d88dc97ea18117831072373e38b5785a2afb874ed4df5070dd'
-if hashlib.sha256(pathlib.Path(sys.argv[1]).read_bytes()).hexdigest()!=expected:
- raise SystemExit('Pinned mpv 0.42 source digest mismatch')
-PY
  clang++ -std=c++17 -O2 -fobjc-arc -dynamiclib desktop/src/native/macos_surface.mm \
   -I"$prefix/include" -L"$prefix/lib" -lmpv -Wl,-rpath,"$prefix/lib" \
   -framework Cocoa -framework OpenGL -framework Metal -framework QuartzCore -framework IOSurface \
@@ -71,7 +89,8 @@ PY
   -framework Foundation -framework Metal -framework OpenGL -framework CoreGraphics -framework IOSurface \
   -o "$build/macos-native-preflight"
  "$build/macos-native-preflight" "$build/libpictureshow_layer.dylib" \
-  > desktop-evidence/native-build/macos-preflight.json
+ > "$evidence/macos-preflight.json"
+ cp "$build/mpv-source/build/meson-info/intro-buildoptions.json" "$evidence/mpv-buildoptions.json"
 else
  fetch https://github.com/mpv-player/mpv/archive/refs/tags/v0.41.0.tar.gz ee21092a5ee427353392360929dc64645c54479aefdb5babc5cfbb5fad626209 mpv.tar.gz
  meson setup "$build/mpv-build" "$build/source/mpv-0.41.0" --prefix="$prefix" --auto-features=disabled \
@@ -81,11 +100,11 @@ else
  meson install -C "$build/mpv-build"
  bash desktop/tools/linux-wayland/build.sh "$prefix" "$PWD/desktop/build/hdr-linux/source/weston-16.0.2" "$build/native"
 fi
-python3 - "$prefix" <<'PY'
+python3 - "$prefix" "$evidence" <<'PY'
 import hashlib,json,pathlib,sys
 prefix=pathlib.Path(sys.argv[1]); libraries={}
 for p in prefix.rglob('*'):
  if p.is_file() and ('.dylib' in p.name or '.so' in p.name):
   libraries[str(p.relative_to(prefix))]=hashlib.sha256(p.read_bytes()).hexdigest()
-pathlib.Path('desktop-evidence/native-build/library-hashes.json').write_text(json.dumps(libraries,indent=2)+'\n')
+(pathlib.Path(sys.argv[2])/'library-hashes.json').write_text(json.dumps(libraries,indent=2)+'\n')
 PY

@@ -34,6 +34,9 @@ import app.pictureshow.core.music.trackIsAvailable
 import app.pictureshow.core.offline.OfflineEntry
 import app.pictureshow.core.offline.OfflinePhase
 import app.pictureshow.core.offline.OfflinePreset
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 internal fun desktopOfflineActionLabel(action: OfflineAction): String = when (action) {
     OfflineAction.Play -> "Play"
@@ -97,6 +100,9 @@ internal fun DownloadsPage(s: DesktopOfflineState, owner: DesktopOffline, play: 
                 }
             }
             item(key = "storage") { StorageRow(s, owner) }
+            MacStoreStorage.packaged?.let { storage ->
+                item(key = "storage-folder") { StoreDownloadFolderRow(storage) }
+            }
             if (sections.isEmpty && !s.library.recoverable) item(key = "empty") {
                 Text("Nothing downloaded yet. Open a movie or an episode and choose Download.", color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.probe("downloads:empty"))
@@ -124,6 +130,48 @@ internal fun DownloadsPage(s: DesktopOfflineState, owner: DesktopOffline, play: 
                 dismissButton = { TextButton(owner::cancelConfirm, Modifier.focusRequester(cancel).controlFocus(allowInModal = true).probe("downloads:cancel")) { Text("Cancel") } },
                 confirmButton = { TextButton(owner::confirmed, Modifier.controlFocus(allowInModal = true).probe("downloads:confirm")) { Text(button) } })
         }
+    }
+}
+
+@Composable
+private fun StoreDownloadFolderRow(storage: MacStoreStorage) {
+    val scope = rememberCoroutineScope()
+    var busy by remember { mutableStateOf(false) }
+    var hasBookmark by remember { mutableStateOf(storage.hasBookmark()) }
+    var notice by remember { mutableStateOf<String?>(null) }
+    val folder = storage.downloadFolder?.parentFile
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text("Download folder", style = MaterialTheme.typography.titleMedium)
+        Text(folder?.path ?: "Pictureshow’s app storage", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (hasBookmark && folder == null && notice == null) {
+            Text("The chosen folder is unavailable. Choose it again to use it after you restart Pictureshow.")
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(enabled = !busy, modifier = Modifier.controlFocus(), onClick = {
+                busy = true
+                scope.launch {
+                    try {
+                        when (withContext(Dispatchers.IO) { storage.chooseFolder() }) {
+                            1 -> {
+                                hasBookmark = true
+                                notice = "Restart Pictureshow to use the chosen folder. Existing downloads stay where they are."
+                            }
+                            -1 -> notice = "Pictureshow couldn’t save access to that folder. Choose another folder and try again."
+                        }
+                    } finally {
+                        busy = false
+                    }
+                }
+            }) { Text("Choose folder…") }
+            if (hasBookmark || folder != null) {
+                TextButton(enabled = !busy, modifier = Modifier.controlFocus(), onClick = {
+                    storage.useContainer()
+                    hasBookmark = false
+                    notice = "Restart Pictureshow to use app storage. Existing downloads stay where they are."
+                }) { Text("Use app storage") }
+            }
+        }
+        notice?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant) }
     }
 }
 

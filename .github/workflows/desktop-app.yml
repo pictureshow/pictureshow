@@ -54,6 +54,13 @@ jobs:
       - name: Desktop build and complete JVM vector contract
         shell: bash
         run: ./gradlew --no-daemon :desktop:test :desktop:vectorTest :desktop:spikeRuntime
+      - name: Check macOS packaging sources
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          for script in desktop/tools/package-macos.sh desktop/tools/macos/build-*.sh; do bash -n "$script"; done
+          python -m py_compile desktop/tools/macos/{bundle,notarize,store-profile}.py
+          xcrun swiftc -typecheck -target "$(uname -m)-apple-macos15.0" desktop/tools/macos/StoreKitBridge.swift
       - name: Retain macOS runtime for native verification without a local Gradle build
         if: runner.os == 'macOS'
         uses: actions/upload-artifact@v7

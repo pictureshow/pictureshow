@@ -8,12 +8,14 @@ set -eu
 prefix=$1
 scratch=$2
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+. "$script_dir/native-sources.sh"
 mkdir -p "$scratch"
-curl -fsSL https://github.com/mpv-player/mpv/archive/refs/tags/v0.42.0.tar.gz -o "$scratch/mpv.tar.gz"
+curl -fsSL --retry 2 "$mpv_url" -o "$scratch/mpv.tar.gz"
+printf '%s  %s\n' "$mpv_sha256" "$scratch/mpv.tar.gz" | shasum -a 256 -c
 tar -xf "$scratch/mpv.tar.gz" -C "$scratch"
-patch -d "$scratch/mpv-0.42.0" -p1 < "$script_dir/render-only-videotoolbox.patch"
+patch -d "$scratch/mpv-$mpv_version" -p1 < "$script_dir/render-only-videotoolbox.patch"
 export PKG_CONFIG_PATH="$prefix/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
-meson setup "$scratch/build" "$scratch/mpv-0.42.0" --prefix="$prefix" \
+meson setup "$scratch/build" "$scratch/mpv-$mpv_version" --prefix="$prefix" \
   --auto-features=disabled --buildtype=release -Dgpl=false -Dlibmpv=true \
   -Dcplayer=false -Dgl=enabled -Dplain-gl=enabled -Dvideotoolbox-gl=enabled \
   -Dcoreaudio=enabled -Dvulkan=disabled -Dswift-build=disabled -Ddefault_library=shared

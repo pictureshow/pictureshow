@@ -69,6 +69,7 @@ class DesktopSettingsStore(private val file: File) {
 }
 
 fun desktopDataDirectory(): File {
+    MacStoreStorage.packaged?.let { return it.applicationData() }
     System.getenv("PICTURESHOW_DATA_DIR")?.let { return File(it) }
     val os = System.getProperty("os.name")
     val base = when {

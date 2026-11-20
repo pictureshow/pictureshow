@@ -147,6 +147,13 @@ internal fun DesktopLicensePage(c: DesktopController) {
         Column(Modifier.fillMaxSize().verticalScroll(scroll).padding(32.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             CatalogHeading(row.name)
             Text("${row.version} · ${row.license}", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (row.id == "mac-playback") {
+                desktopPlaybackSources()?.let { sources ->
+                    Button(onClick = { java.awt.Desktop.getDesktop().open(sources) }, modifier = Modifier.controlFocus()) {
+                        Text("Open playback source files")
+                    }
+                }
+            }
             SelectionContainer {
                 Text(row.text, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.widthIn(max = 900.dp).controlFocus(MaterialTheme.shapes.small).focusable().probe("license-text"))
