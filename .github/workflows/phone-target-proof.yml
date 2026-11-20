@@ -32,7 +32,7 @@ jobs:
           curl --retry 30 --retry-delay 2 --retry-all-errors --fail --silent --output /dev/null http://127.0.0.1:18097/System/Info/Public
           python3 -I build-out/phone-fixture/setup.py
       - name: Build Pictureshow debug APK for the phone
-        run: ./gradlew :app:assembleDebug
+        run: ./gradlew :app:assembleDebug :desktop:compileTestKotlin
       - name: Verify a separate Jellyfin controller opens, pauses, seeks and stops playback
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -47,9 +47,16 @@ jobs:
             adb -s emulator-5554 install app/build/outputs/apk/debug/app-debug.apk
             adb -s emulator-5554 shell wm dismiss-keyguard
             python3 -I build-out/phone-fixture/seed-phone.py
-            for i in $(seq 1 40); do python3 -I build-out/phone-fixture/pilot.py sessions | grep -q '"name": "Pictureshow test phone".*"remote": true' && break; sleep 2; done
-            python3 -I build-out/phone-fixture/pilot.py sessions
-            python3 -I build-out/phone-fixture/pilot.py drive 'Pictureshow test phone'
+            PICTURESHOW_REMOTE_FIXTURE_DIR="$PWD/build-out/phone-fixture" ./gradlew :desktop:test --tests '*PhoneTargetFixtureProofTest'
+            python3 -I build-out/phone-fixture/pilot.py drive "$(cat build-out/phone-fixture/phone-device-name)"
+      - name: Upload desktop controller test proof
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: phone-target-proof
+          path: desktop/build/test-results/test/*PhoneTargetFixtureProofTest.xml
+          retention-days: 5
+          if-no-files-found: ignore
       - name: Stop disposable Jellyfin
         if: always()
         run: docker stop pictureshow-phone-fixture

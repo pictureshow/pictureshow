@@ -8,7 +8,11 @@ account = snapshot["accounts"][0]
 url = account["server"]["url"]
 approver = local.API(url, account["deviceId"], account["accessToken"])
 assert approver.ok("GET", "/System/Info/Public")["ServerName"] == "Pictureshow Remote 172 Disposable"
-device = "Pictureshow test phone"
+def read(*args):
+    return subprocess.run(["adb", "-s", "emulator-5554", "shell", *args], check=True, capture_output=True, text=True, timeout=15).stdout.strip()
+device = read("settings", "get", "global", "device_name")
+if not device or device == "null":
+    device = read("getprop", "ro.product.model")
 identifier = "ps172-test-phone-" + uuid.uuid4().hex
 actor = local.NamedAPI(url, identifier, "Pictureshow", device)
 auth = local.enroll(approver, actor)
@@ -31,8 +35,9 @@ def call(*args, **options):
 name = call("emu", "avd", "name", capture_output=True, text=True).stdout.splitlines()[0]
 assert name == "ps172-remote-phone" or name.startswith("test"), "Use only the disposable phone AVD"
 call("shell", "am", "force-stop", "app.pictureshow")
-call("shell", "settings", "put", "global", "device_name", device)
 call("shell", "run-as", "app.pictureshow", "mkdir", "-p", "files/datastore")
 call("exec-in", "run-as app.pictureshow sh -c 'cat > files/datastore/pictureshow.preferences_pb'", input=prefs)
 call("shell", "am", "start", "-n", "app.pictureshow/.MainActivity")
+(root / "phone-device-id").write_text(identifier)
+(root / "phone-device-name").write_text(device)
 print("Fixture viewer provisioned on disposable phone", flush=True)
