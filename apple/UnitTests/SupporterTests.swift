@@ -27,7 +27,7 @@ final class SupporterTests: XCTestCase {
         XCTAssertNil(model.supporterCode)
 
         try await purchase(model)
-        let code = try XCTUnwrap(model.supporterCode)
+        let code = try await verifiedSupporterCode(model)
         let result = await Transaction.latest(for: StoreKitSupporter.productID)
         XCTAssertEqual(try result?.payloadValue.environment, .xcode)
         XCTAssertEqual(session.allTransactions().count, 1)
@@ -51,7 +51,7 @@ final class SupporterTests: XCTestCase {
         model.startObserving()
         await model.refreshOffer()
         try await purchase(model)
-        _ = try XCTUnwrap(model.supporterCode)
+        _ = try await verifiedSupporterCode(model)
 
         let id = try XCTUnwrap(session.allTransactions().first?.identifier)
         try session.disableAutoRenewForTransaction(identifier: id)
@@ -71,7 +71,7 @@ final class SupporterTests: XCTestCase {
         model.startObserving()
         await model.refreshOffer()
         try await purchase(model)
-        _ = try XCTUnwrap(model.supporterCode)
+        _ = try await verifiedSupporterCode(model)
 
         let id = try XCTUnwrap(session.allTransactions().first?.identifier)
         try session.refundTransaction(identifier: id)
@@ -151,6 +151,16 @@ final class SupporterTests: XCTestCase {
     private func purchase(_ model: SupporterModel) async throws {
         let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
         await model.purchase { product in try await product.purchase(confirmIn: scene) }
+    }
+
+    @MainActor
+    private func verifiedSupporterCode(_ model: SupporterModel) async throws -> String {
+        // A transaction listener can supersede the purchase call's first entitlement read.
+        for _ in 0..<50 {
+            if let code = model.supporterCode { return code }
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        return try XCTUnwrap(model.supporterCode)
     }
 
     @MainActor
