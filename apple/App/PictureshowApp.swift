@@ -19,7 +19,7 @@ import PictureshowCore
             RootView()
                 .environmentObject(app)
                 .environmentObject(supporter)
-                .task { await supporter.observeChanges() }
+                .task { supporter.startObserving() }
                 .tint(Theme.accent)
                 .preferredColorScheme(app.preferences.appearance.scheme)
                 #if DEBUG && os(iOS)

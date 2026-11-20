@@ -47,8 +47,7 @@ final class SupporterTests: XCTestCase {
         let session = try testSession()
         defer { session.clearTransactions() }
         let model = SupporterModel(store: StoreKitSupporter())
-        let observer = Task { await model.observeChanges() }
-        defer { observer.cancel() }
+        model.startObserving()
         await model.refreshOffer()
         try await purchase(model)
         _ = try XCTUnwrap(model.supporterCode)
@@ -63,8 +62,7 @@ final class SupporterTests: XCTestCase {
         let session = try testSession()
         defer { session.clearTransactions() }
         let model = SupporterModel(store: StoreKitSupporter())
-        let observer = Task { await model.observeChanges() }
-        defer { observer.cancel() }
+        model.startObserving()
         await model.refreshOffer()
         try await purchase(model)
         _ = try XCTUnwrap(model.supporterCode)
@@ -92,12 +90,12 @@ final class SupporterTests: XCTestCase {
         XCTAssertEqual(model.notice, .restoredNothing)
 
         store.code = "123456"
-        await model.observeChanges()
+        await model.refreshEntitlement()
         XCTAssertEqual(model.supporterCode, "123456")
         XCTAssertNil(model.notice)
 
         store.code = nil
-        await model.observeChanges()
+        await model.refreshEntitlement()
         XCTAssertNil(model.supporterCode)
     }
 

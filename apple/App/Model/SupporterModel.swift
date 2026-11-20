@@ -124,11 +124,13 @@ final class SupporterModel: ObservableObject {
 
     private let store: any SupporterStore
     private var entitlementRead = 0
-    private var observing = false
+    private var observationTask: Task<Void, Never>?
 
     init(store: any SupporterStore) {
         self.store = store
     }
+
+    deinit { observationTask?.cancel() }
 
     func refreshOffer() async {
         await refreshEntitlement()
@@ -188,11 +190,11 @@ final class SupporterModel: ObservableObject {
         }
     }
 
-    func observeChanges() async {
-        guard !observing else { return }
-        observing = true
-        defer { observing = false }
-        await store.observeChanges { [weak self] in await self?.refreshEntitlement() }
+    func startObserving() {
+        guard observationTask == nil else { return }
+        observationTask = Task { [weak self, store] in
+            await store.observeChanges { [weak self] in await self?.refreshEntitlement() }
+        }
     }
 
     func refreshEntitlement() async {
