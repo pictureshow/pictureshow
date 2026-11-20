@@ -208,7 +208,7 @@ case "$channel" in
   app-store)
     identity=${PICTURESHOW_MAC_APP_IDENTITY:?Set the Apple Distribution signing identity}
     profile=${PICTURESHOW_MAC_PROFILE:?Set the Mac App Store provisioning profile path}
-    cp "$profile" "$app/Contents/embedded.provisionprofile"
+    install -m 0644 "$profile" "$app/Contents/embedded.provisionprofile"
     entitlements="$work/app-store.entitlements"
     python3 "$tools/store-profile.py" "$profile" "$bundle_id" "$tools/app-store.entitlements" "$entitlements"
     xcrun swiftc -O -target "$(uname -m)-apple-macos15.0" -emit-library \

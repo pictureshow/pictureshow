@@ -257,8 +257,13 @@ def main():
     launcher = contents / "MacOS" / info["CFBundleExecutable"]
     set_launcher_uuid(launcher, info["CFBundleIdentifier"], args.evidence / "launcher-uuid.txt")
     players = stage_player(args.native, contents / "Frameworks")
+    spawn_helper = contents / "runtime" / "Contents" / "Home" / "lib" / "jspawnhelper"
+    spawn_entitlements = None
     if args.store_bridge:
         shutil.copy2(args.store_bridge, contents / "Frameworks" / args.store_bridge.name)
+        if not spawn_helper.is_file():
+            raise ValueError("The Mac App Store runtime is missing Java's process launcher")
+        spawn_entitlements = Path(__file__).with_name("app-store-helper.entitlements")
     relocate_hotspot_dependencies(contents / "runtime")
     (args.evidence / "player-libraries.json").write_text(json.dumps(players, indent=2) + "\n")
     output = []
@@ -269,7 +274,7 @@ def main():
         if path.is_file() and not path.is_symlink() and is_mach(path):
             audit_mach(path, args.app, str(path.relative_to(args.app)), output)
             if path != launcher:
-                sign(path, args.identity)
+                sign(path, args.identity, spawn_entitlements if path == spawn_helper else None)
     (args.evidence / "otool-dependencies.txt").write_text("\n\n".join(output) + "\n")
     sign(contents / "runtime", args.identity)
     sign(args.app, args.identity, args.entitlements)
