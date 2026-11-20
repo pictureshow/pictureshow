@@ -61,7 +61,7 @@ separate from physical presentation and HDR colorimetry qualification.
 
 ## Packaging Pictureshow on macOS
 
-Build on macOS 15 or later with Xcode command-line tools, Python 3.10+ with Jinja2, Meson, Ninja, pkg-config and the repository's Gradle prerequisites. Intel builds also need NASM. Build on the target architecture. The script pins and fetches the appropriate Temurin 21 JDK. Use `PICTURESHOW_VERSION` and `PICTURESHOW_BUILD_NUMBER` for the marketing and build versions. The package uses the marketing version in About and in the Jellyfin client identity.
+Build on macOS 15 or later with Xcode command-line tools, Python 3.10+, Meson, Ninja, pkg-config and the repository's Gradle prerequisites. Intel builds also need NASM. Build on the target architecture. The script pins and fetches the appropriate Temurin 21 JDK and libplacebo's build-time Python modules. Use `PICTURESHOW_VERSION` and `PICTURESHOW_BUILD_NUMBER` for the marketing and build versions. The package uses the marketing version in About and in the Jellyfin client identity.
 
 Both channels use the Apple-registered `app.pictureshow` bundle ID for one app identity and universal purchase. The launcher UUID is derived from the ID and the stock launcher UUID. It differs from the stock launcher and changes with it when the JDK changes. The app's Local Network purpose string covers Jellyfin's UDP broadcast discovery and direct LAN access. Bonjour service entries and the multicast entitlement apply to different APIs or platforms. [Apple TN3179](https://developer.apple.com/documentation/technotes/tn3179-understanding-local-network-privacy)
 

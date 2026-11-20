@@ -8,7 +8,7 @@ prefix="$build/prefix"
 source_dir="$build/source"
 tools=$(cd "$(dirname "$0")" && pwd -P)
 export PKG_CONFIG_LIBDIR="$prefix/lib/pkgconfig:$prefix/share/pkgconfig"
-unset PKG_CONFIG_PATH
+unset PKG_CONFIG_PATH PYTHONPATH
 export MACOSX_DEPLOYMENT_TARGET=15.0
 
 while IFS=$'\t' read -r folder archive sha url; do
@@ -17,6 +17,12 @@ while IFS=$'\t' read -r folder archive sha url; do
   fi
   printf '%s  %s\n' "$sha" "$source_dir/$archive" | shasum -a 256 -c
   tar -xf "$source_dir/$archive" -C "$source_dir"
+  case "$archive" in
+    glad.tar.gz|jinja.tar.gz|markupsafe.tar.gz)
+      # libplacebo adds these submodule directories to its build-time Python path.
+      cp -R "$source_dir/$folder/." "$source_dir/libplacebo-7.387.0/3rdparty/${archive%.tar.gz}/"
+      ;;
+  esac
 done < "$tools/render-sources.tsv"
 
 meson_install() {
@@ -38,5 +44,4 @@ meson_install harfbuzz-12.3.2 -Dfreetype=enabled -Dtests=disabled -Dutilities=di
   make install
 )
 meson_install libass-0.17.4 -Dcoretext=enabled -Dlibunibreak=enabled
-mv "$source_dir/glad-73db193f853e2ee079bf3ca8a64aa2eaf6459043/glad" "$source_dir/libplacebo-7.387.0/3rdparty/glad/"
 meson_install libplacebo-7.387.0 -Ddemos=false -Dopengl=enabled

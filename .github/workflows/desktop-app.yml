@@ -78,6 +78,10 @@ jobs:
       - name: Mac build prerequisites
         if: runner.os == 'macOS'
         run: brew install meson ninja pkgconf nasm libass libplacebo dav1d ffmpeg
+      - name: Assemble and audit the macOS package without release credentials
+        if: runner.os == 'macOS'
+        shell: bash
+        run: PICTURESHOW_MAC_RUNTIME="$PWD/desktop/build/spike-runtime/lib" bash desktop/tools/package-macos.sh --unsigned
       - name: Build LGPL mpv and qualified native surface
         if: runner.os != 'Windows'
         run: bash desktop/tools/app-smoke/build-native.sh
@@ -176,6 +180,7 @@ jobs:
             ui-shared/build/libs/*.jar
             core/build/libs/*.jar
             desktop-evidence/**
+            desktop/build/macos-package/work-*/evidence/**
             desktop/build/test-results/**
             desktop/build/reports/tests/**
             core/build/test-results/**

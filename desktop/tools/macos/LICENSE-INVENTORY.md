@@ -20,6 +20,8 @@ The playback libraries below are bundled as shared libraries. The package includ
 
 The rest of the JVM dependencies and their notices appear under Settings > About Pictureshow > Open-source licenses. macOS system libraries and frameworks appear in the Mach-O audit and are supplied by macOS.
 
+The libplacebo rebuild inputs include the exact upstream Jinja and MarkupSafe commits, both BSD-3-Clause, with URLs and digests in `render-sources.tsv`. They run during shader generation and are absent from the app runtime.
+
 ## Mac App Store distribution
 
 LGPL 2.1 §6 permits several ways to convey a "work that uses the Library". Hardened runtime library validation prevents simple replacement with an independently signed dylib in the shipped app. The source and build recipes let a recipient build a separate copy, relink the libraries and sign it locally. The Apple standard EULA has an open-source carve-out, and Apple supports a custom EULA. VideoLAN's 2013 iOS return used an MPLv2 option for the iOS application and an LGPL engine. That precedent leaves open whether this exact Mac App Store package, LGPL notices, source distribution and rebuild process meet §6 and the store terms together. Counsel should confirm that point before a store launch, including whether a custom EULA or another relinking mechanism is needed. [LGPL 2.1 §6](https://www.gnu.org/licenses/old-licenses/lgpl-2.1.en.html) · [Apple standard EULA](https://www.apple.com/legal/internet-services/itunes/dev/stdeula/) · [Apple custom EULA](https://developer.apple.com/help/app-store-connect/manage-app-information/provide-a-custom-license-agreement) · [VideoLAN iOS release](https://images.videolan.org/press/ios2out.html)
