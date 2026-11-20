@@ -18,8 +18,8 @@ while IFS=$'\t' read -r folder archive sha url; do
   printf '%s  %s\n' "$sha" "$source_dir/$archive" | shasum -a 256 -c
   tar -xf "$source_dir/$archive" -C "$source_dir"
   case "$archive" in
-    glad.tar.gz|jinja.tar.gz|markupsafe.tar.gz)
-      # libplacebo adds these submodule directories to its build-time Python path.
+    glad.tar.gz|jinja.tar.gz|markupsafe.tar.gz|fast_float.tar.gz)
+      # Match libplacebo's upstream submodule layout for shader tools and C++ headers.
       cp -R "$source_dir/$folder/." "$source_dir/libplacebo-7.387.0/3rdparty/${archive%.tar.gz}/"
       ;;
   esac
