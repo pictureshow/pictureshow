@@ -234,7 +234,10 @@ case "$channel" in
     secret exec "$key_entry" -- python3 "$tools/notarize.py" "$dmg" "$evidence"
     xcrun stapler staple "$dmg"
     xcrun stapler validate "$dmg" | tee "$evidence/staple.txt"
-    spctl -a -vvv -t install "$dmg" 2>&1 | tee "$evidence/dmg-gatekeeper.txt"
+    install_status=0
+    spctl -a -vvv -t install "$dmg" > "$evidence/dmg-install-assessment.txt" 2>&1 || install_status=$?
+    printf '\nExit status: %s\n' "$install_status" >> "$evidence/dmg-install-assessment.txt"
+    spctl -a -vvv -t open --context context:primary-signature "$dmg" 2>&1 | tee "$evidence/dmg-gatekeeper.txt"
     mv -f "$dmg" "$output/Pictureshow.dmg"
     ;;
 esac

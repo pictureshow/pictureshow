@@ -73,6 +73,8 @@ desktop/tools/package-macos.sh --output desktop/build/macos-dist
 
 The button in the license viewer opens source archives inside the app. Publish the matching Temurin source archive beside the download. The DMG is signed and submitted to Apple's notary service, stapled and assessed before it is copied to the output directory. Keep the signing and notarization reports from the working directory. `--unsigned` builds a local ad-hoc app image for packaging checks. Set `PICTURESHOW_MAC_JDK_ARCHIVE` to reuse an already downloaded pinned JDK. Set `PICTURESHOW_MAC_NATIVE_BUILD` to reuse the release builder's native output for the same architecture and revision. Normal release runs build these libraries from pinned source in a new directory.
 
+The release gate uses Apple's `spctl -t open --context context:primary-signature` assessment for disk images. The evidence also records the `-t install` assessment and its exit status. [Apple Technical Note TN2206](https://developer.apple.com/library/archive/technotes/tn2206/)
+
 The hardened runtime allows HotSpot JIT. The package signs the runtime, the player and every Mach-O in the retained JVM archives using the same identity. App images with either signing channel can be verified with `codesign --verify --deep --strict`. See the package's `otool-dependencies.txt` for the native linkage audit and `LICENSE-INVENTORY.md` for sources and licensing.
 
 ### Mac App Store
