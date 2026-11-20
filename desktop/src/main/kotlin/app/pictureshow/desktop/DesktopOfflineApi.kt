@@ -399,14 +399,14 @@ internal class DesktopOfflineSessions(private val file: File, private val api: D
         load().state.records.filter { it.server == serverId && it.viewer == viewerId }.forEach { settle(it) }
     }
 
-    /** Any set whose account no longer owns private state here (removed, or signed out). */
-    suspend fun endAllExcept(owners: Set<Pair<String, String>>) = mutex.withLock {
-        load().state.records.filterNot { (it.server to it.viewer) in owners }.forEach { settle(it) }
+    /** Retry owed revocations and end sets for removed or signed-out accounts. */
+    suspend fun revokeUnownedAndPending(owners: () -> Set<String>): Boolean = mutex.withLock {
+        val currentOwners = owners()
+        load().state.records.filter { it.phase in PENDING || "${it.server}:${it.viewer}" !in currentOwners }.forEach { settle(it) }
+        load().state.records.any { it.phase in PENDING }
     }
 
-    suspend fun revocationsPending(): Boolean = mutex.withLock { load().state.records.any { it.phase in PENDING } }
-
-    suspend fun reconnect() = mutex.withLock { load().state.records.filter { it.phase in PENDING }.forEach { settle(it) } }
+    suspend fun snapshot(): DesktopOfflineSessionsFile = mutex.withLock { load() }
 
     private suspend fun settle(record: TemporarySession) {
         val saved = load()

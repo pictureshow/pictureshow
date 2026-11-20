@@ -25,15 +25,19 @@ import app.pictureshow.core.offline.offlineDecodeManifest
 import app.pictureshow.core.offline.offlineEncodeManifest
 import app.pictureshow.core.offline.offlineEntryId
 import java.io.File
+import java.io.FileInputStream
 import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -52,6 +56,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Test
 
@@ -62,13 +67,15 @@ class DesktopOfflineEngineTest {
     private val requests = CopyOnWriteArrayList<RecordedRequest>()
     private val deviceFor = ConcurrentHashMap<String, String>()
     private val scopes = mutableListOf<CoroutineScope>()
-    private var free: Long? = 10L * 1024 * 1024 * 1024
-    private var network = OfflineNetwork.unmetered
-    private var cutAt: Int? = null
-    private var hold = false
-    private var slow = false
-    private var quickConnect = true
-    private var logoutStatus = 204
+    @Volatile private var free: Long? = 10L * 1024 * 1024 * 1024
+    @Volatile private var network = OfflineNetwork.unmetered
+    @Volatile private var cutAt: Int? = null
+    @Volatile private var hold = false
+    @Volatile private var slow = false
+    @Volatile private var quickConnect = true
+    @Volatile private var logoutStatus = 204
+    private val logoutResponses = Channel<Int>(Channel.UNLIMITED)
+    private val revocationWriteRefused = CompletableDeferred<String>()
 
     @Volatile private var freshItem: String? = null
 
@@ -76,7 +83,7 @@ class DesktopOfflineEngineTest {
 
     @Volatile
     private var serverOff = false
-    private var restMs = 1L
+    @Volatile private var restMs = 1L
     private var recheckMs = 30_000L
     private var revocationMs = 60_000L
 
@@ -103,6 +110,8 @@ class DesktopOfflineEngineTest {
     private var convertedBody: ByteArray? = null
     private var afterConversion: ByteArray? = null
     private var httpOverride: DesktopOfflineHttp? = null
+    private val identity = ClientIdentity("Test", "install-id", "1")
+    private var apiOverride: DesktopOfflineApi? = null
     private var restartTrust: (Long) -> Long = { it }
     private var cleaner: (OfflineFiles) -> Unit = OfflineFiles::emptyTrash
 
@@ -144,7 +153,11 @@ class DesktopOfflineEngineTest {
                         val viewer = deviceFor["secret"] ?: "viewer-a"
                         json("""{"AccessToken":"set-$viewer","User":{"Id":"$viewer"}}""")
                     }
-                    path == "/Sessions/Logout" -> MockResponse().setResponseCode(logoutStatus)
+                    path == "/Sessions/Logout" -> {
+                        val status = logoutStatus
+                        logoutResponses.trySend(status)
+                        MockResponse().setResponseCode(status)
+                    }
                     path.endsWith("/Download") -> download(request)
                     path.contains("/stream.") -> conversion()
                     path.contains("/Images/") -> MockResponse().setResponseCode(404)
@@ -171,11 +184,19 @@ class DesktopOfflineEngineTest {
     fun tearDown() {
         restoreCrashHandler()
         hold = false
+        try {
+            runBlocking { stopScopes() }
+            base.deleteRecursively()
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    // A cancelled job can still be closing a file or persisting its final state.
+    private suspend fun stopScopes() {
         scopes.forEach { it.cancel() }
-        // A purge already running on IO finishes before the files go, so the two deletions never race.
-        runBlocking { withTimeoutOrNull(10_000) { scopes.forEach { it.coroutineContext[Job]?.join() } } }
-        server.shutdown()
-        File(base, "offline").deleteRecursively()
+        withTimeout(40_000) { scopes.forEach { it.coroutineContext[Job]?.join() } }
+        scopes.clear()
     }
 
     /** The server's own place for every item, as a real server keeps it: written by POST, read back by GET. */
@@ -232,9 +253,10 @@ class DesktopOfflineEngineTest {
         return DesktopOfflineEngine(
             base,
             accounts,
-            ClientIdentity("Test", "install-id", "1"),
+            identity,
+            log = { if (it.startsWith("offline revocation-not-saved ")) revocationWriteRefused.complete(it) },
             http = httpOverride,
-            api = DesktopOfflineApi(ClientIdentity("Test", "install-id", "1")),
+            api = apiOverride,
             networkState = {
                 check(!networkThrows) { "network" }
                 network
@@ -268,9 +290,11 @@ class DesktopOfflineEngineTest {
     private fun choice(id: String, cellular: Boolean = false) = DesktopOfflineChoice(id, original, cellular = cellular)
     private fun entryId(id: String) = offlineEntryId(id, original)
 
-    private suspend fun DesktopOfflineEngine.awaitPhase(account: Account, id: String, phase: OfflinePhase) = withTimeout(20_000) {
-        libraries.first { all -> all[account.key]?.manifest?.entries?.firstOrNull { it.id == entryId(id) }?.job?.phase == phase }
-        Unit
+    private suspend fun DesktopOfflineEngine.awaitPhase(account: Account, id: String, phase: OfflinePhase) {
+        val reached = withTimeoutOrNull(20_000) {
+            libraries.first { all -> all[account.key]?.manifest?.entries?.firstOrNull { it.id == entryId(id) }?.job?.phase == phase }
+        }
+        assertTrue("Expected $id in $phase, last job: ${entry(account, id)?.job}", reached != null)
     }
 
     private suspend fun signIn(vararg all: Account) = all.forEach { accounts.remember(it) }
@@ -373,18 +397,22 @@ class DesktopOfflineEngineTest {
     fun `a killed process resumes with a validated range and exact bytes`() = runBlocking<Unit> {
         signIn(viewerA)
         cutAt = 400_000
+        offAfterNextCut = true
+        restMs = 60_000
         val first = started()
         first.enqueue(viewerA, item("1"), choice("1"))
-        // Retries keep hitting the cut only when no range is asked; let the first attempt drop then be killed.
-        withTimeout(20_000) {
-            while (requests.none { it.getHeader("Range") != null } && first.entry(viewerA, "1")?.job?.phase != OfflinePhase.ready) delay(5)
-        }
+        first.awaitPhase(viewerA, "1", OfflinePhase.waitingNetwork)
+        stopScopes()
+        val partial = File(mediaFile(first, viewerA, "1").path + OFFLINE_PART_SUFFIX).length()
+        assertTrue("Expected an incomplete file from the old process", partial in 1 until media.size.toLong())
+        requests.clear()
+        offAfterNextCut = false
         cutAt = null
-        scopes.last().cancel()
+        serverOff = false
         val second = started()
         second.awaitPhase(viewerA, "1", OfflinePhase.ready)
         assertArrayEquals(media, mediaFile(second, viewerA, "1").readBytes())
-        assertTrue(requests.any { it.path.orEmpty().contains("/Download") && it.getHeader("Range") != null })
+        assertEquals("bytes=$partial-", requests.single { it.path.orEmpty().contains("/Download") }.getHeader("Range"))
     }
 
     @Test
@@ -395,9 +423,8 @@ class DesktopOfflineEngineTest {
         engine.enqueue(viewerA, item("1"), choice("1"))
         engine.awaitPhase(viewerA, "1", OfflinePhase.transferring)
         engine.delete(viewerA.key, entryId("1"))
-        withTimeout(10_000) { engine.libraries.first { it[viewerA.key]!!.manifest.entries.isEmpty() } }
         hold = false
-        delay(100)
+        stopScopes()
         assertTrue(engine.libraries.value[viewerA.key]!!.manifest.entries.isEmpty())
         assertTrue(engine.files.inventory(viewerA.key).isEmpty())
     }
@@ -410,7 +437,6 @@ class DesktopOfflineEngineTest {
         listOf("1", "2", "3").forEach { engine.enqueue(viewerA, item(it), choice(it)) }
         engine.awaitPhase(viewerA, "2", OfflinePhase.transferring)
         engine.awaitPhase(viewerA, "1", OfflinePhase.transferring)
-        delay(100)
         assertEquals(OfflinePhase.queued, engine.entry(viewerA, "3")!!.job.phase)
         engine.delete(viewerA.key, entryId("1"))
         engine.awaitPhase(viewerA, "3", OfflinePhase.transferring)
@@ -457,7 +483,7 @@ class DesktopOfflineEngineTest {
         assertTrue(paused.pausedByCap)
         slow = false
         engine.resume(viewerA.key, entryId("1"))
-        delay(300)
+        engine.awaitPhase(viewerA, "1", OfflinePhase.waitingStorage)
         assertEquals(1024L, engine.libraries.value[viewerA.key]!!.manifest.budget.capBytes)
         assertNotEquals(OfflinePhase.ready, engine.entry(viewerA, "1")!!.job.phase)
     }
@@ -501,14 +527,62 @@ class DesktopOfflineEngineTest {
         accounts.signOutKeepingAccount(viewerA.key)
         withTimeout(10_000) { engine.libraries.first { viewerA.key !in it } }
         assertFalse(dirA.exists())
-        withTimeout(10_000) {
-            while (!sessionsText(engine).contains("pending-revoke")) delay(5)
-        }
-        assertTrue(engine.files.sessions().readText().contains("set-viewer-a"))
+        awaitLogoutResponse(500)
+        val pending = withTimeout(10_000) { engine.sessions.snapshot() }
+        assertEquals("pending-revoke", pending.state.records.single().phase)
+        assertEquals(listOf("set-viewer-a"), pending.tokens.values.toList())
         logoutStatus = 204
-        engine.syncAll()
-        val sessions = engine.files.sessions().readText()
-        assertFalse(sessions, sessions.contains("set-viewer-a"))
+        engine.networkChanged()
+        awaitLogoutResponse(204)
+        assertRevocationFinished(engine)
+    }
+
+    @Test
+    fun `one viewer's slow logout does not hold up another viewer's local purge`() = runBlocking<Unit> {
+        val firstLogout = CompletableDeferred<Unit>()
+        val releaseLogout = CompletableDeferred<Unit>()
+        apiOverride = object : DesktopOfflineApi(identity) {
+            override suspend fun logout(serverUrl: String, deviceId: String, token: String) {
+                if (token == "set-viewer-a") {
+                    firstLogout.complete(Unit)
+                    releaseLogout.await()
+                }
+                super.logout(serverUrl, deviceId, token)
+            }
+        }
+        signIn(viewerA, viewerB)
+        val engine = started()
+        engine.enqueue(viewerA, item("1"), choice("1"))
+        engine.awaitPhase(viewerA, "1", OfflinePhase.ready)
+        engine.enqueue(viewerB, item("2"), choice("2"))
+        engine.awaitPhase(viewerB, "2", OfflinePhase.ready)
+        try {
+            accounts.signOutKeepingAccount(viewerA.key)
+            withTimeout(10_000) { firstLogout.await() }
+            accounts.signOutKeepingAccount(viewerB.key)
+            withTimeout(10_000) { engine.libraries.first { viewerB.key !in it } }
+            assertFalse(engine.files.accountDir(viewerB.key).exists())
+        } finally {
+            releaseLogout.complete(Unit)
+        }
+    }
+
+    @Test
+    fun `a Windows reader holding the session file cannot lose a sign-out revocation`() = runBlocking<Unit> {
+        assumeTrue(System.getProperty("os.name").startsWith("Windows"))
+        revocationMs = 100
+        signIn(viewerA)
+        val engine = started()
+        engine.enqueue(viewerA, item("1"), choice("1"))
+        engine.awaitPhase(viewerA, "1", OfflinePhase.ready)
+        // Hold open the same kind of file handle the old test's readText poll used.
+        FileInputStream(engine.files.sessions()).use {
+            accounts.signOutKeepingAccount(viewerA.key)
+            withTimeout(10_000) { revocationWriteRefused.await() }
+            assertFalse(engine.files.accountDir(viewerA.key).exists())
+        }
+        awaitLogoutResponse(204)
+        assertRevocationFinished(engine)
     }
 
     @Test
@@ -566,7 +640,7 @@ class DesktopOfflineEngineTest {
         first.enqueue(viewerA, item("1"), choice("1"))
         first.awaitPhase(viewerA, "1", OfflinePhase.ready)
         mediaFile(first, viewerA, "1").delete()
-        scopes.last().cancel()
+        stopScopes()
         val second = started()
         assertEquals(OfflinePhase.missing, second.entry(viewerA, "1")!!.job.phase)
         second.redownload(viewerA.key, entryId("1"))
@@ -592,10 +666,14 @@ class DesktopOfflineEngineTest {
         signIn(viewerA)
         quickConnect = false
         val engine = started()
+        val failed = async(Dispatchers.Unconfined, start = CoroutineStart.UNDISPATCHED) {
+            engine.libraries.first { it[viewerA.key]?.manifest?.entries?.singleOrNull()?.job?.phase == OfflinePhase.failed }
+                .getValue(viewerA.key)
+        }
         engine.enqueue(viewerA, item("1"), choice("1"))
-        engine.awaitPhase(viewerA, "1", OfflinePhase.failed)
-        assertEquals("needs-password", engine.entry(viewerA, "1")!!.job.failure)
-        withTimeout(5_000) { engine.libraries.first { it[viewerA.key]!!.needsPassword } }
+        val library = withTimeout(20_000) { failed.await() }
+        assertEquals("needs-password", library.manifest.entries.single().job.failure)
+        assertTrue("The first failed state must include its password prompt", library.needsPassword)
     }
 
     @Test
@@ -716,8 +794,15 @@ class DesktopOfflineEngineTest {
         return crashes
     }
 
-    /** Windows refuses a read while the engine's atomic replace holds the file; the next poll reads it. */
-    private fun sessionsText(engine: DesktopOfflineEngine): String = runCatching { engine.files.sessions().readText() }.getOrDefault("")
+    private suspend fun awaitLogoutResponse(status: Int) = withTimeout(10_000) {
+        while (logoutResponses.receive() != status) Unit
+    }
+
+    private suspend fun assertRevocationFinished(engine: DesktopOfflineEngine) {
+        val saved = withTimeout(10_000) { engine.sessions.snapshot() }
+        assertTrue(saved.state.records.isEmpty())
+        assertTrue(saved.tokens.isEmpty())
+    }
 
     @Test
     fun `a revocation owed at sign-out goes through when the server returns, with no network change or restart`() = runBlocking<Unit> {
@@ -728,13 +813,10 @@ class DesktopOfflineEngineTest {
         engine.awaitPhase(viewerA, "1", OfflinePhase.ready)
         logoutStatus = 500
         accounts.signOutKeepingAccount(viewerA.key)
-        withTimeout(10_000) {
-            while (!sessionsText(engine).contains("pending-revoke")) delay(5)
-        }
+        awaitLogoutResponse(500)
         logoutStatus = 204
-        withTimeout(10_000) {
-            while (sessionsText(engine).contains("set-viewer-a")) delay(20)
-        }
+        awaitLogoutResponse(204)
+        assertRevocationFinished(engine)
     }
 
     @Test
@@ -1127,7 +1209,6 @@ class DesktopOfflineEngineTest {
         assertFalse(dir.exists())
         signIn(viewerA)
         withTimeout(10_000) { engine.libraries.first { viewerA.key in it } }
-        delay(50)
         val back = engine.progressStore(viewerA)
         back.viewing("2", back.newSequence(), 50)
         assertTrue(engine.files.progress(viewerA.key).exists())
@@ -1135,8 +1216,7 @@ class DesktopOfflineEngineTest {
 
     /** What a kill between the rename and the save leaves. */
     private suspend fun stopAndForgetFinish(engine: DesktopOfflineEngine, key: String, entry: String) {
-        scopes.forEach { it.cancel() }
-        delay(100)
+        stopScopes()
         val file = engine.files.manifest(key)
         val manifest = offlineDecodeManifest(file.readText())!!
         file.writeText(
@@ -1226,8 +1306,7 @@ class DesktopOfflineEngineTest {
         engine.awaitPhase(viewerA, "1", OfflinePhase.waitingNetwork)
         val part = File(mediaFile(engine, viewerA, "1").path + OFFLINE_PART_SUFFIX)
         assertTrue(part.length() > 100_000)
-        scopes.forEach { it.cancel() }
-        delay(100)
+        stopScopes()
         offAfterNextCut = false
         serverOff = false
         cutAt = null
@@ -1334,7 +1413,7 @@ class DesktopOfflineEngineTest {
         owner.localProgress(local, 12.5)
         assertEquals(125_000_000L, engine.progressStore(viewerA).place("1").first!!.positionTicks)
         owner.localCompleted(local)
-        scopes.forEach { it.cancel() }
+        stopScopes()
         val again = started()
         val (outbox, _) = again.progressStore(viewerA).place("1")
         assertEquals(true, outbox!!.played)
@@ -1366,7 +1445,7 @@ class DesktopOfflineEngineTest {
         val engine = started()
         engine.enqueue(viewerA, item("1"), choice("1"))
         engine.awaitPhase(viewerA, "1", OfflinePhase.ready)
-        scopes.forEach { it.cancel() }
+        stopScopes()
         serverOff = true
         DesktopController(base, store = accounts, playbackFactory = { error("no player in this test") }).use { c ->
             c.start()

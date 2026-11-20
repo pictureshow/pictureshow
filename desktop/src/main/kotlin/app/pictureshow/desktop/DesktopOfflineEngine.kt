@@ -50,6 +50,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -127,7 +128,7 @@ internal class DesktopOfflineEngine(
     scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
     storageBase: File = base
 ) {
-    private var api: DesktopOfflineApi? = api
+    private val offlineApi by lazy { api ?: DesktopOfflineApi(identity) }
     private val http: DesktopOfflineHttp = http ?: DesktopOfflineHttp { url, headers, range, onCall -> api().open(url, headers, range, onCall) }
 
     /** Background work here must never take the app down with it, and a viewer may be in the middle of a film. */
@@ -153,13 +154,13 @@ internal class DesktopOfflineEngine(
 
     /** Partials this process has already picked up. Any other came through a restart, and so maybe a power cut. */
     private val durableParts = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
-    private var started: Job? = null
-    private var sessionOwner: DesktopOfflineSessions? = null
+    internal val sessions by lazy { DesktopOfflineSessions(files.sessions(), api()) { identity.deviceId } }
     private var lastAccountKeys = emptySet<String>()
     private val unreachable = mutableMapOf<String, OfflineUnreachable>()
     private val freeAtDenial = mutableMapOf<String, Long>()
     private var storageWatch: Job? = null
-    private var revocationWatch: Job? = null
+    private val revocationRequests = Channel<Unit>(Channel.CONFLATED)
+    private val endedDownloadOwners = mutableSetOf<String>()
 
     @Volatile
     private var lastNetwork: OfflineNetwork? = null
@@ -179,17 +180,13 @@ internal class DesktopOfflineEngine(
         }
     }
 
-    private fun api(): DesktopOfflineApi = api ?: DesktopOfflineApi(identity).also { api = it }
-
-    private fun sessions(): DesktopOfflineSessions = sessionOwner ?: DesktopOfflineSessions(files.sessions(), api()) { identity.deviceId }
-        .also { sessionOwner = it }
+    private fun api(): DesktopOfflineApi = offlineApi
 
     /** Runs once per process. Everything here works with the network off. */
-    fun start(): Job = loadOnce()
+    fun start(): Job = startup
 
-    private fun loadOnce(): Job {
-        started?.let { return it }
-        val job = scope.launch {
+    private val startup: Job by lazy {
+        scope.launch {
             emptyTrashSoon()
             val snapshot = accounts.load()
             mutex.withLock {
@@ -197,20 +194,19 @@ internal class DesktopOfflineEngine(
                 purgeOrphansLocked(keys)
                 keys.forEach { loadLocked(it) }
                 lastAccountKeys = keys
-                pumpLocked()
+                applyNetworkLocked()
                 watchStorageLocked()
             }
+            scope.launch { observeRevocations() }
             scope.launch { observeAccounts() }
             watchNetwork()
-            networkChanged()
+            syncSoon()
         }
-        started = job
-        return job
     }
 
     /** The next booked job run. Starting is once per process, and a warm process still has rows nothing else will move. */
     suspend fun wake() {
-        loadOnce().join()
+        start().join()
         networkChanged()
     }
 
@@ -229,15 +225,14 @@ internal class DesktopOfflineEngine(
             mutex.withLock {
                 val gone = lastAccountKeys - keys
                 lastAccountKeys = keys
+                endedDownloadOwners += gone
                 gone.forEach { purgeLocked(it) }
                 synchronized(progressStores) { signedOut.removeAll(keys) }
                 (keys - mutableLibraries.value.keys).forEach { loadLocked(it) }
+                pumpLocked()
             }
-            runCatching {
-                sessions().endAllExcept(snapshot.privateStateOwners.map { it.server.id to it.user.id }.toSet())
-            }
-            watchRevocations()
-            if (keys.isNotEmpty() || lastAccountKeys.isEmpty()) mutex.withLock { pumpLocked() }
+            // Remote logout can stall. Keep observing account changes so every viewer's local purge can proceed.
+            revocationRequests.trySend(Unit)
         }
     }
 
@@ -302,7 +297,7 @@ internal class DesktopOfflineEngine(
      * removing bytes. So a refused write leaves the state in memory and in effect, and is tried again. A restart before it
      * lands falls back on the last manifest and reconcile, which recounts from what's really on disk.
      */
-    private fun saveLocked(key: String, written: OfflineManifest) {
+    private fun saveLocked(key: String, written: OfflineManifest, requestPassword: Boolean = false) {
         // An album or playlist whose every track is gone goes with them, whichever way they went.
         val manifest = written.prunedCollections()
         try {
@@ -313,7 +308,10 @@ internal class DesktopOfflineEngine(
         } catch (e: IllegalStateException) {
             manifestNotSavedLocked(key, e)
         }
-        mutableLibraries.update { all -> all + (key to (all[key] ?: OfflineLibrary()).copy(manifest = manifest, recoverable = false)) }
+        mutableLibraries.update { all ->
+            val previous = all[key] ?: OfflineLibrary()
+            all + (key to previous.copy(manifest = manifest, recoverable = false, needsPassword = previous.needsPassword || requestPassword))
+        }
     }
 
     private fun manifestNotSavedLocked(key: String, error: Exception) {
@@ -328,7 +326,7 @@ internal class DesktopOfflineEngine(
                         val current = library(waiting)?.manifest
                         if (current != null) saveLocked(waiting, current) else unsaved.remove(waiting)
                     }
-                    unsaved.isNotEmpty()
+                    unsaved.isNotEmpty().also { if (!it) unsavedWatch = null }
                 }
                 if (!more) return@launch
             }
@@ -480,7 +478,7 @@ internal class DesktopOfflineEngine(
     suspend fun providePassword(account: Account, password: String): Boolean = contained(false) { passwordGiven(account, password) }
 
     private suspend fun passwordGiven(account: Account, password: String): Boolean {
-        val result = sessions().token(account, password)
+        val result = sessions.token(account, password)
         mutex.withLock {
             mutableLibraries.update { all ->
                 val library = all[account.key] ?: return@update all
@@ -552,7 +550,8 @@ internal class DesktopOfflineEngine(
         } else {
             manifest.copy(entries = manifest.entries.map { if (it.id == entryId) it.copy(job = next) else it })
         }
-        saveLocked(key, after)
+        val requestPassword = next?.phase == OfflinePhase.failed && next.failure == "needs-password"
+        saveLocked(key, after, requestPassword)
         result.effects.forEach { effect ->
             when (effect) {
                 "stop-transfer" -> runners[runnerKey(key, entryId)]?.cancel()
@@ -705,25 +704,37 @@ internal class DesktopOfflineEngine(
     }
 
     /** Dirty progress only, with the viewer's own session. */
-    suspend fun syncAll() {
+    private suspend fun syncAll() {
+        revocationRequests.trySend(Unit)
         val remote = OfflineApiProgressRemote(api())
-        lastAccountKeys.mapNotNull(::account).filterNot(Account::expired).forEach { current ->
+        val viewers = mutex.withLock { lastAccountKeys.mapNotNull(::account).filterNot(Account::expired) }
+        viewers.forEach { current ->
             runCatching { progressStore(current).sync(remote) }
         }
-        runCatching { sessions().reconnect() }
-        watchRevocations()
     }
 
     /**
      * A signed-out viewer's download set must end even when the server was off at sign-out, and a server coming back
      * tells nobody. So while one is owed, keep asking.
      */
-    private fun watchRevocations() {
-        if (revocationWatch?.isActive == true) return
-        revocationWatch = scope.launch {
-            while (runCatching { sessions().revocationsPending() }.getOrDefault(false)) {
-                delay(revocationRecheckMs)
-                if (networkState() != OfflineNetwork.none) runCatching { sessions().reconnect() }
+    private suspend fun observeRevocations() {
+        while (true) {
+            revocationRequests.receive()
+            var requested = true
+            while (true) {
+                if (requested || networkState() != OfflineNetwork.none) {
+                    val ended = mutex.withLock { endedDownloadOwners.toSet().also { endedDownloadOwners.clear() } }
+                    val pending = try {
+                        sessions.revokeUnownedAndPending { accounts.snapshots.value.downloadOwners() - ended }
+                    } catch (e: IOException) {
+                        // A refused atomic replacement can leave the previous active record in place.
+                        mutex.withLock { endedDownloadOwners += ended }
+                        log("offline revocation-not-saved kind=${e.javaClass.simpleName}")
+                        true
+                    }
+                    if (!pending) break
+                }
+                requested = withTimeoutOrNull(revocationRecheckMs) { revocationRequests.receive() } != null
             }
         }
     }
@@ -748,7 +759,7 @@ internal class DesktopOfflineEngine(
             earlier.forEach { it.join() }
             val current = account(key) ?: return
             val api = api()
-            val set = when (val token = sessions().token(current)) {
+            val set = when (val token = sessions.token(current)) {
                 is DesktopOfflineSetToken.Ready -> token
                 DesktopOfflineSetToken.NeedsPassword -> {
                     fail(key, entryId, attempt, "needs-password")
@@ -868,7 +879,7 @@ internal class DesktopOfflineEngine(
     /** Space comes back without telling anyone. While something waits for it, look now and then. */
     private fun watchStorageLocked() {
         if (storageWatch?.isActive == true) return
-        if (lastAccountKeys.none(::hasWaitingStorage)) return
+        if (!hasWaitingStorageLocked()) return
         storageWatch = scope.launch {
             while (true) {
                 delay(storageRecheckMs)
@@ -883,7 +894,7 @@ internal class DesktopOfflineEngine(
                             pumpLocked()
                         }
                     }
-                    waiting.isNotEmpty()
+                    hasWaitingStorageLocked().also { if (!it) storageWatch = null }
                 }
                 if (!more) return@launch
             }
@@ -895,14 +906,10 @@ internal class DesktopOfflineEngine(
         return entries.any { it.job.phase == OfflinePhase.waitingStorage }
     }
 
+    private fun hasWaitingStorageLocked() = lastAccountKeys.any(::hasWaitingStorage)
+
     private suspend fun fail(key: String, entryId: String, attempt: Long, reason: String) {
-        mutex.withLock {
-            val handled = eventLocked(key, entryId, OfflineJobEvent("fail", attempt = attempt, reason = reason))
-            // The failed attempt can cancel itself in eventLocked. Publish the prompt before suspending again.
-            if (handled && reason == "needs-password") {
-                mutableLibraries.update { all -> all[key]?.let { all + (key to it.copy(needsPassword = true)) } ?: all }
-            }
-        }
+        mutex.withLock { eventLocked(key, entryId, OfflineJobEvent("fail", attempt = attempt, reason = reason)) }
     }
 
     private fun ledger(key: String, entryId: String) = object : OfflineLedger {
@@ -992,7 +999,13 @@ internal class DesktopOfflineEngine(
                     if (!resource.required) return true
                     if (result.reason == "unauthorized") {
                         // A revoked set is revalidated once by the viewer's own session on the next attempt.
-                        current(key)?.let { sessions().end(it.server.id, it.user.id) }
+                        current(key)?.let {
+                            try {
+                                sessions.end(it.server.id, it.user.id)
+                            } finally {
+                                revocationRequests.trySend(Unit)
+                            }
+                        }
                     }
                     fail(key, entryId, attempt, result.reason)
                     return false
@@ -1121,7 +1134,7 @@ internal class DesktopOfflineEngine(
 
     /** Waits for the first load, for callers that need a settled answer (cold start). */
     suspend fun ready(): Map<String, OfflineLibrary> {
-        loadOnce().join()
+        start().join()
         return libraries.first()
     }
 

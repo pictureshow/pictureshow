@@ -50,7 +50,7 @@ interface JellyfinService {
 class JellyfinClient(
     private val client: HttpClient,
     private val identity: ClientIdentity,
-    private val probeConnectionHint: (String, Throwable) -> String? = { _, _ -> null }
+    private val probeConnectionHint: suspend (String, Throwable) -> String? = { _, _ -> null }
 ) : JellyfinService,
     CatalogService by CatalogClient(client, identity),
     SearchService by SearchClient(client, identity),
@@ -302,7 +302,7 @@ class JellyfinClient(
         secret: String? = null,
         expiryStatus: Boolean = false,
         timeoutMillis: Long = ApiTimeouts.REQUEST_MILLIS,
-        onNetworkFailure: (Throwable) -> Unit = {},
+        onNetworkFailure: suspend (Throwable) -> Unit = {},
         decode: (String) -> T
     ): ClientResult<T> = try {
         withTimeoutOrNull(timeoutMillis) {
