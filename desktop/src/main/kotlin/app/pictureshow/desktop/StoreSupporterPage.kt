@@ -39,7 +39,7 @@ internal enum class SupporterStore(
         "To manage or cancel, open the App Store, then choose your name, Account Settings, and Subscriptions.",
         "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/"),
     MICROSOFT("Microsoft Store", "Microsoft account",
-        "To manage or cancel, open the Microsoft Store, then choose your profile, Manage account and devices, and Subscriptions.",
+        "To manage or cancel, open the Microsoft Store, select your profile, then Subscriptions, or go to account.microsoft.com/services.",
         "https://www.microsoft.com/en-us/store/b/terms-of-sale"),
 }
 

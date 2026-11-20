@@ -89,7 +89,7 @@ class StoreSupporterPageTest {
         onNodeWithText("Thank you for supporting Pictureshow!").assertExists()
         onNodeWithText("Become a supporter").assertDoesNotExist()
         onNodeWithText("Manage or cancel in the Microsoft Store").performClick()
-        onNodeWithText("To manage or cancel, open the Microsoft Store, then choose your profile, Manage account and devices, and Subscriptions.").assertExists()
+        onNodeWithText("To manage or cancel, open the Microsoft Store, select your profile, then Subscriptions, or go to account.microsoft.com/services.").assertExists()
     }
 
     private class FakeStoreKit : StoreKitBridge {
