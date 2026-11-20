@@ -500,9 +500,9 @@ internal fun rememberPlaybackHost(
     catalog: CatalogSession,
     onNext: (MediaItem) -> Unit,
     onExit: () -> Unit,
-    providedOutput: Media3PlaybackOutput? = null
+    providedOutput: Media3PlaybackOutput? = null,
+    remote: RemoteTargetHost? = null
 ): PlaybackHostState {
-    val remote: RemoteTargetHost = koinInject()
     val host = rememberPlaybackHostState(account, item, startMs, onNext, onExit, providedOutput, remote)
     val paused by host.output.pauseIntent.collectAsState()
     PlaybackHostEffects(host, account, catalog, paused)
