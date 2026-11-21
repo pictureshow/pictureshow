@@ -13,6 +13,10 @@ plugins {
     id("com.mikepenz.aboutlibraries.plugin") version "15.3.0"
 }
 
+// Select the Amazon distribution explicitly so existing Play tasks, artifact paths and pilots stay stable.
+val fireTv = providers.gradleProperty("pictureshowFireTv").map(String::toBooleanStrict).getOrElse(false)
+val releaseVariant = if (fireTv) "fireRelease" else "release"
+
 android {
     namespace = "app.pictureshow"
     compileSdk = 37
@@ -23,6 +27,22 @@ android {
         targetSdk = 36
         versionCode = 43
         versionName = "0.3.0-rc41"
+        buildConfigField("boolean", "FIRE_TV", fireTv.toString())
+        manifestPlaceholders["assistantSearchAction"] =
+            if (fireTv) "android.intent.action.SEARCH" else "com.google.android.gms.actions.SEARCH_ACTION"
+    }
+    if (fireTv) {
+        flavorDimensions += "distribution"
+        productFlavors {
+            create("fire") {
+                dimension = "distribution"
+                minSdk = 28
+                ndk.abiFilters += listOf("armeabi-v7a", "arm64-v8a")
+            }
+        }
+    } else {
+        sourceSets.getByName("main").kotlin.srcDir("src/play/kotlin")
+        sourceSets.getByName("test").kotlin.srcDir("src/testPlay/kotlin")
     }
     buildTypes {
         getByName("release") {
@@ -89,9 +109,11 @@ androidComponents.onVariants { variant ->
 dependencies {
     implementation(project(":ui-shared"))
     implementation(project(":core"))
-    implementation(libs.play.billing)
-    implementation(libs.play.services.cast.framework)
-    implementation(libs.mediarouter)
+    if (!fireTv) {
+        implementation(libs.play.billing)
+        implementation(libs.play.services.cast.framework)
+        implementation(libs.mediarouter)
+    }
     implementation(libs.tvprovider)
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.exoplayer.hls)
@@ -136,21 +158,22 @@ dependencies {
     testImplementation(libs.ktor.client.mock)
 }
 
-tasks.named("check") { dependsOn("ktlintCheck", "lintDebug") }
+tasks.named("check") { dependsOn("ktlintCheck", if (fireTv) "lintFireDebug" else "lintDebug") }
 
 // Export only release metadata. The asset task also checks the actual runtime artifacts,
 // retains their embedded licenses/notices, and adds code outside Gradle's module graph.
 aboutLibraries {
     collect {
-        filterVariants.add("release")
+        filterVariants.add(releaseVariant)
         includePlatform = false
         fetchRemoteLicense = false
         fetchRemoteFunding = false
     }
     library { duplicationMode = com.mikepenz.aboutlibraries.plugin.DuplicateMode.KEEP }
     export {
-        variant = "release"
+        variant = releaseVariant
         outputFile = layout.buildDirectory.file("licenses/aboutlibraries.json").get().asFile
     }
 }
+extra["licenseReleaseVariant"] = releaseVariant
 apply(from = "licenses.gradle")

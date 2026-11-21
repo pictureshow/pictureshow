@@ -19,13 +19,14 @@ abstract class GenerateLicenseCatalog extends DefaultTask {
 // No runtime AboutLibraries/phone UI: explicit JSONObject keys and an asset survive
 // R8 without reflective model keep rules. Query artifacts only after AGP creates variants.
 def metadata = layout.buildDirectory.file('licenses/aboutlibraries.json')
+def releaseRuntime = configurations.named("${licenseReleaseVariant}RuntimeClasspath".toString())
 def catalogModule = { id ->
     if (id instanceof ModuleComponentIdentifier) return true
     if (id instanceof ProjectComponentIdentifier && id.projectPath in [':app', ':core', ':ui-shared', ':media3-ffmpeg', ':mpv']) return false
     throw new GradleException("Unmapped runtime dependency $id: publish module metadata or add an explicit license mapping.")
 }
 def runtimeArtifacts = providers.provider {
-    configurations.releaseRuntimeClasspath.incoming.artifactView { componentFilter(catalogModule) }.artifacts
+    releaseRuntime.get().incoming.artifactView { componentFilter(catalogModule) }.artifacts
 }
 def desugarArtifacts = providers.provider {
     configurations.coreLibraryDesugaring.incoming.artifactView { componentFilter(catalogModule) }.artifacts
@@ -64,7 +65,7 @@ embedded = { byte[] bytes, String prefix = '' ->
 // So the same POMs are fetched strictly first: a repository fault fails here and names the file, and the export,
 // which resolves its POMs again when it runs, reads them from the cache.
 def pomCoordinates = providers.provider {
-    [configurations.releaseRuntimeClasspath, configurations.coreLibraryDesugaring].collectMany {
+    [releaseRuntime.get(), configurations.coreLibraryDesugaring].collectMany {
         it.incoming.resolutionResult.allComponents.collect { it.id }.findAll { it instanceof ModuleComponentIdentifier }
             .collect { "${it.group}:${it.module}:${it.version}".toString() }
     }.unique()

@@ -35,7 +35,9 @@ import org.robolectric.annotation.Config
 
 /** The TV interface must never pay for Cast: not a class load, not a search, nothing at startup. */
 class CastSourceIsolationTest {
-    private val sources = File("src/main/kotlin/app/pictureshow").listFiles()!!.filter { it.extension == "kt" }
+    private val sources = listOf("main", "play").flatMap { source ->
+        File("src/$source/kotlin/app/pictureshow").listFiles()!!.filter { it.extension == "kt" }
+    }
 
     @Test fun onlyTheAdapterImportsTheSdk() {
         val importers = sources.filter { file ->

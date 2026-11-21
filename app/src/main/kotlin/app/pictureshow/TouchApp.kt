@@ -780,11 +780,15 @@ internal fun TouchPictureshow(
                 TouchLicense(library) { nav.popBackStack() }
             }
             composable("supporter") {
-                val owner = (context.applicationContext as PictureshowApplication).supporter
-                val screen by owner.state.collectAsStateWithLifecycle()
-                val activity = LocalActivity.current
-                LaunchedEffect(owner) { owner.refresh() }
-                TouchSupporter(screen, { activity?.let(owner::purchase) }) { nav.popBackStack() }
+                if (BuildConfig.FIRE_TV) {
+                    FireSupporterScreen { nav.popBackStack() }
+                } else {
+                    val owner = checkNotNull((context.applicationContext as PictureshowApplication).supporter)
+                    val screen by owner.state.collectAsStateWithLifecycle()
+                    val activity = LocalActivity.current
+                    LaunchedEffect(owner) { owner.refresh() }
+                    TouchSupporter(screen, { activity?.let(owner::purchase) }) { nav.popBackStack() }
+                }
             }
         }
     }

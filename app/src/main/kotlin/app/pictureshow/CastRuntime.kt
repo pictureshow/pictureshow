@@ -115,7 +115,7 @@ internal class AndroidCastEnvironment(private val context: Context, private val 
     override fun link(): CastLink {
         CastRuntime.linkBuilds += 1
         val main = Handler(Looper.getMainLooper())
-        return GmsCastLink(context) { main.post(it) }
+        return createPlatformCastLink(context) { main.post(it) }
     }
 
     override var enabled: Boolean

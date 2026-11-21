@@ -222,7 +222,7 @@ class SearchFollowupTest {
         external("  cloud  ")
         compose.onNodeWithTag("search:MOVIES:cloud").assertIsFocused()
         assertKeyboard(false)
-        external("lantern", ASSISTANT_SEARCH_ACTION)
+        external("lantern", if (BuildConfig.FIRE_TV) Intent.ACTION_SEARCH else ASSISTANT_SEARCH_ACTION)
         compose.onNodeWithTag("search:field").assertTextEquals("lantern")
         compose.onNodeWithTag("search:MOVIES:lantern").assertIsFocused()
         compose.runOnIdle { assertEquals("home", nav.previousBackStackEntry?.destination?.route) }
@@ -236,7 +236,7 @@ class SearchFollowupTest {
         compose.setContent { Harness() }
         key(Key.DirectionCenter)
         compose.onNodeWithTag("detail:play").assertIsFocused()
-        external("cloud", ASSISTANT_SEARCH_ACTION)
+        external("cloud", if (BuildConfig.FIRE_TV) Intent.ACTION_SEARCH else ASSISTANT_SEARCH_ACTION)
         compose.onNodeWithTag("search:MOVIES:cloud").assertIsFocused()
         compose.runOnIdle { assertEquals("item", nav.previousBackStackEntry?.destination?.route) }
         key(Key.Back)
@@ -253,7 +253,7 @@ class SearchFollowupTest {
         external("cloud")
         assertInputActive(false)
         compose.onNodeWithTag("search:MOVIES:cloud").assertIsFocused()
-        external("cloud", ASSISTANT_SEARCH_ACTION)
+        external("cloud", if (BuildConfig.FIRE_TV) Intent.ACTION_SEARCH else ASSISTANT_SEARCH_ACTION)
         compose.onNodeWithTag("search:MOVIES:cloud").assertIsFocused()
         compose.runOnIdle { assertEquals("home", nav.previousBackStackEntry?.destination?.route) }
     }

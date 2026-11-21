@@ -31,3 +31,27 @@ jobs:
             **/build/reports/tests/**
             app/build/outputs/apk/debug/*.apk
             **/build/reports/lint-results*
+  fire-tv:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6
+      - run: >-
+          ./gradlew -PpictureshowFireTv=true :app:testFireDebugUnitTest :app:lintFireDebug
+          :app:ktlintCheck :app:assembleFireDebug :app:assembleFireRelease
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: always()
+        with:
+          name: fire-tv-reports
+          retention-days: 5
+          path: |
+            app/build/test-results/testFireDebugUnitTest/**
+            app/build/reports/tests/testFireDebugUnitTest/**
+            app/build/reports/lint-results-fireDebug*
+            app/build/outputs/apk/fire/release/*-unsigned.apk
+            app/build/outputs/mapping/fireRelease/mapping.txt

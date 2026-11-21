@@ -30,6 +30,13 @@ internal fun Modifier.playerRemoteKeys(
         return@onPreviewKeyEvent true
     }
     if (!enabled) return@onPreviewKeyEvent false
+    if (BuildConfig.FIRE_TV && key == Key.Menu) {
+        if (event.type == KeyEventType.KeyUp) {
+            showControls()
+            interact()
+        }
+        return@onPreviewKeyEvent true
+    }
     val center = key == Key.DirectionCenter || key == Key.Enter || key == Key.NumPadEnter
     if (rootFocused && event.type == KeyEventType.KeyDown && (key == Key.DirectionLeft || key == Key.DirectionRight)) {
         val step = if (event.nativeKeyEvent.repeatCount >= 5) 30_000L else 10_000L

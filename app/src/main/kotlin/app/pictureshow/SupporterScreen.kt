@@ -49,12 +49,56 @@ import androidx.tv.material3.Text
 /** The activity and focus regression use the same route. */
 internal fun NavGraphBuilder.supporterScreen(nav: NavHostController, controller: SupporterController? = null) {
     composable("supporter") {
-        val context = LocalContext.current
-        val owner = controller ?: (context.applicationContext as PictureshowApplication).supporter
-        val state by owner.state.collectAsStateWithLifecycle()
-        LaunchedEffect(owner) { owner.refresh() }
-        SupporterScreen(state, onPurchase = { context.activity()?.let(owner::purchase) }, onBack = { nav.popBackStack() })
+        if (BuildConfig.FIRE_TV) {
+            FireSupporterScreen { nav.popBackStack() }
+        } else {
+            val context = LocalContext.current
+            val owner = controller ?: checkNotNull((context.applicationContext as PictureshowApplication).supporter)
+            val state by owner.state.collectAsStateWithLifecycle()
+            LaunchedEffect(owner) { owner.refresh() }
+            SupporterScreen(state, onPurchase = { context.activity()?.let(owner::purchase) }, onBack = { nav.popBackStack() })
+        }
     }
+}
+
+@Composable
+internal fun FireSupporterScreen(onBack: () -> Unit) {
+    BackHandler(onBack = onBack)
+    val context = LocalContext.current
+    val first = remember { FocusRequester() }
+    var browserUnavailable by remember { mutableStateOf(false) }
+    Column(
+        Modifier.fillMaxSize().background(Color(0xFF10131C)).verticalScroll(rememberScrollState()).padding(48.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Text(
+            stringResource(R.string.supporter_title),
+            style = MaterialTheme.typography.headlineLarge,
+            modifier = Modifier.semantics { heading() }
+        )
+        Text(stringResource(R.string.fire_supporter_description))
+        if (browserUnavailable) {
+            UnavailableReason(stringResource(R.string.fire_supporter_browser_unavailable), Modifier.focusRequester(first))
+        } else {
+            Button(
+                onClick = {
+                    val website = Intent(Intent.ACTION_VIEW, "https://pictureshow.app/".toUri()).addCategory(Intent.CATEGORY_BROWSABLE)
+                    try {
+                        context.startActivity(website)
+                    } catch (_: ActivityNotFoundException) {
+                        browserUnavailable = true
+                    } catch (_: SecurityException) {
+                        browserUnavailable = true
+                    }
+                },
+                modifier = Modifier.focusRequester(first).testTag("supporter:website")
+            ) {
+                Text(stringResource(R.string.fire_supporter_website))
+            }
+        }
+        Button(onClick = onBack, modifier = Modifier.testTag("supporter:back")) { Text(stringResource(R.string.supporter_back)) }
+    }
+    LaunchedEffect(browserUnavailable) { first.requestFocus() }
 }
 
 private fun Context.activity(): Activity? = when (this) {

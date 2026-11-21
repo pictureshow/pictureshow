@@ -18,6 +18,8 @@ import com.android.billingclient.api.QueryPurchasesParams
 import kotlin.coroutines.resume
 import kotlinx.coroutines.suspendCancellableCoroutine
 
+internal fun storeSupporterBilling(context: Context): SupporterBilling? = PlaySupporterBilling(context)
+
 /** Only the auto-renewing monthly base plan is offered; trials/prepaid/promotional offers are not selected. */
 internal fun monthlySupporterOffer(details: ProductDetails): Pair<SupporterProduct, String>? {
     if (details.productId != "supporter" || details.productType != BillingClient.ProductType.SUBS) return null

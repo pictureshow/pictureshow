@@ -9,6 +9,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.content.res.Configuration
 import androidx.test.core.app.ApplicationProvider
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import org.junit.Test
@@ -42,9 +43,9 @@ class InterfaceModeTest {
     fun phoneAndTabletUseTouchInterfaceIndependentlyOfCurrentInputHardware() {
         shadowOf(mode).setCurrentModeType(Configuration.UI_MODE_TYPE_NORMAL)
         shadowOf(context.packageManager).setSystemFeature(PackageManager.FEATURE_TOUCHSCREEN, true)
-        assertFalse(usesTvInterface(context))
+        assertEquals(BuildConfig.FIRE_TV, usesTvInterface(context))
         shadowOf(context.packageManager).setSystemFeature(PackageManager.FEATURE_TOUCHSCREEN, false)
-        assertFalse(usesTvInterface(context))
+        assertEquals(BuildConfig.FIRE_TV, usesTvInterface(context))
         assertFalse(isTvInterface(Configuration.UI_MODE_TYPE_UNDEFINED))
     }
 }

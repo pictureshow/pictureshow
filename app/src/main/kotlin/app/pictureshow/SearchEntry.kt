@@ -13,7 +13,8 @@ import app.pictureshow.core.normalizeSearch
 const val ASSISTANT_SEARCH_ACTION = "com.google.android.gms.actions.SEARCH_ACTION"
 
 fun parseSearchIntent(intent: Intent): String? {
-    if (intent.action !in listOf(Intent.ACTION_SEARCH, ASSISTANT_SEARCH_ACTION)) return null
+    val action = intent.action
+    if (action != Intent.ACTION_SEARCH && (BuildConfig.FIRE_TV || action != ASSISTANT_SEARCH_ACTION)) return null
     return normalizeSearch(intent.getStringExtra(SearchManager.QUERY).orEmpty()).takeIf { it.isNotEmpty() }
 }
 

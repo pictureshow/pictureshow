@@ -75,6 +75,8 @@ internal fun castServicesState(context: Context): String = runCatching {
     }
 }.getOrDefault("missing")
 
+internal fun createPlatformCastLink(context: Context, mainExecutor: Executor): CastLink = GmsCastLink(context, mainExecutor)
+
 /**
  * The adapter over the SDK's session, router and media client. We use RemoteMediaClient directly instead of Media3's
  * RemoteCastPlayer because the handoff needs the receiver's own player state, idle reason, media session id, current

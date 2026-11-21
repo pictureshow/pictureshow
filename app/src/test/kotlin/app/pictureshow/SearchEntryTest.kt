@@ -14,6 +14,7 @@ import app.pictureshow.core.SEARCH_QUERY_LIMIT
 import app.pictureshow.core.Server
 import app.pictureshow.core.User
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.junit.Test
@@ -25,10 +26,11 @@ import org.robolectric.annotation.Config
 @Config(sdk = [30], application = Application::class)
 class SearchEntryTest {
     private val account = Account(Server("server", "Test", "https://media.example.test/base", "12"), User("user", "Viewer"), "token")
+    private val actions = if (BuildConfig.FIRE_TV) listOf(Intent.ACTION_SEARCH) else listOf(Intent.ACTION_SEARCH, ASSISTANT_SEARCH_ACTION)
 
     @Test
-    fun bothActionsTrimCapAndPreserveSpecialCharactersWhileIgnoringEmptyOrUnrelatedIntents() {
-        listOf(Intent.ACTION_SEARCH, ASSISTANT_SEARCH_ACTION).forEach { action ->
+    fun supportedActionsTrimCapAndPreserveSpecialCharactersWhileIgnoringEmptyOrUnrelatedIntents() {
+        actions.forEach { action ->
             val intent = Intent(action).putExtra(SearchManager.QUERY, "  cloud \"orb\" & # 日本語  ")
             assertEquals("cloud \"orb\" & # 日本語", parseSearchIntent(intent))
             assertEquals(SEARCH_QUERY_LIMIT, parseSearchIntent(Intent(action).putExtra(SearchManager.QUERY, "x".repeat(500)))!!.length)
@@ -39,11 +41,16 @@ class SearchEntryTest {
     }
 
     @Test
-    fun manifestRegistersBothSearchActionsOnTheExportedMainActivity() {
+    fun manifestRegistersStoreAppropriateSearchActionsOnTheExportedMainActivity() {
         val app = ApplicationProvider.getApplicationContext<Application>()
-        listOf(Intent.ACTION_SEARCH, ASSISTANT_SEARCH_ACTION).forEach { action ->
+        actions.forEach { action ->
             val matches = app.packageManager.queryIntentActivities(Intent(action).setPackage(app.packageName), 0)
             assertTrue(matches.any { it.activityInfo.name == MainActivity::class.java.name && it.activityInfo.exported })
+        }
+        if (BuildConfig.FIRE_TV) {
+            val google = Intent(ASSISTANT_SEARCH_ACTION).setPackage(app.packageName).putExtra(SearchManager.QUERY, "cloud")
+            assertFalse(app.packageManager.queryIntentActivities(google, 0).any { it.activityInfo.name == MainActivity::class.java.name })
+            assertNull(parseSearchIntent(google))
         }
     }
 

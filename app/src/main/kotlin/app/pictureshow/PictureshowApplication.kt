@@ -44,13 +44,13 @@ class PictureshowApplication : Application() {
     internal var relockObserver: ProfileRelockObserver? = null
         private set
     internal val supporter by lazy {
-        SupporterController(
-            PlaySupporterBilling(this),
-            SupporterStore(preferences),
-            CoroutineScope(
-                SupervisorJob() + Dispatchers.Main.immediate
+        storeSupporterBilling(this)?.let { billing ->
+            SupporterController(
+                billing,
+                SupporterStore(preferences),
+                CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
             )
-        )
+        }
     }
     private var watchNext: WatchNextCoordinator? = null
 
@@ -265,7 +265,7 @@ class PictureshowApplication : Application() {
         }
         val koin = dependencyGraph.koin
         val lock = koin.get<app.pictureshow.core.ProfileLockStore>()
-        if (usesTvInterface(this)) {
+        if (usesTvInterface(this) && !BuildConfig.FIRE_TV) {
             watchNext = WatchNextCoordinator(
                 this,
                 dependencyGraph.koin.get(),
