@@ -86,7 +86,7 @@ class FireDistributionTest {
         assertEquals(28, app.applicationInfo.minSdkVersion)
         assertEquals(36, app.applicationInfo.targetSdkVersion)
         assertTrue(app.applicationInfo.banner != 0 && app.applicationInfo.icon != 0)
-        assertFalse(info.requestedPermissions.orEmpty().any { it == "com.android.vending.BILLING" || it.endsWith("WRITE_EPG_DATA") })
+        assertFalse(info.requestedPermissions.orEmpty().any { it == "com.android.vending.BILLING" || it.endsWith("_EPG_DATA") })
         val metadata = pm.getApplicationInfo(packageName, PackageManager.GET_META_DATA).metaData
         assertNull(metadata?.getString("com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME"))
     }
