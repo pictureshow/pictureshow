@@ -33,7 +33,8 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 
 @androidx.annotation.ChecksSdkIntAtLeast(api = 26)
-internal fun supportsWatchNext(context: Context): Boolean = !BuildConfig.FIRE_TV && Build.VERSION.SDK_INT >= 26 &&
+internal fun supportsWatchNext(context: Context): Boolean = !BuildConfig.FIRE_TV &&
+    Build.VERSION.SDK_INT >= 26 &&
     context.packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK) &&
     context.packageManager.resolveContentProvider(TvContractCompat.AUTHORITY, 0) != null
 

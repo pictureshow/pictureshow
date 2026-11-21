@@ -207,7 +207,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
-        lifecycleScope.launch { (application as PictureshowApplication).supporter.refresh() }
+        lifecycleScope.launch { (application as PictureshowApplication).supporter?.refresh() }
         remoteTarget.setForeground(true)
     }
 
