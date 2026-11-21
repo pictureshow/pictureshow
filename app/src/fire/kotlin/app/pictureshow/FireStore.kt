@@ -13,5 +13,4 @@ internal fun storeSupporterBilling(context: Context): SupporterBilling? = null
 internal fun castServicesState(context: Context): String = "missing"
 
 @Suppress("UNUSED_PARAMETER")
-internal fun createPlatformCastLink(context: Context, mainExecutor: Executor): CastLink =
-    error("Google Cast is unavailable on Fire TV")
+internal fun createPlatformCastLink(context: Context, mainExecutor: Executor): CastLink = error("No Cast on Fire TV")

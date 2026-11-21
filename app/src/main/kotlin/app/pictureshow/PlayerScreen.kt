@@ -362,6 +362,15 @@ internal fun PlayerItemScreen(
         interaction++
     }
 
+    fun hideControls() {
+        controls = false
+        lastAction.hidden(android.os.SystemClock.uptimeMillis())
+        if (accessibleControls) controlsFeedback = CONTROLS_HIDDEN_FEEDBACK
+        val focusMoves = !rootFocused
+        val focused = rootFocus.requestFocus()
+        focusSpeaksControlsHidden = accessibleControls && focusMoves && focused
+    }
+
     fun handleBack() {
         when {
             switching -> finish(reason = "back-during-next")
@@ -387,14 +396,7 @@ internal fun PlayerItemScreen(
                 chooserRequest = null
             }
 
-            controls -> {
-                controls = false
-                lastAction.hidden(android.os.SystemClock.uptimeMillis())
-                if (accessibleControls) controlsFeedback = CONTROLS_HIDDEN_FEEDBACK
-                val focusMoves = !rootFocused
-                val focused = rootFocus.requestFocus()
-                focusSpeaksControlsHidden = accessibleControls && focusMoves && focused
-            }
+            controls -> hideControls()
 
             else -> finish(reason = "back")
         }
@@ -566,7 +568,7 @@ internal fun PlayerItemScreen(
                     showControls = ::showRemoteControls,
                     interact = { interaction++ },
                     back = ::handleBack,
-                    menu = { if (controls) handleBack() else showRemoteControls() },
+                    menu = { if (controls) hideControls() else showRemoteControls() },
                     skip = activeSegment(segments, position, localPreferences.segmentModes)
                         ?.takeIf { (localPreferences.segmentModes[it.type] ?: SegmentMode.Ask) == SegmentMode.Ask }
                         ?.let { segment ->
