@@ -34,7 +34,9 @@ import org.robolectric.annotation.LooperMode
 @Config(sdk = [30], application = Application::class, qualifiers = "w960dp-h540dp-land-xhdpi")
 @LooperMode(LooperMode.Mode.PAUSED)
 class FireSupporterScreenTest {
-    @get:Rule(order = -2) val timeLimit = PerTestTimeLimit(180)
+    @get:Rule(order = -2)
+    val timeLimit = PerTestTimeLimit(180)
+
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
     @Test
@@ -58,9 +60,7 @@ class FireSupporterScreenTest {
     fun missingBrowserLeavesAReadableFallbackAndRemoteBack() {
         var left = false
         val noBrowser = object : ContextWrapper(compose.activity) {
-            override fun startActivity(intent: Intent) {
-                throw ActivityNotFoundException()
-            }
+            override fun startActivity(intent: Intent) = throw ActivityNotFoundException()
         }
         compose.setContent {
             CompositionLocalProvider(LocalContext provides noBrowser) {

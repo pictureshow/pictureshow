@@ -58,12 +58,13 @@ class FireDistributionTest {
     fun fireDoesNotPublishWatchNextEvenIfTheDeviceAdvertisesTheAndroidProvider() {
         val pm = app.packageManager
         shadowOf(pm).setSystemFeature(PackageManager.FEATURE_LEANBACK, true)
-        shadowOf(pm).addOrUpdateProvider(ProviderInfo().apply {
+        val provider = ProviderInfo().apply {
             authority = TvContractCompat.AUTHORITY
             name = "TestTvProvider"
             packageName = app.packageName
             applicationInfo = app.applicationInfo
-        })
+        }
+        shadowOf(pm).addOrUpdateProvider(provider)
         assertNotNull(pm.resolveContentProvider(TvContractCompat.AUTHORITY, 0))
         assertFalse(supportsWatchNext(app))
     }
