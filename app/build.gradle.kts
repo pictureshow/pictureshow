@@ -92,6 +92,10 @@ android {
         checkDependencies = true
         // The brief deliberately targets API 36 while compiling against 37.
         disable += "OldTargetApi"
+        if (fireTv) {
+            // Fire TV targets ARM. The shared sources and resources also serve Play devices below API 28.
+            disable += setOf("ChromeOsAbiSupport", "ObsoleteSdkInt")
+        }
     }
 }
 kotlin {

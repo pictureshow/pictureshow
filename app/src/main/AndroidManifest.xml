@@ -35,8 +35,8 @@
         android:theme="@style/Theme.Pictureshow"
         android:usesCleartextTraffic="true"
         tools:ignore="AllowBackup,UnusedAttribute">
-        <service android:name="com.google.android.gms.cast.framework.ReconnectionService" tools:node="remove" />
-        <receiver android:name="com.google.android.gms.cast.framework.media.MediaIntentReceiver" tools:node="remove" />
+        <service android:name="com.google.android.gms.cast.framework.ReconnectionService" tools:node="remove" tools:ignore="MissingClass" />
+        <receiver android:name="com.google.android.gms.cast.framework.media.MediaIntentReceiver" tools:node="remove" tools:ignore="MissingClass" />
         <meta-data
             android:name="com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME"
             android:value="app.pictureshow.CastOptionsProvider" />
