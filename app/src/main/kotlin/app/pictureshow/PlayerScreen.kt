@@ -540,6 +540,13 @@ internal fun PlayerItemScreen(
         lastAction.hidden(android.os.SystemClock.uptimeMillis())
         rootFocus.requestFocus()
     }
+    fun showRemoteControls() {
+        controls = true
+        if (rootFocused) {
+            focusControls = true
+            preferLastAction = true
+        }
+    }
     PlayerSeekHost((seekOpen || extraPanel != null) && error == null && !switching, player = {
         Box(
             Modifier.fillMaxSize().background(Color.Black).testTag("player:surface")
@@ -556,15 +563,10 @@ internal fun PlayerItemScreen(
                     enabled = chooser == null && extraPanel == null && !chaptersOpen && !seekOpen && error == null && !switching,
                     rootFocused = rootFocused,
                     seek = ::keySeek,
-                    showControls = {
-                        controls = true
-                        if (rootFocused) {
-                            focusControls = true
-                            preferLastAction = true
-                        }
-                    },
+                    showControls = ::showRemoteControls,
                     interact = { interaction++ },
                     back = ::handleBack,
+                    menu = { if (controls) handleBack() else showRemoteControls() },
                     skip = activeSegment(segments, position, localPreferences.segmentModes)
                         ?.takeIf { (localPreferences.segmentModes[it.type] ?: SegmentMode.Ask) == SegmentMode.Ask }
                         ?.let { segment ->

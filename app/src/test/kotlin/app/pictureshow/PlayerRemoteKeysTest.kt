@@ -44,19 +44,21 @@ class PlayerRemoteKeysTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>(effectContext = kotlinx.coroutines.test.StandardTestDispatcher())
 
     @Test
-    fun menuRevealsControlsOnceOnFireWhileLeavingPlayBehaviorAlone() {
+    fun menuTogglesControlsOnceOnFireWhileLeavingPlayBehaviorAlone() {
         val root = FocusRequester()
-        var shows = 0
+        var toggles = 0
         compose.setContent {
             MaterialTheme {
                 Column(
-                    Modifier.focusRequester(root).playerRemoteKeys(true, true, {}, { shows++ }, {}, back = {}).focusable()
+                    Modifier.focusRequester(root)
+                        .playerRemoteKeys(true, true, {}, {}, {}, back = {}, menu = { toggles++ })
+                        .focusable()
                 ) {}
             }
         }
         compose.runOnIdle { root.requestFocus() }
         compose.onRoot().performKeyInput { pressKey(Key.Menu) }
-        compose.runOnIdle { assertEquals(if (BuildConfig.FIRE_TV) 1 else 0, shows) }
+        compose.runOnIdle { assertEquals(if (BuildConfig.FIRE_TV) 1 else 0, toggles) }
     }
 
     @Test

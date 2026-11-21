@@ -1,7 +1,7 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
     <string name="app_name">Pictureshow</string>
     <string name="supporter_title">Support Pictureshow</string>
-    <string name="fire_supporter_description">Learn how to support Pictureshow at pictureshow.app.</string>
+    <string name="fire_supporter_description">Pictureshow is free and open source. Visit the project website.</string>
     <string name="fire_supporter_website">Visit pictureshow.app</string>
     <string name="fire_supporter_browser_unavailable">This TV couldn’t open the website. Visit pictureshow.app on another device.</string>
     <string name="supporter_description">Pictureshow is free and open source. Supporters pay monthly to have their feature requests read and considered first.</string>

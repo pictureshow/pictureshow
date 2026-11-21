@@ -22,7 +22,8 @@ internal fun Modifier.playerRemoteKeys(
     showControls: () -> Unit,
     interact: () -> Unit,
     back: () -> Unit,
-    skip: (() -> Unit)? = null
+    skip: (() -> Unit)? = null,
+    menu: (() -> Unit)? = null
 ): Modifier = onPreviewKeyEvent { event ->
     val key = event.key
     if (key == Key.Back) {
@@ -30,9 +31,9 @@ internal fun Modifier.playerRemoteKeys(
         return@onPreviewKeyEvent true
     }
     if (!enabled) return@onPreviewKeyEvent false
-    if (BuildConfig.FIRE_TV && key == Key.Menu) {
+    if (BuildConfig.FIRE_TV && key == Key.Menu && menu != null) {
         if (event.type == KeyEventType.KeyUp) {
-            showControls()
+            menu()
             interact()
         }
         return@onPreviewKeyEvent true

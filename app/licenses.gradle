@@ -19,7 +19,7 @@ abstract class GenerateLicenseCatalog extends DefaultTask {
 // No runtime AboutLibraries/phone UI: explicit JSONObject keys and an asset survive
 // R8 without reflective model keep rules. Query artifacts only after AGP creates variants.
 def metadata = layout.buildDirectory.file('licenses/aboutlibraries.json')
-def releaseRuntime = configurations.named("${licenseReleaseVariant}RuntimeClasspath".toString())
+def releaseRuntime = providers.provider { configurations.getByName("${licenseReleaseVariant}RuntimeClasspath".toString()) }
 def catalogModule = { id ->
     if (id instanceof ModuleComponentIdentifier) return true
     if (id instanceof ProjectComponentIdentifier && id.projectPath in [':app', ':core', ':ui-shared', ':media3-ffmpeg', ':mpv']) return false
