@@ -141,9 +141,8 @@ class AboutLicensesTest {
             assertTrue(rows.any { it.getString("id") == id }, "Missing runtime library $id")
         }
         if (BuildConfig.FIRE_TV) {
-            val playOnly = rows.map { it.getString("id") }.filter { id ->
-                id.startsWith("com.android.billingclient:") || id.startsWith("com.google.android.gms:") || id.startsWith("androidx.mediarouter:")
-            }
+            val playOnlyPrefixes = listOf("com.android.billingclient:", "com.google.android.gms:", "androidx.mediarouter:")
+            val playOnly = rows.map { it.getString("id") }.filter { id -> playOnlyPrefixes.any { prefix -> id.startsWith(prefix) } }
             assertTrue(playOnly.isEmpty(), "Unexpected Play dependencies $playOnly")
         } else {
             val billing = rows.single { it.getString("id") == "com.android.billingclient:billing" }
