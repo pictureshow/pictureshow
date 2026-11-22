@@ -134,18 +134,24 @@ class AboutLicensesTest {
         val rows = catalog()
         listOf(
             "androidx.media3:media3-exoplayer",
-            "com.android.billingclient:billing",
             "com.squareup.okhttp3:okhttp-android",
             "org.jetbrains.kotlin:kotlin-stdlib",
             "com.squareup.okio:okio-jvm"
         ).forEach { id ->
             assertTrue(rows.any { it.getString("id") == id }, "Missing runtime library $id")
         }
-        val billing = rows.single { it.getString("id") == "com.android.billingclient:billing" }
-        assertEquals("9.1.0", billing.getString("version"))
-        assertEquals("ASDKL", billing.getString("license"))
-        assertTrue(billing.getString("text").contains("14.7"))
-        assertTrue(billing.getString("text").contains("April 28, 2026"))
+        if (BuildConfig.FIRE_TV) {
+            val playOnly = rows.map { it.getString("id") }.filter { id ->
+                id.startsWith("com.android.billingclient:") || id.startsWith("com.google.android.gms:") || id.startsWith("androidx.mediarouter:")
+            }
+            assertTrue(playOnly.isEmpty(), "Unexpected Play dependencies $playOnly")
+        } else {
+            val billing = rows.single { it.getString("id") == "com.android.billingclient:billing" }
+            assertEquals("9.1.0", billing.getString("version"))
+            assertEquals("ASDKL", billing.getString("license"))
+            assertTrue(billing.getString("text").contains("14.7"))
+            assertTrue(billing.getString("text").contains("April 28, 2026"))
+        }
         val desugar = rows.single { it.getString("id") == "com.android.tools:desugar_jdk_libs" }
         assertEquals("2.1.5", desugar.getString("version"))
         assertEquals("GPL-2.0-only WITH Classpath-exception-2.0 AND Apache-2.0", desugar.getString("license"))

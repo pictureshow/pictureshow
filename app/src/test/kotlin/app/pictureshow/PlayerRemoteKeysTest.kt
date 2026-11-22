@@ -4,6 +4,7 @@
 package app.pictureshow
 
 import android.app.Application
+import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Column
@@ -46,18 +47,22 @@ class PlayerRemoteKeysTest {
     @Test
     fun menuTogglesControlsOnceOnFireWhileLeavingPlayBehaviorAlone() {
         val root = FocusRequester()
+        var focused = false
         var toggles = 0
         compose.setContent {
             MaterialTheme {
                 Column(
-                    Modifier.focusRequester(root)
+                    Modifier.focusRequester(root).onFocusChanged { focused = it.isFocused }
                         .playerRemoteKeys(true, true, {}, {}, {}, back = {}, menu = { toggles++ })
                         .focusable()
-                ) {}
+                ) { Text("Playback surface") }
             }
         }
         compose.runOnIdle { root.requestFocus() }
-        compose.onRoot().performKeyInput { pressKey(Key.Menu) }
+        compose.runOnIdle {
+            assertEquals(true, focused)
+            compose.activity.pressRemoteKey(KeyEvent.KEYCODE_MENU)
+        }
         compose.runOnIdle { assertEquals(if (BuildConfig.FIRE_TV) 1 else 0, toggles) }
     }
 

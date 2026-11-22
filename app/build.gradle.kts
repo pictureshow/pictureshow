@@ -34,6 +34,8 @@ android {
     if (fireTv) {
         flavorDimensions += "distribution"
         productFlavors {
+            // Gradle lint reads this block during Play lint too. Fire TV only ships ARM hardware.
+            @Suppress("ChromeOsAbiSupport")
             create("fire") {
                 dimension = "distribution"
                 minSdk = 28
@@ -76,6 +78,21 @@ android {
         unitTests.isIncludeAndroidResources = true
         // Robolectric API 36 initializes ApplicationSharedMemory through the JDK file-descriptor bridge.
         unitTests.all {
+            if (fireTv) {
+                // Play's full check covers the shared suite, including phone layouts and pre-28 manifests.
+                // This suite exercises the Fire distribution and the shared entry points it changes.
+                listOf(
+                    "FireDistributionTest",
+                    "FireSupporterScreenTest",
+                    "AboutLicensesTest",
+                    "InterfaceModeTest",
+                    "PlayerRemoteKeysTest",
+                    "ActivityMediaKeysTest",
+                    "AnonymousMediaButtonsTest",
+                    "SearchEntryTest",
+                    "SearchFollowupTest"
+                ).forEach { suite -> it.filter.includeTestsMatching("app.pictureshow.$suite") }
+            }
             it.jvmArgs("--add-exports=java.base/jdk.internal.access=ALL-UNNAMED")
             // Robolectric keeps bitmaps on the JVM heap: at 2,022 tests the default 512 MB ran out in TrickplayCacheTest, twice in a row.
             it.maxHeapSize = "1g"
@@ -93,8 +110,8 @@ android {
         // The brief deliberately targets API 36 while compiling against 37.
         disable += "OldTargetApi"
         if (fireTv) {
-            // Fire TV targets ARM. The shared sources and resources also serve Play devices below API 28.
-            disable += setOf("ChromeOsAbiSupport", "ObsoleteSdkInt")
+            // The shared sources and resources also serve Play devices below API 28.
+            disable += "ObsoleteSdkInt"
         }
     }
 }
