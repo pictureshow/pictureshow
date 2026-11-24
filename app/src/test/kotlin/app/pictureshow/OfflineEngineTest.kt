@@ -1376,6 +1376,47 @@ class OfflineEngineTest {
         assertEquals("Downloads", offlineNotificationTitle(listOf("", "")))
     }
 
+    @Test
+    fun `the notification names the album or series the viewer asked for`() {
+        fun entry(id: String, kind: OfflineMediaKind, labels: OfflineLabels, phase: OfflinePhase = OfflinePhase.transferring) =
+            OfflineEntry(id = id, itemId = id, kind = kind, preset = original, labels = labels, job = OfflineJob(phase))
+        val track1 = entry("t1", OfflineMediaKind.audio, OfflineLabels(title = "Thunderdays", album = "Promo"), OfflinePhase.preparing)
+        val track2 = entry("t2", OfflineMediaKind.audio, OfflineLabels(title = "Outro", album = "Promo"))
+        val otherTrack = entry("t3", OfflineMediaKind.audio, OfflineLabels(title = "Secret", album = "Hidden"))
+        val albumLibraries = mapOf(
+            "me" to OfflineLibrary(OfflineManifest(entries = listOf(track1, track2))),
+            "other" to OfflineLibrary(OfflineManifest(entries = listOf(otherTrack)))
+        )
+        val albumTitles = offlineForegroundTitles(albumLibraries, "me")
+        assertEquals(listOf("Promo", "Promo", ""), albumTitles)
+        assertEquals("Promo", offlineNotificationTitle(albumTitles))
+        assertEquals("Downloads", offlineNotificationTitle(offlineForegroundTitles(albumLibraries, "nobody")))
+
+        val episode = entry(
+            "e1",
+            OfflineMediaKind.episode,
+            OfflineLabels(title = "Pilot", seriesName = "Columbo"),
+            OfflinePhase.verifying
+        )
+        val seriesTitles = offlineForegroundTitles(mapOf("me" to OfflineLibrary(OfflineManifest(entries = listOf(episode)))), "me")
+        assertEquals(listOf("Columbo"), seriesTitles)
+        assertEquals("Columbo", offlineNotificationTitle(seriesTitles))
+
+        val fallbacks = listOf(
+            entry("a1", OfflineMediaKind.audio, OfflineLabels(title = "Single", album = null)),
+            entry("a2", OfflineMediaKind.audio, OfflineLabels(title = "Blank album", album = "   ")),
+            entry("s1", OfflineMediaKind.episode, OfflineLabels(title = "Special", seriesName = null)),
+            entry("s2", OfflineMediaKind.episode, OfflineLabels(title = "Blank series", seriesName = "")),
+            entry("m1", OfflineMediaKind.movie, OfflineLabels(title = "Feature", album = "Ignored", seriesName = "Ignored")),
+            entry("b1", OfflineMediaKind.movie, OfflineLabels(title = "   "))
+        )
+        assertEquals(
+            listOf("Single", "Blank album", "Special", "Blank series", "Feature", ""),
+            offlineForegroundTitles(mapOf("me" to OfflineLibrary(OfflineManifest(entries = fallbacks))), "me")
+        )
+        assertEquals("Downloads", offlineNotificationTitle(listOf("   ", "")))
+    }
+
     /** What a kill between the rename and the save leaves. */
     private suspend fun stopAndForgetFinish(engine: OfflineEngine, key: String, entry: String) {
         scopes.forEach { it.cancel() }

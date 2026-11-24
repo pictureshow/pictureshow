@@ -18,6 +18,7 @@ import app.pictureshow.core.offline.OfflineCollection
 import app.pictureshow.core.offline.OfflineEntry
 import app.pictureshow.core.offline.OfflineJobEvent
 import app.pictureshow.core.offline.OfflineManifest
+import app.pictureshow.core.offline.OfflineMediaKind
 import app.pictureshow.core.offline.OfflinePhase
 import app.pictureshow.core.offline.OfflineResource
 import app.pictureshow.core.offline.OfflineUserData
@@ -1199,9 +1200,19 @@ internal fun offlineForegroundTitles(libraries: Map<String, OfflineLibrary>, cur
     fun running(library: OfflineLibrary) = library.manifest.entries.filter {
         it.job.phase == OfflinePhase.preparing || it.job.phase == OfflinePhase.transferring || it.job.phase == OfflinePhase.verifying
     }
-    val mine = libraries[currentKey]?.let(::running).orEmpty().map { it.labels.title }
+    val mine = libraries[currentKey]?.let(::running).orEmpty().map(OfflineEntry::foregroundTitle)
     val others = libraries.filterKeys { it != currentKey }.values.flatMap(::running).map { "" }
     return mine + others
+}
+
+/** Names what the viewer asked to download: a track's album or an episode's series when present, else its own title. */
+private fun OfflineEntry.foregroundTitle(): String {
+    val container = when (kind) {
+        OfflineMediaKind.audio -> labels.album
+        OfflineMediaKind.episode -> labels.seriesName
+        OfflineMediaKind.movie -> null
+    }
+    return container?.takeIf(String::isNotBlank) ?: labels.title.takeIf(String::isNotBlank).orEmpty()
 }
 
 private data class OfflineUnreachable(val tries: Int, val untilMs: Long)

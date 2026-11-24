@@ -45,8 +45,8 @@ internal const val OFFLINE_JOB_WAITING_MS = 15 * 60_000L
 internal const val OFFLINE_RECOVERY_RETRY_MS = 60_000L
 private const val OFFLINE_JOB_HOLD_LOOK_MS = 2_000L
 
-/** Another viewer's download counts but has no name here: see [offlineForegroundTitles]. */
-internal fun offlineNotificationTitle(titles: List<String>): String = titles.firstOrNull { it.isNotEmpty() } ?: OFFLINE_CHANNEL_NAME
+/** First nameable running download, else "Downloads"; another viewer's counts as blank (see [offlineForegroundTitles]). */
+internal fun offlineNotificationTitle(titles: List<String>): String = titles.firstOrNull(String::isNotBlank) ?: OFFLINE_CHANNEL_NAME
 
 internal fun offlineNotification(context: Context, titles: List<String>): Notification {
     val manager = context.getSystemService(NotificationManager::class.java)
