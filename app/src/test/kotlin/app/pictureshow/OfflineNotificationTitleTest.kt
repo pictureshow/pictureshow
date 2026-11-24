@@ -33,14 +33,16 @@ class OfflineNotificationTitleTest {
     @Test
     fun `episodes are named for their show, a movie for itself`() {
         assertEquals("Columbo" to 1, title(entry("e", OfflineMediaKind.episode, OfflineLabels(title = "Pilot", seriesName = "Columbo"))))
-        assertEquals("Sintel" to 1, title(entry("m", OfflineMediaKind.movie, OfflineLabels(title = "Sintel", album = "x", seriesName = "y"))))
+        val movie = OfflineLabels(title = "Sintel", album = "x", seriesName = "y")
+        assertEquals("Sintel" to 1, title(entry("m", OfflineMediaKind.movie, movie)))
     }
 
     @Test
     fun `a missing or blank album or show falls back to the item, and nothing nameable says Downloads`() {
         assertEquals("Lone" to 1, title(entry("t", OfflineMediaKind.audio, OfflineLabels(title = "Lone", album = "  "))))
         assertEquals("Ep" to 1, title(entry("e", OfflineMediaKind.episode, OfflineLabels(title = "Ep"))))
-        assertEquals("Downloads" to 1, title(entry("t", OfflineMediaKind.audio, OfflineLabels(title = "Lone", album = "Promo")), key = null))
-        assertEquals("Downloads" to 0, title(entry("d", OfflineMediaKind.audio, OfflineLabels(title = "Done", album = "Promo"), OfflinePhase.ready)))
+        val promo = OfflineLabels(title = "Lone", album = "Promo")
+        assertEquals("Downloads" to 1, title(entry("t", OfflineMediaKind.audio, promo), key = null))
+        assertEquals("Downloads" to 0, title(entry("d", OfflineMediaKind.audio, promo, OfflinePhase.ready)))
     }
 }
