@@ -13,6 +13,7 @@
 		06519DF114D2428C05B55CEA /* OfflineAppTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81EBF4E3F4237D733B2DFBD5 /* OfflineAppTests.swift */; };
 		0B99F18F8D129486022D92F3 /* ProfileLocks.swift in Sources */ = {isa = PBXBuildFile; fileRef = 771392D0B7A834239EEE71B2 /* ProfileLocks.swift */; };
 		0F554915C1643BA74ED1E79D /* DownloadsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6DAE332122C47FC6A003F76E /* DownloadsView.swift */; };
+		1085FBD44CABC064F3D5ED24 /* iOS-Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 5B8804F3F416AC59C0A83833 /* iOS-Assets.xcassets */; };
 		1087FEF3E07D86A1DB557007 /* Downloads.swift in Sources */ = {isa = PBXBuildFile; fileRef = 904A0CBE1AA604D4D68C7F89 /* Downloads.swift */; };
 		10FF7DE827E875AC9A8B6996 /* PictureshowTransport in Frameworks */ = {isa = PBXBuildFile; productRef = 8DCA7E7F54A8A046DB8216E5 /* PictureshowTransport */; };
 		11617390D9523475784987FA /* MusicDownloads.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B05F5DFC5CED9E3E88EC23C /* MusicDownloads.swift */; };
@@ -163,6 +164,7 @@
 		FAD8CA3B5BE4D3331E2CF855 /* SeerrStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC4D33D303EBD962B2332E14 /* SeerrStoreTests.swift */; };
 		FBE993AB0C057D0A1E88E3EB /* MusicStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C2D97A848BCA6199F8CF76B /* MusicStore.swift */; };
 		FC4B5E15B7E6707EC0107CAA /* PictureshowTransport in Frameworks */ = {isa = PBXBuildFile; productRef = 8BC88131B14D3FDC4B03C068 /* PictureshowTransport */; };
+		FD1D4B0A155C9DD8AC86A9AA /* tvOS-Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 80C7B623CA0BD14FED20E695 /* tvOS-Assets.xcassets */; };
 		FE13A6E3680B7AAC7D0581F2 /* LiveRecordingsAndSchedules.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90E71B17D96D739F15ADF3BA /* LiveRecordingsAndSchedules.swift */; };
 		FE313322D27572ED40917830 /* SyncPlaySession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 561EA52FB0EF6B1A771D8C18 /* SyncPlaySession.swift */; };
 		FEC5CF08DDE87EF57E7C9D5E /* SupportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 569F053C4BABD85F93C4D260 /* SupportView.swift */; };
@@ -216,6 +218,7 @@
 		569F053C4BABD85F93C4D260 /* SupportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupportView.swift; sourceTree = "<group>"; };
 		588F00E3A8C0CF7F9A5E526B /* SubtitleDownloadView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubtitleDownloadView.swift; sourceTree = "<group>"; };
 		5936508D935E89E91DCD94AB /* DownloadRedirectTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadRedirectTests.swift; sourceTree = "<group>"; };
+		5B8804F3F416AC59C0A83833 /* iOS-Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "iOS-Assets.xcassets"; sourceTree = "<group>"; };
 		5C20A953C6C8CAF260954D06 /* MusicEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MusicEngine.swift; sourceTree = "<group>"; };
 		5F1AA7A88109F235A876E08B /* LiveTVParts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveTVParts.swift; sourceTree = "<group>"; };
 		62471EE4B103D973C242E55E /* InformationViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InformationViews.swift; sourceTree = "<group>"; };
@@ -226,6 +229,7 @@
 		771392D0B7A834239EEE71B2 /* ProfileLocks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileLocks.swift; sourceTree = "<group>"; };
 		78A1DE7E5968B6A48C7CCEE2 /* PlayerScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerScreen.swift; sourceTree = "<group>"; };
 		7AFB7FB1BED8180AEBEFD99D /* MPL-2.0.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "MPL-2.0.txt"; sourceTree = "<group>"; };
+		80C7B623CA0BD14FED20E695 /* tvOS-Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "tvOS-Assets.xcassets"; sourceTree = "<group>"; };
 		81298277BD56E4141639BCA9 /* PictureInPictureHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PictureInPictureHost.swift; sourceTree = "<group>"; };
 		81EBF4E3F4237D733B2DFBD5 /* OfflineAppTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfflineAppTests.swift; sourceTree = "<group>"; };
 		85BFCB25BD1407FDFF65CF38 /* OfflineFiles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfflineFiles.swift; sourceTree = "<group>"; };
@@ -413,7 +417,9 @@
 		5E4F52F9BDB3B99D1D8B0A70 /* Config */ = {
 			isa = PBXGroup;
 			children = (
+				5B8804F3F416AC59C0A83833 /* iOS-Assets.xcassets */,
 				36069B96C247513EF8BA39E5 /* Supporter.storekit */,
+				80C7B623CA0BD14FED20E695 /* tvOS-Assets.xcassets */,
 			);
 			path = Config;
 			sourceTree = "<group>";
@@ -633,6 +639,7 @@
 				B2048C739BE03E29989CCDD9 /* MPL-2.0.txt in Resources */,
 				F4C7A803FEB43080163485CE /* Supporter.storekit in Resources */,
 				552DE76342EA5C4A738264BD /* hevc-main8-1080p30.mp4 in Resources */,
+				1085FBD44CABC064F3D5ED24 /* iOS-Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -643,6 +650,7 @@
 				3F2C51E8D81F56BF967603B2 /* MPL-2.0.txt in Resources */,
 				6E5F5C6CBE430A1599C4D58C /* Supporter.storekit in Resources */,
 				8B3B46BDA8F258118F40C929 /* hevc-main8-1080p30.mp4 in Resources */,
+				FD1D4B0A155C9DD8AC86A9AA /* tvOS-Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
