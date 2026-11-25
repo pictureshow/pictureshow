@@ -48,6 +48,8 @@ targets:
     settings:
       base:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        # Empty unless tools/testflight.sh names the App Store profile (packages refuse a CLI-wide profile).
+        PROVISIONING_PROFILE_SPECIFIER: $(PICTURESHOW_PROFILE)
         TARGETED_DEVICE_FAMILY: '1,2'
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
@@ -77,6 +79,8 @@ targets:
     settings:
       base:
         ASSETCATALOG_COMPILER_APPICON_NAME: App Icon & Top Shelf Image
+        # Empty unless tools/testflight.sh names the App Store profile (packages refuse a CLI-wide profile).
+        PROVISIONING_PROFILE_SPECIFIER: $(PICTURESHOW_PROFILE)
         TARGETED_DEVICE_FAMILY: '3'
   Pictureshow-iOS-UnitTests:
     type: bundle.unit-test
