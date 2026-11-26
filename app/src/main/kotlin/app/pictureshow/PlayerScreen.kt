@@ -761,8 +761,26 @@ internal fun PlayerItemScreen(
                 PlaybackStatus("Finding next episode…", Modifier.align(Alignment.Center))
             }
             if (state.preparing && !state.bufferingSlow && setupError == null && !switching) {
-                PlaybackStatus("Preparing playback…", Modifier.align(Alignment.Center))
+                Column(
+                    Modifier.align(Alignment.Center),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    PlayerWaitIndicator()
+                    PlaybackStatus("Preparing playback…")
+                }
             }
+            // Waiting for data after the picture started (a seek, a slow stretch) shows a spinner, never a silent freeze.
+            val rebuffering = playback.buffering && !state.preparing && !state.bufferingSlow && error == null && !switching && !ended
+            var rebufferShown by remember { mutableStateOf(false) }
+            LaunchedEffect(rebuffering) {
+                rebufferShown = false
+                if (rebuffering) {
+                    delay(PLAYER_WAIT_INDICATOR_DELAY_MS)
+                    rebufferShown = true
+                }
+            }
+            if (rebuffering && rebufferShown) PlayerWaitIndicator(Modifier.align(Alignment.Center))
             if (state.bufferingSlow && error == null && !switching) {
                 Text(
                     "Still waiting for playback. You can go back and try again.",
@@ -1450,3 +1468,15 @@ private const val CONTROLS_HIDDEN_FEEDBACK = "Controls hidden"
 
 /** Both directions always remain available: the surface's "scroll" is a 10 s seek or a reveal, never a position. */
 private val ReaderArrowRange = ScrollAxisRange(value = { 1f }, maxValue = { 2f })
+
+/** A short wait (one segment, a quick seek) passes without a flash of spinner. */
+internal const val PLAYER_WAIT_INDICATOR_DELAY_MS = 500L
+
+@Composable
+internal fun PlayerWaitIndicator(modifier: Modifier = Modifier) {
+    androidx.compose.material3.CircularProgressIndicator(
+        modifier = modifier.size(48.dp).semantics { contentDescription = "Loading" },
+        color = Color.White,
+        strokeWidth = 4.dp
+    )
+}
