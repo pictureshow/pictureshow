@@ -763,20 +763,21 @@ internal fun PlayerItemScreen(
             val preparingShown = state.preparing && !state.bufferingSlow && setupError == null && !switching
             // Waiting for data after the picture started (a seek, a slow stretch) shows a spinner, never a silent freeze.
             val rebuffering = playback.buffering && !state.preparing && !state.bufferingSlow && error == null && !switching && !ended
-            // Both spinners wait 500 ms: a quick start or a one-segment wait passes without one, and the animation
-            // doesn't draw while a slow device is starting the decoder (leg 194 measured start-up slower with it).
-            val spinnerShown = rememberAfterDelay(preparingShown || rebuffering, PLAYER_WAIT_INDICATOR_DELAY_MS)
+            // A start that stalls gets a spinner after 2 s; a normal start never draws one, because the animation took
+            // 1-1.5 s off a CPU-rendered device's start-up (leg 194). A wait for data mid-play gets one after 500 ms.
+            val preparingSpinner = rememberAfterDelay(preparingShown, PLAYER_PREPARING_INDICATOR_DELAY_MS)
+            val rebufferSpinner = rememberAfterDelay(rebuffering, PLAYER_WAIT_INDICATOR_DELAY_MS)
             if (preparingShown) {
                 Column(
                     Modifier.align(Alignment.Center),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    if (spinnerShown) PlayerWaitIndicator()
+                    if (preparingSpinner) PlayerWaitIndicator()
                     PlaybackStatus("Preparing playback…")
                 }
             }
-            if (rebuffering && spinnerShown) PlayerWaitIndicator(Modifier.align(Alignment.Center))
+            if (rebufferSpinner) PlayerWaitIndicator(Modifier.align(Alignment.Center))
             if (state.bufferingSlow && error == null && !switching) {
                 Text(
                     "Still waiting for playback. You can go back and try again.",
@@ -1467,6 +1468,9 @@ private val ReaderArrowRange = ScrollAxisRange(value = { 1f }, maxValue = { 2f }
 
 /** A short wait (one segment, a quick seek) passes without a flash of spinner. */
 internal const val PLAYER_WAIT_INDICATOR_DELAY_MS = 500L
+
+/** Longer than a normal start, so the spinner's animation never competes with the decoder starting up. */
+internal const val PLAYER_PREPARING_INDICATOR_DELAY_MS = 2_000L
 
 /** True once [active] has held for [delayMs] without a break; false again as soon as it stops. */
 @Composable
