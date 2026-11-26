@@ -97,6 +97,8 @@ import app.pictureshow.core.creditsStartMs
 import app.pictureshow.core.displayRuntimeMillis
 import app.pictureshow.core.nextEpisodeWillAutoAdvance
 import app.pictureshow.core.playback.BACK_EXIT_HINT_MS
+import app.pictureshow.core.playback.BackPressGate
+import app.pictureshow.core.playback.BackPressPath
 import app.pictureshow.core.playback.MediaStreamType
 import app.pictureshow.core.playback.SeekSteps
 import app.pictureshow.core.playback.TvPlayerBackAction
@@ -214,6 +216,7 @@ internal fun PlayerItemScreen(
     var controlsFeedback by remember { mutableStateOf<String?>(null) }
     var focusSpeaksControlsHidden by remember { mutableStateOf(false) }
     val heldSeek = remember { HeldSeekTracker() }
+    val backGate = remember { BackPressGate() }
     var controlsHeight by remember { mutableStateOf(240.dp) }
     val density = LocalDensity.current
     var controlsTop by remember { mutableStateOf<Int?>(null) }
@@ -437,7 +440,9 @@ internal fun PlayerItemScreen(
             }
         }
     }
-    BackHandler { handleBack() }
+    BackHandler {
+        if (backGate.admit(BackPressPath.System, android.os.SystemClock.uptimeMillis())) handleBack()
+    }
     LaunchedEffect(Unit) { rootFocus.requestFocus() }
     PlaybackHostEffects(host, account, catalog, paused)
     LaunchedEffect(controls, focusControls, chaptersOpen, chooser, seekOpen, extraPanel, restoringSeekFocus) {
@@ -606,7 +611,9 @@ internal fun PlayerItemScreen(
                     seek = ::keySeek,
                     showControls = ::showRemoteControls,
                     interact = { interaction++ },
-                    back = ::handleBack,
+                    back = {
+                        if (backGate.admit(BackPressPath.Key, android.os.SystemClock.uptimeMillis())) handleBack()
+                    },
                     menu = { if (controls) hideControls() else showRemoteControls() },
                     durationMs = if (host.isLive) 0L else duration,
                     heldSeek = heldSeek,

@@ -198,6 +198,26 @@ class PlayerBackFeedbackTest {
         }
     }
 
+    @Test fun pairedKeyAndSystemBackHidesControlsOnceWithoutExitingPlayback() {
+        launch(false)
+        compose.onRoot().performKeyInput { pressKey(Key.DirectionUp) }
+        compose.onNodeWithText("Subtitles").assertIsDisplayed()
+        // Android 14+ predictive back can deliver one physical BACK press to both Key.Back and BackHandler.
+        compose.onRoot().performKeyInput { pressKey(Key.Back) }
+        compose.runOnIdle { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        compose.waitForIdle()
+        compose.onNodeWithText("Subtitles").assertDoesNotExist()
+        compose.onNodeWithTag("player:back-hint").assertIsDisplayed()
+        compose.runOnIdle { assertEquals(0, exits) }
+        // A second physical BACK press (also paired) exits cleanly.
+        compose.onRoot().performKeyInput { pressKey(Key.Back) }
+        compose.runOnIdle { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        compose.waitUntil(10_000) {
+            shadowOf(android.os.Looper.getMainLooper()).idle()
+            exits == 1
+        }
+    }
+
     @Test fun backCancelsAPreDecisionTrackOpenWithoutALateWindow() {
         verifyPendingOpenCancellation(stopActivity = false)
     }

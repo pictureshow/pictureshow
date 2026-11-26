@@ -100,6 +100,20 @@ class ApplicationParityVectorsTest {
                             input.getValue("nowMs").jsonPrimitive.long
                         ).name
                     )
+                    "tv-player-back-gate" -> {
+                        val gate = app.pictureshow.core.playback.BackPressGate()
+                        JsonArray(
+                            input.getValue("events").jsonArray.map { step ->
+                                val o = step.jsonObject
+                                JsonPrimitive(
+                                    gate.admit(
+                                        app.pictureshow.core.playback.BackPressPath.valueOf(o.getValue("path").jsonPrimitive.content),
+                                        o.getValue("nowMs").jsonPrimitive.long
+                                    )
+                                )
+                            }
+                        )
+                    }
                     "next-episode-will-auto-advance" -> JsonPrimitive(
                         nextEpisodeWillAutoAdvance(
                             input.getValue("countdownSeconds").jsonPrimitive.int,

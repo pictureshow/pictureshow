@@ -10448,6 +10448,43 @@
         "totalMs": 0
       },
       "expected": 0.0
+    },
+    {
+      "id": "tv-player-back-gate-pairs-key-and-system",
+      "operation": "tv-player-back-gate",
+      "input": {
+        "events": [
+          { "path": "Key", "nowMs": 1000 },
+          { "path": "System", "nowMs": 1005 },
+          { "path": "Key", "nowMs": 1150 },
+          { "path": "System", "nowMs": 1155 }
+        ]
+      },
+      "expected": [true, false, true, false]
+    },
+    {
+      "id": "tv-player-back-gate-allows-same-path-repeat",
+      "operation": "tv-player-back-gate",
+      "input": {
+        "events": [
+          { "path": "Key", "nowMs": 1000 },
+          { "path": "Key", "nowMs": 1005 }
+        ]
+      },
+      "expected": [true, true]
+    },
+    {
+      "id": "tv-player-back-gate-pairs-reverse-order-and-expires",
+      "operation": "tv-player-back-gate",
+      "input": {
+        "events": [
+          { "path": "System", "nowMs": 1000 },
+          { "path": "Key", "nowMs": 1010 },
+          { "path": "System", "nowMs": 2000 },
+          { "path": "Key", "nowMs": 2251 }
+        ]
+      },
+      "expected": [true, false, true, true]
     }
 ]
 }

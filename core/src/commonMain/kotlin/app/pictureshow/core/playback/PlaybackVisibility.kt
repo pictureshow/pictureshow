@@ -41,3 +41,29 @@ fun tvPlayerBackAction(controlsVisible: Boolean, autoHiddenAtMs: Long?, nowMs: L
     autoHiddenAtMs != null && nowMs - autoHiddenAtMs in 0..BACK_AUTO_HIDE_GRACE_MS -> TvPlayerBackAction.ShowControls
     else -> TvPlayerBackAction.Exit
 }
+
+enum class BackPressPath {
+    Key,
+    System
+}
+
+/**
+ * PLAY-05: one physical BACK press acts once, even when the OS delivers it through both Compose key dispatch and the
+ * system back dispatcher (e.g. Android 14+ predictive back). A claim absorbs at most one paired event from the other
+ * path within [windowMs], never a second press from the same path.
+ */
+class BackPressGate(private val windowMs: Long = 250L) {
+    private var lastPath: BackPressPath? = null
+    private var lastAtMs: Long = 0L
+
+    fun admit(path: BackPressPath, nowMs: Long): Boolean {
+        val previous = lastPath
+        if (previous != null && previous != path && nowMs - lastAtMs in 0..windowMs) {
+            lastPath = null
+            return false
+        }
+        lastPath = path
+        lastAtMs = nowMs
+        return true
+    }
+}
