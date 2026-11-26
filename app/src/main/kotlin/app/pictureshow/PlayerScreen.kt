@@ -760,27 +760,23 @@ internal fun PlayerItemScreen(
             if (ended && (nextLookup == null || nextLookup?.result is ClientResult.Failure) && !exitRequested && !switching) {
                 PlaybackStatus("Finding next episode…", Modifier.align(Alignment.Center))
             }
-            if (state.preparing && !state.bufferingSlow && setupError == null && !switching) {
+            val preparingShown = state.preparing && !state.bufferingSlow && setupError == null && !switching
+            // Waiting for data after the picture started (a seek, a slow stretch) shows a spinner, never a silent freeze.
+            val rebuffering = playback.buffering && !state.preparing && !state.bufferingSlow && error == null && !switching && !ended
+            // Both spinners wait 500 ms: a quick start or a one-segment wait passes without one, and the animation
+            // doesn't draw while a slow device is starting the decoder (leg 194 measured start-up slower with it).
+            val spinnerShown = rememberAfterDelay(preparingShown || rebuffering, PLAYER_WAIT_INDICATOR_DELAY_MS)
+            if (preparingShown) {
                 Column(
                     Modifier.align(Alignment.Center),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    PlayerWaitIndicator()
+                    if (spinnerShown) PlayerWaitIndicator()
                     PlaybackStatus("Preparing playback…")
                 }
             }
-            // Waiting for data after the picture started (a seek, a slow stretch) shows a spinner, never a silent freeze.
-            val rebuffering = playback.buffering && !state.preparing && !state.bufferingSlow && error == null && !switching && !ended
-            var rebufferShown by remember { mutableStateOf(false) }
-            LaunchedEffect(rebuffering) {
-                rebufferShown = false
-                if (rebuffering) {
-                    delay(PLAYER_WAIT_INDICATOR_DELAY_MS)
-                    rebufferShown = true
-                }
-            }
-            if (rebuffering && rebufferShown) PlayerWaitIndicator(Modifier.align(Alignment.Center))
+            if (rebuffering && spinnerShown) PlayerWaitIndicator(Modifier.align(Alignment.Center))
             if (state.bufferingSlow && error == null && !switching) {
                 Text(
                     "Still waiting for playback. You can go back and try again.",
@@ -1471,6 +1467,20 @@ private val ReaderArrowRange = ScrollAxisRange(value = { 1f }, maxValue = { 2f }
 
 /** A short wait (one segment, a quick seek) passes without a flash of spinner. */
 internal const val PLAYER_WAIT_INDICATOR_DELAY_MS = 500L
+
+/** True once [active] has held for [delayMs] without a break; false again as soon as it stops. */
+@Composable
+private fun rememberAfterDelay(active: Boolean, delayMs: Long): Boolean {
+    var shown by remember { mutableStateOf(false) }
+    LaunchedEffect(active) {
+        shown = false
+        if (active) {
+            delay(delayMs)
+            shown = true
+        }
+    }
+    return active && shown
+}
 
 @Composable
 internal fun PlayerWaitIndicator(modifier: Modifier = Modifier) {
