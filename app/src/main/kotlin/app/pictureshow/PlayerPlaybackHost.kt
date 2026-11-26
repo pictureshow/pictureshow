@@ -212,15 +212,20 @@ internal class PlaybackHostState(
         qualityGuard = BandwidthQualityGuard()
         if (changed) controller?.routeChanged()
     }
-    fun bandwidthSample(estimate: Long, bytes: Long, nowMs: Long) {
+    fun bandwidthSample(estimate: Long, bytes: Long, nowMs: Long, bufferedPositionMs: Long? = null, speed: Float = 1f) {
         if (!localPreferences.tuning.autoAdjustQuality || qualityOverrideMbps != null || state.preparing || atEnd) return
-        val lower = qualityGuard.reduction(effectiveSettings.maxStreamingBitrate, estimate, bytes, nowMs) ?: return
+        val lower = qualityGuard.reduction(effectiveSettings.maxStreamingBitrate, estimate, bytes, nowMs, bufferedPositionMs, speed) ?: return
         val cap = localPreferences.tuning.bitrate(localPreferences.bitrateMbps, network, lower)
         val streamBitrate = app.pictureshow.core.playback.PlaybackInformation.streamBitrate(state.decision)
-        if (!app.pictureshow.core.playback.PlaybackQualityPresentation.affectsStream(cap, streamBitrate)) return
+        if (!app.pictureshow.core.playback.PlaybackNetworkPolicy.reroutes(cap, lower, streamBitrate)) {
+            PlaybackDiagnostics.write("quality-keep estimate=$lower stream=$streamBitrate cap=$cap network=${network.name}")
+            return
+        }
         reducedStreamBitrate = streamBitrate
         estimatedBandwidth = lower
-        PlaybackDiagnostics.write("quality-adjust cap=${effectiveSettings.maxStreamingBitrate} network=${network.name}")
+        PlaybackDiagnostics.write(
+            "quality-adjust cap=${effectiveSettings.maxStreamingBitrate} estimate=$lower stream=$streamBitrate network=${network.name}"
+        )
         controller?.routeChanged()
     }
     var subtitleDelayMs by mutableIntStateOf(0)
@@ -741,8 +746,16 @@ internal fun PlaybackHostEffects(host: PlaybackHostState, account: Account, cata
                         ended = true
                     }
                 }
-                output.onBandwidthEstimate =
-                    { estimate, bytes -> bandwidthSample(estimate, bytes, android.os.SystemClock.elapsedRealtime()) }
+                output.onBandwidthEstimate = { estimate, bytes ->
+                    val active = output.player.value
+                    bandwidthSample(
+                        estimate,
+                        bytes,
+                        android.os.SystemClock.elapsedRealtime(),
+                        active?.bufferedPosition,
+                        active?.playbackParameters?.speed ?: 1f
+                    )
+                }
                 reportScope.launch {
                     session.state.collect { value ->
                         capabilityChanges.settled(!value.preparing && value.decision != null && value.error == null)

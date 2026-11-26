@@ -21,4 +21,21 @@ object PlaybackNetworkPolicy {
             sampleCount >= 2 &&
             sampleBytes >= 131_072 &&
             elapsedSinceAdjustmentMs >= 30_000
+
+    /**
+     * PLAY-26: the player is getting at least [speed] seconds of media per wall-clock second, so the connection keeps up
+     * whatever a throughput sample says. A sample window where the buffered end moved forward that fast (start-up fill,
+     * a full buffer topping up, a decoder that is the slow part) never counts toward a reduction. A buffered end that
+     * moved backwards (a seek, a replaced source) or a non-positive window is no evidence of a slow connection either.
+     */
+    fun keepsUp(bufferedGainMs: Long, elapsedMs: Long, speed: Float = 1f): Boolean =
+        elapsedMs <= 0 || bufferedGainMs < 0 || bufferedGainMs >= elapsedMs * speed.coerceAtLeast(0.1f)
+
+    /**
+     * PLAY-26: an automatic [cap] replaces the playing stream only when the cap is below the stream's bitrate and the
+     * measured rate's 80% budget can't carry that bitrate either. Ladder rounding alone (8 Mbps measured, 5.7 Mbps file,
+     * next rung down 4 Mbps) never interrupts a stream the connection is carrying.
+     */
+    fun reroutes(cap: Int, estimate: Long, streamBitrate: Int?): Boolean =
+        PlaybackQualityPresentation.affectsStream(cap, streamBitrate) && estimate > 0 && estimate / 5 * 4 < streamBitrate!!
 }

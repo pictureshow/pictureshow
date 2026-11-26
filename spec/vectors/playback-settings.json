@@ -234,6 +234,76 @@
       "expected": false
     },
     {
+      "id": "playback-settings.quality.load-pace-startup-fill",
+      "operation": "quality-load-pace",
+      "input": {
+        "bufferedGainMs": 1500,
+        "elapsedMs": 1000,
+        "speed": 1.0
+      },
+      "expected": true
+    },
+    {
+      "id": "playback-settings.quality.load-pace-exactly-real-time",
+      "operation": "quality-load-pace",
+      "input": {
+        "bufferedGainMs": 1000,
+        "elapsedMs": 1000,
+        "speed": 1.0
+      },
+      "expected": true
+    },
+    {
+      "id": "playback-settings.quality.load-pace-falling-behind",
+      "operation": "quality-load-pace",
+      "input": {
+        "bufferedGainMs": 999,
+        "elapsedMs": 1000,
+        "speed": 1.0
+      },
+      "expected": false
+    },
+    {
+      "id": "playback-settings.quality.load-pace-stalled",
+      "operation": "quality-load-pace",
+      "input": {
+        "bufferedGainMs": 0,
+        "elapsedMs": 1000,
+        "speed": 1.0
+      },
+      "expected": false
+    },
+    {
+      "id": "playback-settings.quality.load-pace-double-speed-behind",
+      "operation": "quality-load-pace",
+      "input": {
+        "bufferedGainMs": 1500,
+        "elapsedMs": 1000,
+        "speed": 2.0
+      },
+      "expected": false
+    },
+    {
+      "id": "playback-settings.quality.load-pace-seek-backwards",
+      "operation": "quality-load-pace",
+      "input": {
+        "bufferedGainMs": -30000,
+        "elapsedMs": 1000,
+        "speed": 1.0
+      },
+      "expected": true
+    },
+    {
+      "id": "playback-settings.quality.load-pace-no-window",
+      "operation": "quality-load-pace",
+      "input": {
+        "bufferedGainMs": 0,
+        "elapsedMs": 0,
+        "speed": 1.0
+      },
+      "expected": true
+    },
+    {
       "id": "playback-settings.resume.clamp-zero",
       "operation": "resume-position",
       "input": {

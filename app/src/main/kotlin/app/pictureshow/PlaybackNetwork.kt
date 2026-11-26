@@ -33,13 +33,28 @@ internal suspend fun playbackNetwork(context: Context, serverUrl: String): Playb
 internal fun classifyPlaybackNetwork(metered: Boolean, localEndpoint: Boolean): PlaybackNetwork =
     PlaybackNetworkPolicy.classify(metered, localEndpoint)
 
-/** Reduce at most once per 30 seconds, and require two substantial samples. Never auto-raise within a viewing. */
+/**
+ * Reduce at most once per 30 seconds, and require two substantial samples taken while the player was falling behind.
+ * Never auto-raise within a viewing. A sample counts only when the buffered end gained less media time than wall time
+ * passed since the previous sample (PLAY-26): a start-up fill, or a decoder that is slower than the network, keeps the
+ * buffer growing and so never lowers a stream the connection is carrying. The first sample only sets that baseline.
+ */
 internal class BandwidthQualityGuard {
     private var samples = 0
     private var lastChangeMs: Long? = null
-    fun reduction(currentCap: Int, estimatedBitrate: Long, bytes: Long, nowMs: Long): Long? {
+    private var previous: Pair<Long, Long>? = null
+
+    /** [bufferedPositionMs] is null when no player reports one; the sample rule then stands alone. */
+    fun reduction(currentCap: Int, estimatedBitrate: Long, bytes: Long, nowMs: Long, bufferedPositionMs: Long? = null, speed: Float = 1f): Long? {
+        val baseline = previous
+        val behind = if (bufferedPositionMs == null) {
+            true
+        } else {
+            previous = nowMs to bufferedPositionMs
+            baseline != null && !PlaybackNetworkPolicy.keepsUp(bufferedPositionMs - baseline.second, nowMs - baseline.first, speed)
+        }
         val proposedCap = app.pictureshow.core.playback.PlaybackTuning.automaticCap(currentCap, estimatedBitrate)
-        if (bytes < 131_072 || estimatedBitrate <= 0 || estimatedBitrate >= currentCap || proposedCap >= currentCap) {
+        if (!behind || bytes < 131_072 || estimatedBitrate <= 0 || estimatedBitrate >= currentCap || proposedCap >= currentCap) {
             samples = 0
             return null
         }

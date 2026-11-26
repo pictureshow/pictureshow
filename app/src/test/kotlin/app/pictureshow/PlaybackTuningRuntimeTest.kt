@@ -62,6 +62,25 @@ class PlaybackTuningRuntimeTest {
         assertNull(guard.reduction(2_000_000, 40_000_000, 262_144, 71_000))
     }
 
+    @Test fun bandwidthGuardCountsOnlySamplesTakenWhileTheBufferFallsBehind() {
+        val filling = BandwidthQualityGuard()
+        for (step in 0L..6L) assertNull(filling.reduction(20_000_000, 4_000_000, 262_144, step * 1_000, 5_000 + step * 1_000))
+        val falling = BandwidthQualityGuard()
+        assertNull(falling.reduction(20_000_000, 4_000_000, 262_144, 0, 5_000)) // baseline only
+        assertNull(falling.reduction(20_000_000, 4_000_000, 262_144, 1_000, 5_500))
+        assertEquals(4_000_000L, falling.reduction(20_000_000, 4_000_000, 262_144, 2_000, 6_000))
+        val doubleSpeed = BandwidthQualityGuard()
+        assertNull(doubleSpeed.reduction(20_000_000, 4_000_000, 262_144, 0, 5_000, 2f))
+        assertNull(doubleSpeed.reduction(20_000_000, 4_000_000, 262_144, 1_000, 6_500, 2f))
+        assertEquals(4_000_000L, doubleSpeed.reduction(20_000_000, 4_000_000, 262_144, 2_000, 8_000, 2f))
+        val interrupted = BandwidthQualityGuard()
+        assertNull(interrupted.reduction(20_000_000, 4_000_000, 262_144, 0, 5_000))
+        assertNull(interrupted.reduction(20_000_000, 4_000_000, 262_144, 1_000, 5_200))
+        assertNull(interrupted.reduction(20_000_000, 4_000_000, 262_144, 2_000, 7_500)) // caught up: the count restarts
+        assertNull(interrupted.reduction(20_000_000, 4_000_000, 262_144, 3_000, 7_700))
+        assertEquals(4_000_000L, interrupted.reduction(20_000_000, 4_000_000, 262_144, 4_000, 7_900))
+    }
+
     @Test fun keepScenesDoesNotOfferEarlyContinuationAtCreditsBeforeATailScene() {
         val outro = MediaSegment("credits", SegmentType.Outro, 80_000L * 10_000, 100_000L * 10_000)
         assertEquals(80_000L, playbackNextTriggerMs(150_000, listOf(outro), true))
