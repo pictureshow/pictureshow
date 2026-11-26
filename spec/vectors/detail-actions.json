@@ -1,0 +1,307 @@
+{
+  "schemaVersion": 1,
+  "suite": "detail-actions",
+  "description": "CAT-05/06: TV detail, series and season action order and presentation. One prominent primary pill leads, optional Play from start sits beside it when there is progress (or reserved during a playback return, never on missing episodes or natural-end Play again), followed by a compact row of round icon buttons with captions: Favorite, optional Download, optional Find subtitles (leaf items), optional Trailer (Movie/Series), and Mark watched last (never beside Play).",
+  "cases": [
+    {
+      "id": "detail-actions-movie-no-progress",
+      "operation": "detail-action-slots",
+      "input": {
+        "itemType": "Movie",
+        "isMissing": false,
+        "hasProgress": false,
+        "playsAgain": false,
+        "playbackReturn": false,
+        "canDownload": true,
+        "canFindSubtitles": true,
+        "hasTrailer": true,
+        "pending": false
+      },
+      "expected": [
+        { "target": "primary", "presentation": "primary" },
+        { "target": "favorite", "presentation": "icon" },
+        { "target": "download", "presentation": "icon" },
+        { "target": "subtitles", "presentation": "icon" },
+        { "target": "trailer", "presentation": "icon" },
+        { "target": "played", "presentation": "icon" }
+      ]
+    },
+    {
+      "id": "detail-actions-movie-with-progress",
+      "operation": "detail-action-slots",
+      "input": {
+        "itemType": "Movie",
+        "isMissing": false,
+        "hasProgress": true,
+        "playsAgain": false,
+        "playbackReturn": false,
+        "canDownload": true,
+        "canFindSubtitles": true,
+        "hasTrailer": true,
+        "pending": false
+      },
+      "expected": [
+        { "target": "primary", "presentation": "primary" },
+        { "target": "from-start", "presentation": "secondary-pill" },
+        { "target": "favorite", "presentation": "icon" },
+        { "target": "download", "presentation": "icon" },
+        { "target": "subtitles", "presentation": "icon" },
+        { "target": "trailer", "presentation": "icon" },
+        { "target": "played", "presentation": "icon" }
+      ]
+    },
+    {
+      "id": "detail-actions-movie-minimal-with-progress",
+      "operation": "detail-action-slots",
+      "input": {
+        "itemType": "Movie",
+        "isMissing": false,
+        "hasProgress": true,
+        "playsAgain": false,
+        "playbackReturn": false,
+        "canDownload": false,
+        "canFindSubtitles": false,
+        "hasTrailer": false,
+        "pending": false
+      },
+      "expected": [
+        { "target": "primary", "presentation": "primary" },
+        { "target": "from-start", "presentation": "secondary-pill" },
+        { "target": "favorite", "presentation": "icon" },
+        { "target": "played", "presentation": "icon" }
+      ]
+    },
+    {
+      "id": "detail-actions-playback-return-pending-reserves-from-start",
+      "operation": "detail-action-slots",
+      "input": {
+        "itemType": "Movie",
+        "isMissing": false,
+        "hasProgress": false,
+        "playsAgain": false,
+        "playbackReturn": true,
+        "canDownload": true,
+        "canFindSubtitles": true,
+        "hasTrailer": true,
+        "pending": true
+      },
+      "expected": [
+        { "target": "primary", "presentation": "primary" },
+        { "target": "from-start", "presentation": "secondary-pill" },
+        { "target": "favorite", "presentation": "icon" },
+        { "target": "played", "presentation": "icon" }
+      ]
+    },
+    {
+      "id": "detail-actions-cold-open-pending-omits-from-start-without-progress",
+      "operation": "detail-action-slots",
+      "input": {
+        "itemType": "Movie",
+        "isMissing": false,
+        "hasProgress": false,
+        "playsAgain": false,
+        "playbackReturn": false,
+        "canDownload": true,
+        "canFindSubtitles": true,
+        "hasTrailer": false,
+        "pending": true
+      },
+      "expected": [
+        { "target": "primary", "presentation": "primary" },
+        { "target": "favorite", "presentation": "icon" },
+        { "target": "played", "presentation": "icon" }
+      ]
+    },
+    {
+      "id": "detail-actions-plays-again-hides-from-start",
+      "operation": "detail-action-slots",
+      "input": {
+        "itemType": "Movie",
+        "isMissing": false,
+        "hasProgress": true,
+        "playsAgain": true,
+        "playbackReturn": true,
+        "canDownload": true,
+        "canFindSubtitles": true,
+        "hasTrailer": false,
+        "pending": false
+      },
+      "expected": [
+        { "target": "primary", "presentation": "primary" },
+        { "target": "favorite", "presentation": "icon" },
+        { "target": "download", "presentation": "icon" },
+        { "target": "subtitles", "presentation": "icon" },
+        { "target": "played", "presentation": "icon" }
+      ]
+    },
+    {
+      "id": "detail-actions-episode-with-progress-omits-trailer",
+      "operation": "detail-action-slots",
+      "input": {
+        "itemType": "Episode",
+        "isMissing": false,
+        "hasProgress": true,
+        "playsAgain": false,
+        "playbackReturn": false,
+        "canDownload": true,
+        "canFindSubtitles": true,
+        "hasTrailer": true,
+        "pending": false
+      },
+      "expected": [
+        { "target": "primary", "presentation": "primary" },
+        { "target": "from-start", "presentation": "secondary-pill" },
+        { "target": "favorite", "presentation": "icon" },
+        { "target": "download", "presentation": "icon" },
+        { "target": "subtitles", "presentation": "icon" },
+        { "target": "played", "presentation": "icon" }
+      ]
+    },
+    {
+      "id": "detail-actions-missing-episode-hides-playback-and-transfer",
+      "operation": "detail-action-slots",
+      "input": {
+        "itemType": "Episode",
+        "isMissing": true,
+        "hasProgress": true,
+        "playsAgain": false,
+        "playbackReturn": true,
+        "canDownload": true,
+        "canFindSubtitles": true,
+        "hasTrailer": true,
+        "pending": false
+      },
+      "expected": [
+        { "target": "primary", "presentation": "primary" },
+        { "target": "favorite", "presentation": "icon" },
+        { "target": "played", "presentation": "icon" }
+      ]
+    },
+    {
+      "id": "detail-actions-series-no-progress",
+      "operation": "detail-action-slots",
+      "input": {
+        "itemType": "Series",
+        "isMissing": false,
+        "hasProgress": false,
+        "playsAgain": false,
+        "playbackReturn": false,
+        "canDownload": true,
+        "canFindSubtitles": true,
+        "hasTrailer": true,
+        "pending": false
+      },
+      "expected": [
+        { "target": "primary", "presentation": "primary" },
+        { "target": "favorite", "presentation": "icon" },
+        { "target": "download", "presentation": "icon" },
+        { "target": "trailer", "presentation": "icon" },
+        { "target": "played", "presentation": "icon" }
+      ]
+    },
+    {
+      "id": "detail-actions-series-with-progress",
+      "operation": "detail-action-slots",
+      "input": {
+        "itemType": "Series",
+        "isMissing": false,
+        "hasProgress": true,
+        "playsAgain": false,
+        "playbackReturn": false,
+        "canDownload": true,
+        "canFindSubtitles": false,
+        "hasTrailer": true,
+        "pending": false
+      },
+      "expected": [
+        { "target": "primary", "presentation": "primary" },
+        { "target": "from-start", "presentation": "secondary-pill" },
+        { "target": "favorite", "presentation": "icon" },
+        { "target": "download", "presentation": "icon" },
+        { "target": "trailer", "presentation": "icon" },
+        { "target": "played", "presentation": "icon" }
+      ]
+    },
+    {
+      "id": "detail-actions-season-no-progress",
+      "operation": "detail-action-slots",
+      "input": {
+        "itemType": "Season",
+        "isMissing": false,
+        "hasProgress": false,
+        "playsAgain": false,
+        "playbackReturn": false,
+        "canDownload": true,
+        "canFindSubtitles": true,
+        "hasTrailer": true,
+        "pending": false
+      },
+      "expected": [
+        { "target": "primary", "presentation": "primary" },
+        { "target": "favorite", "presentation": "icon" },
+        { "target": "download", "presentation": "icon" },
+        { "target": "played", "presentation": "icon" }
+      ]
+    },
+    {
+      "id": "detail-actions-season-with-progress",
+      "operation": "detail-action-slots",
+      "input": {
+        "itemType": "Season",
+        "isMissing": false,
+        "hasProgress": true,
+        "playsAgain": false,
+        "playbackReturn": false,
+        "canDownload": true,
+        "canFindSubtitles": false,
+        "hasTrailer": false,
+        "pending": false
+      },
+      "expected": [
+        { "target": "primary", "presentation": "primary" },
+        { "target": "from-start", "presentation": "secondary-pill" },
+        { "target": "favorite", "presentation": "icon" },
+        { "target": "download", "presentation": "icon" },
+        { "target": "played", "presentation": "icon" }
+      ]
+    },
+    {
+      "id": "detail-actions-video-with-subtitles",
+      "operation": "detail-action-slots",
+      "input": {
+        "itemType": "Video",
+        "isMissing": false,
+        "hasProgress": false,
+        "playsAgain": false,
+        "playbackReturn": false,
+        "canDownload": true,
+        "canFindSubtitles": true,
+        "hasTrailer": false,
+        "pending": false
+      },
+      "expected": [
+        { "target": "primary", "presentation": "primary" },
+        { "target": "favorite", "presentation": "icon" },
+        { "target": "download", "presentation": "icon" },
+        { "target": "subtitles", "presentation": "icon" },
+        { "target": "played", "presentation": "icon" }
+      ]
+    },
+    {
+      "id": "detail-actions-non-playable-container-empty",
+      "operation": "detail-action-slots",
+      "input": {
+        "itemType": "Folder",
+        "isMissing": false,
+        "hasProgress": false,
+        "playsAgain": false,
+        "playbackReturn": false,
+        "canDownload": true,
+        "canFindSubtitles": true,
+        "hasTrailer": true,
+        "pending": false
+      },
+      "expected": []
+    }
+  ]
+}

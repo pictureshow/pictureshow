@@ -107,7 +107,7 @@ class CatalogDetailHandoffTest {
         }
         compose.mainClock.advanceTimeBy(8_000)
         compose.runOnIdle { state.value = state.value.copy(loading = false, playbackPending = false) }
-        compose.onNodeWithTag("detail:favorite").assertIsFocused()
+        compose.onNodeWithTag("detail:from-start").assertIsFocused()
     }
 
     @Test fun anEmptyContainerReportsTheActualFavoriteTarget() {
@@ -297,7 +297,9 @@ class CatalogDetailHandoffTest {
             val offered = compose.onNodeWithTag("detail:played-pending").fetchSemanticsNode()
             assertFalse(offered.config.contains(SemanticsProperties.HideFromAccessibility))
             // No reader ACK and less than its former timeout: the first move must have a target.
-            // CAT-05: Favorite follows the primary; Mark watched sits further from Play.
+            // CAT-05: Play from start sits beside Play on playback return, followed by Favorite; Mark watched is last.
+            compose.onRoot().performKeyInput { pressKey(Key.DirectionRight) }
+            compose.onNodeWithTag("detail:from-start-pending").assertIsFocused()
             compose.onRoot().performKeyInput { pressKey(Key.DirectionRight) }
             compose.onNodeWithTag("detail:favorite-pending").assertIsFocused()
         } finally {
@@ -1025,6 +1027,7 @@ class CatalogDetailHandoffTest {
         }
         compose.onRoot().performKeyInput {
             pressKey(Key.MediaPlayPause)
+            pressKey(Key.DirectionRight)
             pressKey(Key.DirectionRight)
             pressKey(Key.DirectionCenter)
         }

@@ -41,7 +41,7 @@ class DetailPendingPresentationTest {
     private val account = Account(Server("s", "Test", "https://example.test", "12"), User("u", "Viewer"), "fake")
     private val film = MediaItem("film", "Invented film", "Movie")
 
-    // The held layout fixes each pill's size, and TV Material leaves content at the top start: "Play" sat in the corner.
+    // The held pills centre their wording across and down; the round icon buttons centre their captions underneath.
     @Test fun heldPillsKeepTheirWordingInTheMiddle() {
         compose.setContent {
             PictureshowTheme {
@@ -58,11 +58,17 @@ class DetailPendingPresentationTest {
             }
         }
         compose.waitForIdle()
-        listOf("play", "played", "favorite", "from-start").forEach { tag ->
+        listOf("play", "from-start").forEach { tag ->
             val pill = compose.onNodeWithTag("detail:$tag-pending").getBoundsInRoot()
             val label = compose.onNodeWithTag("detail:$tag-pending-label", useUnmergedTree = true).getBoundsInRoot()
             assertEquals(((pill.left + pill.right) / 2).value, ((label.left + label.right) / 2).value, 1f, "$tag across")
             assertEquals(((pill.top + pill.bottom) / 2).value, ((label.top + label.bottom) / 2).value, 1f, "$tag down")
+        }
+        listOf("favorite", "played").forEach { tag ->
+            val button = compose.onNodeWithTag("detail:$tag-pending").getBoundsInRoot()
+            val label = compose.onNodeWithTag("detail:$tag-pending-label", useUnmergedTree = true).getBoundsInRoot()
+            assertEquals(((button.left + button.right) / 2).value, ((label.left + label.right) / 2).value, 1f, "$tag across")
+            kotlin.test.assertTrue(label.top > button.top + DETAIL_ICON_CIRCLE_SIZE, "$tag caption sits below circle")
         }
     }
 

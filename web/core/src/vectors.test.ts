@@ -62,6 +62,8 @@ const spec =
 const pendingPortSuites = new Set([
     // HOME-20..23 TV hero art, facts and BlurHash (Android leg 188): web port owed.
     "home-hero",
+    // CAT-05/06 TV detail action order and presentation (Android leg 191 Part D): web port owed.
+    "detail-actions",
     "cast-queue",
     // SYN-01 create-with-item queues on GroupJoined (Apple/Android); web SyncPlay create owed.
     "sync-create-queue",

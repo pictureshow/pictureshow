@@ -114,8 +114,6 @@ import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.semantics.toggleableState
 import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.state.ToggleableState
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -1726,9 +1724,9 @@ fun CatalogDetail(
             if (commandNotice == "Changes will be available when loading finishes.") commandNotice = null
         }
         if (state.playbackPending && state.error == null && !pendingFailed) playbackReturn = true
-        if (playbackWaiting) {
+        if (playbackWaiting && !coldWaiting) {
             playbackLayout = true
-            if (!coldWaiting && playbackHeader == null) playbackHeader = state.item ?: origin
+            if (playbackHeader == null) playbackHeader = state.item ?: origin
         }
         if (playbackWaiting && !recoveryActive && !pendingFailed && state.error == null && lifecycleState == Lifecycle.State.RESUMED) {
             onPendingQueueNeeded()
@@ -2505,7 +2503,7 @@ fun CatalogDetail(
             ) {
                 item(key = "body") {
                     Box(Modifier.fillMaxWidth()) {
-                        Column(modifier = Modifier.accessibilityGroup(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        Column(modifier = Modifier.accessibilityGroup(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                             if (!playbackWaiting && state.loading && item == null) Text("Loading item…")
                             if (item != null && headerItem != null) {
                                 if (!recordingContext) {
@@ -2513,8 +2511,8 @@ fun CatalogDetail(
                                     // name stands in until the logo loads and stays the spoken heading (CAT-05).
                                     // Actions that wrap get the room back from the hero, so the second line stays on screen (T-8).
                                     var logoShown by remember(headerItem.id) { mutableStateOf(false) }
-                                    // An episode wears its series' logo above its own name; a film or series is its logo.
-                                    val episode = headerItem.type == "Episode"
+                                    // An episode or season wears its series' logo above its own name; a film or series is its logo.
+                                    val childOfSeries = headerItem.type in setOf("Episode", "Season")
                                     val logo = app.pictureshow.core.heroLogo(headerItem)
                                     Column(
                                         Modifier.fillMaxWidth().height(if (actionsWrapped) 140.dp else 220.dp).testTag("detail:hero"),
@@ -2532,10 +2530,11 @@ fun CatalogDetail(
                                                     onSuccess = { logoShown = true },
                                                     onError = { logoShown = false },
                                                     modifier = Modifier.fillMaxWidth(.5f)
-                                                        .height(if (episode || actionsWrapped) 72.dp else 120.dp).clearAndSetSemantics {}
+                                                        .height(if (childOfSeries || actionsWrapped) 72.dp else 120.dp)
+                                                        .clearAndSetSemantics {}
                                                 )
                                             }
-                                            if (!episode) {
+                                            if (!childOfSeries) {
                                                 CatalogHeading(
                                                     headerItem.name,
                                                     modifier = arrivalMetadataSemantics.fillMaxWidth(.6f).alpha(if (logoShown) 0f else 1f)
@@ -2543,7 +2542,7 @@ fun CatalogDetail(
                                                 )
                                             }
                                         }
-                                        if (episode) {
+                                        if (childOfSeries) {
                                             CatalogHeading(
                                                 headerItem.name,
                                                 modifier = arrivalMetadataSemantics.fillMaxWidth(.6f).testTag("detail:title")
@@ -2614,54 +2613,6 @@ fun CatalogDetail(
                                             .semantics { liveRegion = LiveRegionMode.Polite }
                                     )
                                 }
-                                val container = item.type in listOf("Series", "Season")
-                                if (hasActions && container && (!playbackWaiting || pendingEnabled || recoveryActive || recoveryHandoff)) {
-                                    DetailActions(
-                                        if (recoveryActive) headerItem else item, playItem, state.busy, initial,
-                                        if (playbackLayout) {
-                                            { queueReadyMutation(true) }
-                                        } else {
-                                            onPlayed
-                                        },
-                                        if (playbackLayout) {
-                                            { queueReadyMutation(false) }
-                                        } else {
-                                            onFavorite
-                                        },
-                                        onPlay,
-                                        playedFocus, favoriteFocus, pendingActions, ::headerFocus,
-                                        compact = recordingContext,
-                                        stableLayout =
-                                        playbackLayout || playbackWaiting,
-                                        readyQueuedTargets = readyQueuedTargets,
-                                        requestCueTarget = requestCueTarget.takeIf { it == headerInputTarget },
-                                        readiness = readiness,
-                                        onReadyCue = { target, label ->
-                                            readyDeliveryTarget = target
-                                            readyDeliveryLabel = label
-                                        },
-                                        readyCancelled =
-                                        state.error != null || waitHadRequest || readyQueuedTargets.isNotEmpty() || state.busy,
-                                        fromStartFocus = fromStartFocus,
-                                        onDownload = onDownload?.takeIf { offlineOffersDownload(item) }?.let { open ->
-                                            {
-                                                open(
-                                                    item,
-                                                    state.selectedSeasonId,
-                                                    state.seasons.firstOrNull {
-                                                        it.id ==
-                                                            state.selectedSeasonId
-                                                    }?.name
-                                                )
-                                            }
-                                        },
-                                        blocked = recoveryActive || (playbackWaiting && pendingActions == null),
-                                        onWrapped = { if (it) actionsWrapped = true },
-                                        playsAgain = playsAgain
-                                    ) {
-                                        if (trackSelection) selectedSection = "header"
-                                    }
-                                }
                                 headerItem.overview?.takeIf(String::isNotBlank)?.let {
                                     Text(
                                         it,
@@ -2678,7 +2629,9 @@ fun CatalogDetail(
                                         modifier = arrivalMetadataSemantics
                                     )
                                 }
-                                if (hasActions && !container && (!playbackWaiting || pendingEnabled || recoveryActive || recoveryHandoff)) {
+                                // CAT-05/06: Movie, Episode, Video, Series and Season share the same header order and action bar.
+                                if (hasActions && (!playbackWaiting || pendingEnabled || recoveryActive || recoveryHandoff)) {
+                                    val firstTrailer = discovery.firstOrNull { it.key == "trailers" }?.entries?.firstOrNull()
                                     DetailActions(
                                         if (recoveryActive) headerItem else item, playItem, state.busy, initial,
                                         if (playbackLayout) {
@@ -2694,8 +2647,7 @@ fun CatalogDetail(
                                         onPlay,
                                         playedFocus, favoriteFocus, pendingActions, ::headerFocus,
                                         compact = recordingContext,
-                                        stableLayout =
-                                        playbackLayout || playbackWaiting,
+                                        stableLayout = playbackLayout,
                                         readyQueuedTargets = readyQueuedTargets,
                                         requestCueTarget = requestCueTarget.takeIf { it == headerInputTarget },
                                         readiness = readiness,
@@ -2723,7 +2675,8 @@ fun CatalogDetail(
                                         playsAgain = playsAgain,
                                         onSubtitles = onSubtitleDownload
                                             ?.takeIf { subtitleDownloadOffered(item.type) && !item.isMissing }
-                                            ?.let { open -> { open(item) } }
+                                            ?.let { open -> { open(item) } },
+                                        onTrailer = firstTrailer?.let { entry -> { onDiscovery(entry) } }
                                     ) {
                                         if (trackSelection) selectedSection = "header"
                                     }
@@ -3309,19 +3262,21 @@ private fun DetailActions(
     onWrapped: (Boolean) -> Unit = {},
     /** SUB-DL: Find subtitles, on titles the server can attach a subtitle file to. */
     onSubtitles: (() -> Unit)? = null,
+    /** CAT-30: open or play the title's primary trailer directly from the action bar. */
+    onTrailer: (() -> Unit)? = null,
     /** PLAY-17: the return from this title's natural end; Play reads "Play again", starts at 0, and From start goes. */
     playsAgain: Boolean = false,
     onFocus: () -> Unit
 ) {
     val bringIntoView = remember { BringIntoViewRequester() }
-    // A series names its episode, so its primary action needs more room than "Play" when sizes are fixed.
-    val primaryStable = if (item.type in listOf("Series", "Season")) "primary-wide" else "primary"
-    var primaryHeight by remember { mutableStateOf(0) }
+    val widePrimary = item.type in listOf("Series", "Season")
+    var singleRowHeight by remember { mutableStateOf(0) }
     val scope = rememberCoroutineScope()
     val feedbackHost = LocalView.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle.currentStateAsState().value
     var focusedTarget by remember { mutableStateOf<String?>(null) }
-    val position = playItem?.userData?.playbackPositionTicks ?: 0
+    val position = playItem?.userData?.playbackPositionTicks
+        ?: if (pending != null && !stableLayout) item.userData.playbackPositionTicks else 0L
     // CAT-21: a missing episode offers nothing that plays, including the returning layout's reserved Play from start.
     val offersFromStart = !item.isMissing && !playsAgain
     val resumes = !playsAgain && position > 0
@@ -3400,7 +3355,7 @@ private fun DetailActions(
         }
     }
     FlowRow(
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        horizontalArrangement = Arrangement.spacedBy(if (compact) 16.dp else 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
         modifier = Modifier.bringIntoViewRequester(bringIntoView).onFocusChanged {
             focused = it.hasFocus
@@ -3416,7 +3371,7 @@ private fun DetailActions(
             // or label wrapping that move the focused button without another focus event.
             if (!stableLayout && focused) revealFocusedBounds(coordinates, bringIntoView)
             // More than one line of actions: the caller gives the room back by shrinking the hero (T-8).
-            onWrapped(primaryHeight > 0 && coordinates.size.height > primaryHeight * 3 / 2)
+            onWrapped(singleRowHeight > 0 && coordinates.size.height > singleRowHeight * 3 / 2)
         }.focusProperties {
             // Let the parent route a shelf exit to its remembered card, after spatial navigation
             // has exhausted the wrapped action rows. Programmatic requests remain unrestricted.
@@ -3444,12 +3399,9 @@ private fun DetailActions(
                             if (target in focusedChildren) revealFocusedBounds(coordinates, childBringIntoView)
                         }.then(
                             if (compact) {
-                                Modifier.heightIn(
-                                    min = 48.dp
-                                )
+                                Modifier.heightIn(min = 48.dp)
                             } else {
-                                Modifier.width(detailStableWidth(if (target == "primary") primaryStable else target))
-                                    .heightIn(min = DETAIL_STABLE_HEIGHT)
+                                Modifier
                             }
                         )
                     } else {
@@ -3598,204 +3550,161 @@ private fun DetailActions(
                 }
             }
         } else {
-            val playedSlot: @Composable () -> Unit = {
-                key("played") {
-                    Box {
-                        val click = pending?.onPlayed ?: onPlayed
-                        Button(
-                            colors = detailButtonColors(primary = false),
-                            onClick = { if (!blocked) click() },
-                            enabled = !blocked && (pending != null || (!item.isEmptyContainer && (stableLayout || !busy))),
-                            modifier = (
-                                if (pending == null &&
-                                    playItem == null &&
-                                    !item.isEmptyContainer
-                                ) {
-                                    Modifier.focusRequester(initial)
-                                } else {
-                                    Modifier
-                                }
-                                )
-                                .then(playedFocus?.let { Modifier.focusRequester(it) } ?: Modifier)
-                                .then(actionModifier("played", "played", click)).semantics {
-                                    if (!blocked && pending?.available != false && activeRequestCue != "played") {
-                                        toggleableState = ToggleableState(item.isWatched)
-                                    }
-                                }
-                        ) {
-                            DetailActionLabel(
-                                labels.getValue("played"),
-                                if (stableLayout || compact) "played" else null,
-                                Modifier.testTag("detail:played$suffix-label").then(labelSemantics("played")),
-                                compact = compact,
-                                icon = if (item.isWatched) "check" else "eye"
-                            )
-                        }
-                    }
-                }
-            }
+            val slots = app.pictureshow.core.detailActionSlots(
+                itemType = item.type,
+                isMissing = item.isMissing,
+                hasProgress = position > 0,
+                playsAgain = playsAgain,
+                playbackReturn = stableLayout,
+                canDownload = onDownload != null,
+                canFindSubtitles = onSubtitles != null,
+                hasTrailer = onTrailer != null,
+                pending = pending != null
+            )
+            val showsFromStart = slots.any { it.target == "from-start" }
+            val recordHeight = Modifier.onSizeChanged { if (it.height > singleRowHeight) singleRowHeight = it.height }
             // TV Material raises the focused surface. Stable parents keep native traversal order
             // and node identities unchanged as pending labels become authoritative actions.
-            key("primary") {
-                Box(Modifier.onSizeChanged { primaryHeight = it.height }) {
-                    val click: () -> Unit = pending?.onPlay ?: {
-                        playItem?.let { onPlay(it, resumes) }
-                        Unit
-                    }
-                    Button(
-                        onClick = { if (!blocked) click() },
-                        colors = detailButtonColors(primary = true),
-                        enabled = !blocked && (pending != null || playItem != null),
-                        modifier = (if (pending != null || playItem != null) Modifier.focusRequester(initial) else Modifier)
-                            .then(actionModifier("primary", "play", click))
-                            .then(
-                                if (pending == null && playItem == null && item.type in listOf("Series", "Season")) {
-                                    Modifier.clearAndSetSemantics { hideFromAccessibility() }
-                                } else {
-                                    Modifier
+            slots.forEach { slot ->
+                key(slot.target) {
+                    when (slot.target) {
+                        "primary" -> {
+                            Box(recordHeight.align(Alignment.Top)) {
+                                val click: () -> Unit = pending?.onPlay ?: {
+                                    playItem?.let { onPlay(it, resumes) }
+                                    Unit
                                 }
-                            )
-                    ) {
-                        DetailActionLabel(
-                            labels.getValue("primary"),
-                            if (stableLayout || compact) primaryStable else null,
-                            Modifier.testTag("detail:play$suffix-label").then(labelSemantics("primary")),
-                            compact = compact,
-                            icon = "play"
-                        )
-                    }
-                }
-            }
-            if (offersFromStart && !stableLayout && position > 0) {
-                key("from-start") {
-                    Box {
-                        Button(
-                            colors = detailButtonColors(primary = false),
-                            onClick = { if (!blocked) playItem?.let { onPlay(it, false) } },
-                            enabled = !blocked,
-                            modifier = Modifier.detailFocusDiagnostic("from-start")
-                                .then(
-                                    if (compact) Modifier.width(detailActionWidth("from-start", true)).heightIn(min = 48.dp) else Modifier
+                                DetailPillButton(
+                                    label = labels.getValue("primary"),
+                                    icon = "play",
+                                    primary = true,
+                                    enabled = !blocked && (pending != null || playItem != null),
+                                    onClick = { if (!blocked) click() },
+                                    modifier = (if (pending != null || playItem != null) Modifier.focusRequester(initial) else Modifier)
+                                        .then(actionModifier("primary", "play", click))
+                                        .then(
+                                            if (pending == null && playItem == null && item.type in listOf("Series", "Season")) {
+                                                Modifier.clearAndSetSemantics { hideFromAccessibility() }
+                                            } else {
+                                                Modifier
+                                            }
+                                        ),
+                                    labelModifier = Modifier.testTag("detail:play$suffix-label").then(labelSemantics("primary")),
+                                    stableWidth = if (stableLayout) {
+                                        if (widePrimary) DETAIL_PRIMARY_WIDE_STABLE_WIDTH else DETAIL_PRIMARY_STABLE_WIDTH
+                                    } else {
+                                        null
+                                    },
+                                    maxWidth = if (widePrimary && showsFromStart) 310.dp else 360.dp
                                 )
-                        ) { DetailActionLabel("Play from start", null, Modifier, icon = "restart") }
-                    }
-                }
-            }
-            key("favorite") {
-                Box {
-                    val click = pending?.onFavorite ?: onFavorite
-                    Button(
-                        colors = detailButtonColors(primary = false),
-                        onClick = { if (!blocked) click() },
-                        enabled = !blocked && (pending != null || stableLayout || !busy),
-                        modifier = (
-                            if (pending == null &&
-                                playItem == null &&
-                                item.isEmptyContainer
-                            ) {
-                                Modifier.focusRequester(initial)
-                            } else {
-                                Modifier
                             }
-                            )
-                            .then(favoriteFocus?.let { Modifier.focusRequester(it) } ?: Modifier)
-                            .then(actionModifier("favorite", "favorite", click)).semantics {
-                                if (!blocked && pending?.available != false && activeRequestCue != "favorite") {
-                                    toggleableState = ToggleableState(item.userData.isFavorite)
+                        }
+                        "from-start" -> {
+                            Box(recordHeight.align(Alignment.Top)) {
+                                val click: () -> Unit = pending?.onFromStart ?: {
+                                    playItem?.let { onPlay(it, false) }
+                                    Unit
                                 }
+                                DetailPillButton(
+                                    label = labels.getValue("from-start"),
+                                    icon = "restart",
+                                    primary = false,
+                                    enabled = !blocked && (pending != null || playItem != null),
+                                    onClick = { if (!blocked) click() },
+                                    modifier = (fromStartFocus?.let { Modifier.focusRequester(it) } ?: Modifier)
+                                        .then(actionModifier("from-start", "from-start", click)),
+                                    labelModifier = Modifier.testTag("detail:from-start$suffix-label").then(labelSemantics("from-start")),
+                                    stableWidth = if (stableLayout) DETAIL_FROM_START_STABLE_WIDTH else null
+                                )
                             }
-                    ) {
-                        DetailActionLabel(
-                            labels.getValue("favorite"),
-                            if (stableLayout || compact) "favorite" else null,
-                            Modifier.testTag("detail:favorite$suffix-label").then(labelSemantics("favorite")),
-                            compact = compact,
-                            icon = if (item.userData.isFavorite) "heart" else "heart-outline"
-                        )
-                    }
-                }
-            }
-            if (onDownload != null && pending == null) {
-                key("download") {
-                    Button(
-                        colors = detailButtonColors(primary = false),
-                        onClick = {
-                            if (!blocked) onDownload()
-                        },
-                        enabled = !blocked,
-                        modifier = Modifier.testTag("detail:download").then(
-                            when {
-                                compact -> Modifier.width(detailActionWidth("download", true)).heightIn(min = 48.dp)
-                                // The same fixed pill as its siblings, so it neither shrinks nor rides higher (T-8).
-                                stableLayout -> Modifier.width(detailStableWidth("download")).heightIn(min = DETAIL_STABLE_HEIGHT)
-                                else -> Modifier
-                            }
-                        )
-                    ) {
-                        if (compact || stableLayout) {
-                            DetailActionLabel(
-                                "Download",
-                                "download",
-                                Modifier.testTag("detail:download-label"),
-                                compact = compact,
-                                icon = "download"
-                            )
-                        } else {
-                            DetailActionLabel("Download", null, Modifier, icon = "download")
                         }
-                    }
-                }
-            }
-            if (onSubtitles != null && pending == null && !compact) {
-                key("subtitles") {
-                    Button(
-                        colors = detailButtonColors(primary = false),
-                        onClick = { if (!blocked) onSubtitles() },
-                        enabled = !blocked,
-                        modifier = Modifier.testTag("detail:subtitles").then(
-                            if (stableLayout) {
-                                Modifier.width(detailStableWidth("subtitles")).heightIn(min = DETAIL_STABLE_HEIGHT)
-                            } else {
-                                Modifier
+                        "favorite" -> {
+                            Box(recordHeight.align(Alignment.Top)) {
+                                val click = pending?.onFavorite ?: onFavorite
+                                DetailIconActionButton(
+                                    label = labels.getValue("favorite"),
+                                    icon = if (item.userData.isFavorite) "heart" else "heart-outline",
+                                    enabled = !blocked && (pending != null || stableLayout || !busy),
+                                    active = item.userData.isFavorite,
+                                    onClick = { if (!blocked) click() },
+                                    modifier = (
+                                        if (pending == null && playItem == null && item.isEmptyContainer) {
+                                            Modifier.focusRequester(initial)
+                                        } else {
+                                            Modifier
+                                        }
+                                        )
+                                        .then(favoriteFocus?.let { Modifier.focusRequester(it) } ?: Modifier)
+                                        .then(actionModifier("favorite", "favorite", click)).semantics {
+                                            if (!blocked && pending?.available != false && activeRequestCue != "favorite") {
+                                                toggleableState = ToggleableState(item.userData.isFavorite)
+                                            }
+                                        },
+                                    labelModifier = Modifier.testTag("detail:favorite$suffix-label").then(labelSemantics("favorite"))
+                                )
                             }
-                        )
-                    ) {
-                        // TV Button leaves content at top start; the stable label centres it like its siblings.
-                        DetailActionLabel(
-                            androidx.compose.ui.res.stringResource(R.string.subtitle_find_action),
-                            if (stableLayout) "subtitles" else null,
-                            Modifier.testTag("detail:subtitles-label"),
-                            icon = "captions"
-                        )
-                    }
-                }
-            }
-            // CAT-05: Mark watched sits after the other actions, away from Play (a viewer pressed it by accident beside Play).
-            // The pending and ready rows share this order, so Right from the primary lands on Favorite in both (CAT-08..12).
-            playedSlot()
-            // In the fixed playback layout Play from start keeps its last place, so the pending handoff and the ready row
-            // agree; the shorter hero keeps a wrapped second row on screen (T-8).
-            if (offersFromStart && stableLayout) {
-                key("from-start") {
-                    Box {
-                        val click = pending?.onFromStart ?: {
-                            playItem?.let { onPlay(it, false) }
-                            Unit
                         }
-                        Button(
-                            colors = detailButtonColors(primary = false),
-                            onClick = { if (!blocked) click() },
-                            enabled = !blocked && (pending != null || playItem != null),
-                            modifier = (fromStartFocus?.let { Modifier.focusRequester(it) } ?: Modifier)
-                                .then(actionModifier("from-start", "from-start", click))
-                        ) {
-                            DetailActionLabel(
-                                labels.getValue("from-start"),
-                                if (stableLayout || compact) "from-start" else null,
-                                Modifier.testTag("detail:from-start$suffix-label").then(labelSemantics("from-start")),
-                                compact = compact,
-                                icon = "restart"
-                            )
+                        "download" -> {
+                            Box(recordHeight.align(Alignment.Top)) {
+                                DetailIconActionButton(
+                                    label = "Download",
+                                    icon = "download",
+                                    enabled = !blocked,
+                                    onClick = { if (!blocked) onDownload?.invoke() },
+                                    modifier = Modifier.testTag("detail:download").detailFocusDiagnostic("download"),
+                                    labelModifier = Modifier.testTag("detail:download-label")
+                                )
+                            }
+                        }
+                        "subtitles" -> {
+                            Box(recordHeight.align(Alignment.Top)) {
+                                DetailIconActionButton(
+                                    label = androidx.compose.ui.res.stringResource(R.string.subtitle_find_action),
+                                    icon = "captions",
+                                    enabled = !blocked,
+                                    onClick = { if (!blocked) onSubtitles?.invoke() },
+                                    modifier = Modifier.testTag("detail:subtitles").detailFocusDiagnostic("subtitles"),
+                                    labelModifier = Modifier.testTag("detail:subtitles-label")
+                                )
+                            }
+                        }
+                        "trailer" -> {
+                            Box(recordHeight.align(Alignment.Top)) {
+                                DetailIconActionButton(
+                                    label = "Trailer",
+                                    icon = "movies",
+                                    enabled = !blocked,
+                                    onClick = { if (!blocked) onTrailer?.invoke() },
+                                    modifier = Modifier.testTag("detail:trailer").detailFocusDiagnostic("trailer"),
+                                    labelModifier = Modifier.testTag("detail:trailer-label")
+                                )
+                            }
+                        }
+                        "played" -> {
+                            Box(recordHeight.align(Alignment.Top)) {
+                                val click = pending?.onPlayed ?: onPlayed
+                                DetailIconActionButton(
+                                    label = labels.getValue("played"),
+                                    icon = if (item.isWatched) "check" else "eye",
+                                    enabled = !blocked && (pending != null || (!item.isEmptyContainer && (stableLayout || !busy))),
+                                    active = item.isWatched,
+                                    onClick = { if (!blocked) click() },
+                                    modifier = (
+                                        if (pending == null && playItem == null && !item.isEmptyContainer) {
+                                            Modifier.focusRequester(initial)
+                                        } else {
+                                            Modifier
+                                        }
+                                        )
+                                        .then(playedFocus?.let { Modifier.focusRequester(it) } ?: Modifier)
+                                        .then(actionModifier("played", "played", click)).semantics {
+                                            if (!blocked && pending?.available != false && activeRequestCue != "played") {
+                                                toggleableState = ToggleableState(item.isWatched)
+                                            }
+                                        },
+                                    labelModifier = Modifier.testTag("detail:played$suffix-label").then(labelSemantics("played"))
+                                )
+                            }
                         }
                     }
                 }
@@ -3804,80 +3713,13 @@ private fun DetailActions(
     }
 }
 
-private val DETAIL_STABLE_HEIGHT = 72.dp
-
-private fun detailStableWidth(target: String) = when (target) {
-    // The primary carries a play mark beside its centred wording, so it gets the room "Resume from 1:23:45" needs on one line.
-    "primary" -> 240.dp
-    "from-start", "download" -> 200.dp
-    "primary-wide" -> 340.dp
-    else -> 260.dp
-}
-
-private fun detailActionWidth(target: String, compact: Boolean) = if (!compact) {
-    detailStableWidth(target)
-} else {
-    when (target) {
-        "played" -> 160.dp
-        "from-start" -> 140.dp
-        else -> 120.dp
-    }
-}
-
-/**
- * After playback the pills keep a fixed size so nothing moves as labels change. TV Material's Button leaves its content at
- * the surface's top start, so the wording has to fill the room inside the button's padding to sit in the middle.
- */
+/** Compact single-line action wording for recording details. */
 @Composable
 private fun DetailActionLabel(label: String, stableTarget: String?, modifier: Modifier, compact: Boolean = false, icon: String? = null) {
-    @Composable
-    fun Mark() {
-        if (icon != null) {
-            Icon(tvIcon(icon), contentDescription = null, modifier = Modifier.size(20.dp))
-            Spacer(Modifier.width(10.dp))
-        }
-    }
-    if (compact) {
-        Box(Modifier.heightIn(min = RECORDING_DETAIL_LABEL_MIN_HEIGHT_DP.dp), contentAlignment = Alignment.Center) {
-            Text(label, modifier = modifier, maxLines = 1, softWrap = false)
-        }
-    } else if (stableTarget == null) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Mark()
-            Text(label, modifier = modifier, fontWeight = FontWeight.Medium)
-        }
-    } else {
-        // The fixed pill keeps its wording centred (CAT-08..12); the mark sits at its start, outside the text's room.
-        Box(
-            Modifier.width(detailActionWidth(stableTarget, compact) - 32.dp)
-                .heightIn(min = (if (compact) 48.dp else DETAIL_STABLE_HEIGHT) - 20.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            if (icon != null) {
-                Icon(tvIcon(icon), contentDescription = null, modifier = Modifier.align(Alignment.CenterStart).size(20.dp))
-            }
-            Text(
-                label,
-                modifier = modifier.padding(horizontal = if (icon != null) 26.dp else 0.dp),
-                textAlign = TextAlign.Center,
-                fontWeight = FontWeight.Medium
-            )
-        }
+    Box(Modifier.heightIn(min = RECORDING_DETAIL_LABEL_MIN_HEIGHT_DP.dp), contentAlignment = Alignment.Center) {
+        Text(label, modifier = modifier, maxLines = 1, softWrap = false)
     }
 }
-
-/** CAT-05: Play is the one filled action; the rest are quiet glass until focused, when they turn light like Play. */
-@Composable
-private fun detailButtonColors(primary: Boolean) = androidx.tv.material3.ButtonDefaults.colors(
-    containerColor = if (primary) Color(0xFFE6E9F2) else Color(0x2EFFFFFF),
-    contentColor = if (primary) Color(0xFF10131C) else Color(0xFFE8EBF2),
-    focusedContainerColor = Color.White,
-    focusedContentColor = Color(0xFF10131C),
-    pressedContainerColor = Color(0xFFD5DAE6),
-    pressedContentColor = Color(0xFF10131C),
-    disabledContainerColor = Color(0x1AFFFFFF),
-    disabledContentColor = Color(0x99E8EBF2)
-)
 
 @Composable
 private fun DetailRow(
