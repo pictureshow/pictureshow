@@ -193,7 +193,8 @@ class CatalogDetailReadRecoveryTest {
         compose.runOnIdle { state.value = state.value.copy(loading = false) }
         awaitFreshRetryPublication()
         compose.onNodeWithTag("detail:favorite").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
-        compose.onRoot().performKeyInput { pressKey(Key.DirectionLeft) }
+        // CAT-05: Mark watched now follows Favorite, away from Play.
+        compose.onRoot().performKeyInput { pressKey(Key.DirectionRight) }
         advanceFrames(12)
         compose.onNodeWithTag("detail:played").assertIsFocused()
         compose.onNodeWithTag("detail:retry").assertDoesNotExist()
@@ -344,7 +345,8 @@ class CatalogDetailReadRecoveryTest {
         advanceFrames(6)
         compose.onNodeWithTag("detail:retry").assertIsFocused()
         compose.onNodeWithTag("detail:favorite").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
-        compose.onRoot().performKeyInput { pressKey(Key.DirectionLeft) }
+        // CAT-05: Mark watched now follows Favorite, away from Play.
+        compose.onRoot().performKeyInput { pressKey(Key.DirectionRight) }
         advanceFrames(12)
         compose.onNodeWithTag("detail:played").assertIsFocused()
         compose.onNodeWithTag("detail:retry").assertDoesNotExist()

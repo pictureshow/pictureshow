@@ -56,6 +56,11 @@ data class MediaItem(
     @SerialName("SeriesPrimaryImageTag") val seriesPrimaryImageTag: String? = null,
     @SerialName("ParentThumbItemId") val parentThumbItemId: String? = null,
     @SerialName("ParentThumbImageTag") val parentThumbImageTag: String? = null,
+    /** An episode's or season's series logo (HOME-20); the item's own logo is in [imageTags]["Logo"]. */
+    @SerialName("ParentLogoItemId") val parentLogoItemId: String? = null,
+    @SerialName("ParentLogoImageTag") val parentLogoImageTag: String? = null,
+    /** Image type to tag to BlurHash, sent by default on item reads; drawn while the image loads (HOME-23). */
+    @SerialName("ImageBlurHashes") val imageBlurHashes: Map<String, Map<String, String>> = emptyMap(),
     @SerialName("Chapters") val chapters: List<Chapter> = emptyList(),
     @SerialName("Trickplay") val trickplay: Map<String, Map<String, TrickplayInfo>> = emptyMap(),
     @SerialName("People") val people: List<MediaPerson> = emptyList(),

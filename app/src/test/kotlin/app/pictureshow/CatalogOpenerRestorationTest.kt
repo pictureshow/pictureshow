@@ -31,6 +31,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToKey
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.pressKey
 import androidx.lifecycle.Lifecycle
@@ -104,6 +105,9 @@ class CatalogOpenerRestorationTest {
     }
 
     private fun open(tag: String) {
+        // The hero above the shelves leaves one shelf composed at a time; bring the card's shelf in first.
+        val key = if (tag == "home:switch-user") "profile" else tag.removePrefix("home:").substringBeforeLast(":")
+        if (tag.startsWith("home:")) compose.onNodeWithTag("home").performScrollToKey(key)
         compose.onNodeWithTag(tag).performScrollTo().performSemanticsAction(SemanticsActions.OnClick) { it() }
         compose.onNodeWithTag("detail:play").assertIsFocused()
     }

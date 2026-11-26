@@ -9,16 +9,21 @@ import {
     ClientError,
 } from "./index";
 
+/** A container id or GUID standing in for a server name. */
+const MACHINE_NAME = /^(?:[0-9a-f]{12}|[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
+
 /**
  * What an entry for this server is called, against the others listed with it. Jellyfin's name is free text and defaults to
- * the machine's hostname, so two entries can share it. The address then tells them apart. A server with no name is its address.
+ * the machine's hostname, so two entries can share it. The address then tells them apart. A server with no name, or named by a
+ * container id or GUID, is its address.
  */
 export function serverLabel(
     server: { id: string; name: string; url: string },
     all: { id: string; name: string; url: string }[],
 ): string {
     const name = server.name.trim();
-    if (!name) return server.url;
+    // A server left on its container's hostname is named like "3f9a1c0be472"; that id means nothing to a viewer.
+    if (!name || MACHINE_NAME.test(name.toLowerCase())) return server.url;
     const distinct = new Map<string, { name: string }>();
     for (const s of all) {
         const key = s.id + " " + s.url;

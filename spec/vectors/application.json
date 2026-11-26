@@ -6562,6 +6562,69 @@
       "expected": "Home"
     },
     {
+      "id": "server-label.a-container-hostname-is-its-address",
+      "operation": "server-label",
+      "input": {
+        "server": {
+          "id": "m",
+          "name": "3f9a1c0be472",
+          "url": "https://media.example",
+          "version": "12"
+        },
+        "all": [
+          {
+            "id": "m",
+            "name": "3f9a1c0be472",
+            "url": "https://media.example",
+            "version": "12"
+          }
+        ]
+      },
+      "expected": "https://media.example"
+    },
+    {
+      "id": "server-label.a-guid-name-is-its-address",
+      "operation": "server-label",
+      "input": {
+        "server": {
+          "id": "m",
+          "name": "0F1E2D3C-4B5A-6978-8796-A5B4C3D2E1F0",
+          "url": "https://media.example",
+          "version": "12"
+        },
+        "all": [
+          {
+            "id": "m",
+            "name": "0F1E2D3C-4B5A-6978-8796-A5B4C3D2E1F0",
+            "url": "https://media.example",
+            "version": "12"
+          }
+        ]
+      },
+      "expected": "https://media.example"
+    },
+    {
+      "id": "server-label.a-word-of-hex-letters-stays-a-name",
+      "operation": "server-label",
+      "input": {
+        "server": {
+          "id": "m",
+          "name": "cafe",
+          "url": "https://media.example",
+          "version": "12"
+        },
+        "all": [
+          {
+            "id": "m",
+            "name": "cafe",
+            "url": "https://media.example",
+            "version": "12"
+          }
+        ]
+      },
+      "expected": "cafe"
+    },
+    {
       "id": "grid-vertical-move.down-keeps-column",
       "operation": "grid-vertical-move",
       "input": {

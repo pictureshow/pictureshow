@@ -107,7 +107,7 @@ class CatalogDetailHandoffTest {
         }
         compose.mainClock.advanceTimeBy(8_000)
         compose.runOnIdle { state.value = state.value.copy(loading = false, playbackPending = false) }
-        compose.onNodeWithTag("detail:played").assertIsFocused()
+        compose.onNodeWithTag("detail:favorite").assertIsFocused()
     }
 
     @Test fun anEmptyContainerReportsTheActualFavoriteTarget() {
@@ -297,8 +297,9 @@ class CatalogDetailHandoffTest {
             val offered = compose.onNodeWithTag("detail:played-pending").fetchSemanticsNode()
             assertFalse(offered.config.contains(SemanticsProperties.HideFromAccessibility))
             // No reader ACK and less than its former timeout: the first move must have a target.
+            // CAT-05: Favorite follows the primary; Mark watched sits further from Play.
             compose.onRoot().performKeyInput { pressKey(Key.DirectionRight) }
-            compose.onNodeWithTag("detail:played-pending").assertIsFocused()
+            compose.onNodeWithTag("detail:favorite-pending").assertIsFocused()
         } finally {
             compose.mainClock.autoAdvance = true
             org.robolectric.Shadows.shadowOf(manager).apply {
@@ -1015,7 +1016,7 @@ class CatalogDetailHandoffTest {
         compose.setContent {
             PictureshowTheme {
                 CatalogDetail(
-                    state.value, {}, {}, { calls += "played" }, {}, {}, onPlay = { _, _ -> calls += "play" },
+                    state.value, {}, {}, { calls += "played" }, { calls += "favorite" }, {}, onPlay = { _, _ -> calls += "play" },
                     onPendingAction = { handoff.accessibleSelect("entry", it) },
                     onPendingControlsReady = { handoff.live("entry", it) },
                     onFocusRestored = { target, focused -> handoff.finish("entry", target, focused) }
@@ -1032,7 +1033,7 @@ class CatalogDetailHandoffTest {
             state.value = state.value.copy(loading = false, playbackPending = false)
         }
         compose.mainClock.advanceTimeBy(100)
-        compose.runOnIdle { assertEquals(listOf("play", "played"), calls) }
+        compose.runOnIdle { assertEquals(listOf("play", "favorite"), calls) }
     }
 
     @Test fun aRequestedContainerPlayReportsWhenFreshEpisodesAreUnavailable() {

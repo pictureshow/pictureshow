@@ -151,7 +151,7 @@ class ConfirmationInputFocusTest {
             host = LocalView.current
             MaterialTheme { Pictureshow() }
         }
-        compose.waitUntil(timeoutMillis = 5_000) { compose.onAllNodesWithText("Viewer A · Fixture server").fetchSemanticsNodes().size == 1 }
+        compose.waitUntil(timeoutMillis = 5_000) { compose.onAllNodesWithText("Viewer A").fetchSemanticsNodes().size == 1 }
         compose.onNodeWithTag("home:switch-user").performSemanticsAction(SemanticsActions.OnClick) { it() }
         compose.onNodeWithText("Who’s watching?").assertExists()
         compose.waitForIdle()

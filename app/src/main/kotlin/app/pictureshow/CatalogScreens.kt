@@ -13,7 +13,6 @@ import androidx.compose.foundation.gestures.BringIntoViewSpec
 import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.gestures.ScrollableState
 import androidx.compose.foundation.gestures.scrollBy
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -34,7 +33,6 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
@@ -49,7 +47,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.onFocusedBoundsChanged
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -70,9 +67,9 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameMillis
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
@@ -117,6 +114,7 @@ import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.semantics.toggleableState
 import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.state.ToggleableState
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -139,6 +137,8 @@ import app.pictureshow.core.GridSorts
 import app.pictureshow.core.GridVerticalMove
 import app.pictureshow.core.MediaItem
 import app.pictureshow.core.UNBOUNDED_TITLE_FONT_SCALE
+import app.pictureshow.core.blurHashFor
+import app.pictureshow.core.cardImage
 import app.pictureshow.core.episodeLabel
 import app.pictureshow.core.gridHoldRelease
 import app.pictureshow.core.gridStripDetail
@@ -166,6 +166,17 @@ private val HEADER_ROWS = setOf("account", "search", "settings", "live-tv", "req
 
 /** The TV home header (account, Search, Settings, Requests, Downloads); it scrolls sideways when the actions outgrow the screen. */
 internal const val HOME_ACTIONS_TAG = "home:actions"
+
+/** HOME-20: how long focus rests on a card before the hero changes to it. */
+internal const val HOME_HERO_SETTLE_MILLIS = 140L
+private val HOME_HERO_HEIGHT = 228.dp
+private val HOME_HERO_HEIGHT_LARGE_TYPE = 96.dp
+private val HOME_SHELF_LEAD = 60.dp
+private const val HOME_BACKDROP_WIDTH_FRACTION = .74f
+private const val HOME_BACKDROP_HEIGHT_FRACTION = .8f
+
+/** The hero's second line: an episode's own name under its series' logo or name. */
+internal fun heroSubtitle(item: MediaItem): String? = if (item.type == "Episode" && item.seriesName != null) item.name else null
 
 /** Each navigation entry owns its saveable focus identity and lazy-list scroll positions. */
 @OptIn(ExperimentalFoundationApi::class)
@@ -233,7 +244,7 @@ fun CatalogHome(
         "requests" -> requestsLabel
         "customize" -> "Customize home"
         "profile" -> "Switch user"
-        "account" -> accountChipLabel(account.user.name, serverLabel)
+        "account" -> account.user.name
         "retry" -> if (onWatchDownloads != null) "Watch downloads" else "Retry"
         else -> restoreItem?.let(::catalogAnnouncement)
     }
@@ -260,6 +271,19 @@ fun CatalogHome(
         rowSelections = rowSelections + (row.key to item.id)
         rowPositions = rowPositions + (row.key to itemIndex)
     }
+    // HOME-20: the hero follows the focused card. A short settle lets a fast run of presses pass without
+    // starting a backdrop load for every card on the way; the first title shows at once.
+    var heroCandidate by remember { mutableStateOf<MediaItem?>(null) }
+    var heroItem by remember { mutableStateOf<MediaItem?>(null) }
+    LaunchedEffect(heroCandidate) {
+        val candidate = heroCandidate ?: return@LaunchedEffect
+        if (heroItem != null) delay(HOME_HERO_SETTLE_MILLIS)
+        heroItem = candidate
+    }
+    val heroShown = heroItem?.let { shown -> rows.firstNotNullOfOrNull { row -> row.items.firstOrNull { it.id == shown.id } } ?: shown }
+        ?: restoreItem
+        ?: rows.firstOrNull()?.items?.firstOrNull()
+    val railHome = remember { FocusRequester() }
     val profile = remember { FocusRequester() }
     val accountFocus = remember { FocusRequester() }
     var accountMenu by rememberSaveable { mutableStateOf(false) }
@@ -352,13 +376,6 @@ fun CatalogHome(
             }
         }
     }
-    fun headerDown(event: androidx.compose.ui.input.key.KeyEvent): Boolean =
-        if (event.key == Key.DirectionDown && event.type == KeyEventType.KeyDown && rows.isNotEmpty()) {
-            moveRow(0)
-            true
-        } else {
-            false
-        }
     // Back below the first shelf returns to the top of home, where it opened; Back at the top leaves the app.
     val belowTop =
         rows.isNotEmpty() &&
@@ -373,19 +390,143 @@ fun CatalogHome(
         if (pendingReturn) entryBackSwallowed = true else moveRow(0)
     }
     val platformBringIntoView = LocalBringIntoViewSpec.current
-    val firstRowFocused by rememberUpdatedState(rows.firstOrNull()?.key == selectedRow)
     val focusMargin = with(LocalDensity.current) { FocusedCardMargin.toPx() }
-    val homeBringIntoView = remember(platformBringIntoView, focusMargin) {
+    val shelfLead = with(LocalDensity.current) { HOME_SHELF_LEAD.toPx() }
+    val homeBringIntoView = remember(platformBringIntoView, focusMargin, shelfLead) {
         object : BringIntoViewSpec {
-            override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float = focusedCardScrollDistance(
-                offset,
-                size,
-                containerSize,
-                focusMargin,
-                // TV's default 30% pivot would hide Search even when the whole first card already fits.
-                if (firstRowFocused && offset >= 0f) 0f else platformBringIntoView.calculateScrollDistance(offset, size, containerSize)
+            // HOME-25: the focused shelf rides at the top of the list, its heading just above, under the hero.
+            override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float =
+                focusedCardScrollDistance(offset, size, containerSize, focusMargin, offset - shelfLead)
+        }
+    }
+    fun leaveRail() = moveRow(selectedRowIndex.coerceIn(0, rows.lastIndex.coerceAtLeast(0)))
+    val libraryRowIndex = rows.indexOfFirst { it.library }
+    val railEntries = buildList {
+        add(
+            RailEntry(
+                "account", account.user.name, null, "home:account",
+                onClick = {
+                    selectedRow = "account"
+                    accountMenu = true
+                },
+                enabled = !state.busy,
+                description = "Account: ${account.user.name}",
+                avatar = account.user.name.trim().take(1).uppercase().ifEmpty { "?" },
+                modifier = target(Modifier, restoreAction == "account").focusRequester(accountFocus)
+                    .onFocusChanged { if (it.isFocused && (restored || initialNavigation)) selectedRow = "account" }
+            )
+        )
+        add(
+            RailEntry(
+                "search",
+                "Search",
+                tvIcon("search"),
+                "home:search",
+                onClick = {
+                    selectedRow = "search"
+                    onSearch()
+                },
+                groupStart = true,
+                modifier = target(Modifier, restoreAction == "search").focusRequester(search)
+                    // The first attached target during the first load, like the profile actions below.
+                    .onFocusChanged { if (it.isFocused && (restored || initialNavigation)) selectedRow = "search" }
+            )
+        )
+        add(
+            RailEntry(
+                "home",
+                "Home",
+                tvIcon("home"),
+                "home:home",
+                onClick = ::leaveRail,
+                selected = true,
+                modifier = Modifier.focusRequester(railHome)
+            )
+        )
+        rows.getOrNull(libraryRowIndex)?.items?.forEachIndexed { index, library ->
+            add(
+                RailEntry(
+                    "library:${library.id}",
+                    library.name,
+                    tvIcon(libraryIconKind(library.collectionType)),
+                    "home:library:${library.id}",
+                    onClick = {
+                        select(libraryRowIndex, index)
+                        onOpen(library)
+                    },
+                    groupStart = index == 0
+                )
             )
         }
+        add(
+            RailEntry(
+                "live-tv",
+                "Live TV",
+                tvIcon("live-tv"),
+                "home:live-tv",
+                onClick = {
+                    selectedRow = "live-tv"
+                    onLiveTv()
+                },
+                groupStart = true,
+                modifier = target(Modifier, restoreAction == "live-tv").focusRequester(liveFocus)
+                    .onFocusChanged { if (it.isFocused && (restored || initialNavigation)) selectedRow = "live-tv" }
+            )
+        )
+        if (onRequests != null) {
+            add(
+                RailEntry(
+                    "requests",
+                    requestsLabel,
+                    tvIcon("requests"),
+                    "home:requests",
+                    onClick = {
+                        selectedRow = "requests"
+                        onRequests()
+                    },
+                    modifier = target(Modifier, restoreAction == "requests").focusRequester(requestsFocus)
+                        .onFocusChanged { if (it.isFocused && (restored || initialNavigation)) selectedRow = "requests" }
+                )
+            )
+        }
+        // Reachable with the server down: the home error never hides the way to saved media.
+        if (onDownloads != null) add(RailEntry("downloads", "Downloads", tvIcon("downloads"), "home:downloads", onClick = onDownloads))
+        if (onCustomize != null) {
+            add(
+                RailEntry(
+                    "customize",
+                    "Customize home",
+                    tvIcon("customize"),
+                    "home:customize",
+                    onClick = {
+                        if (app.pictureshow.core.canOpenHomeEditor(state.preferencesReady)) {
+                            selectedRow = "customize"
+                            onCustomize()
+                        }
+                    },
+                    enabled = app.pictureshow.core.canOpenHomeEditor(state.preferencesReady),
+                    groupStart = true,
+                    modifier = target(Modifier, restoreAction == "customize").focusRequester(customizeFocus)
+                        .onFocusChanged { if (it.isFocused && (restored || initialNavigation)) selectedRow = "customize" }
+                )
+            )
+        }
+        add(
+            RailEntry(
+                "settings",
+                "Settings",
+                tvIcon("settings"),
+                "home:settings",
+                onClick = {
+                    selectedRow = "settings"
+                    onSettings()
+                },
+                enabled = !state.busy,
+                groupStart = onCustomize == null,
+                modifier = target(Modifier, restoreAction == "settings").focusRequester(settingsFocus)
+                    .onFocusChanged { if (it.isFocused && (restored || initialNavigation)) selectedRow = "settings" }
+            )
+        )
     }
     val reveal = Modifier.revealFocusAfterFontChange(list)
     CompositionLocalProvider(LocalBringIntoViewSpec provides homeBringIntoView) {
@@ -395,259 +536,212 @@ fun CatalogHome(
             selectedRow = "search"
             scope.launch { focusAction("header", 0, search) }
         }
-        LazyColumn(
-            state = list,
-            modifier = reveal.fillMaxSize().background(CatalogBackground).testTag("home").accessibilityGroup().onPreviewKeyEvent {
-                if (it.type == KeyEventType.KeyDown) {
-                    if (BuildConfig.DEBUG && returning) {
-                        android.util.Log.d("CatalogFocus", "home-key key=${it.key} lifecycle=$homeLifecycle restored=$restored")
-                    }
-                    // The Back that reveals this destination is not a new catalog selection.
-                    if (it.key != Key.Back && it.key != Key.Escape) {
-                        initialNavigation = true
-                        if (returning) restored = true
-                    }
-                }
-                false
-            },
-            contentPadding = PaddingValues(horizontal = 48.dp, vertical = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(24.dp)
-        ) {
-            item(key = "header") {
-                Column(modifier = Modifier.accessibilityGroup(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    // Up from the first shelf lands on Search; Settings is beside it. The account chip leads the row
-                    // (Switch user · Sign out · Settings), and the same two buttons stay below every shelf.
-                    // With Requests and Downloads the actions outgrow a 960 dp TV screen; the row scrolls (focus brings
-                    // each button into view) rather than squeezing a label onto three lines.
-                    Row(
-                        modifier = Modifier.horizontalScroll(rememberScrollState()).testTag(HOME_ACTIONS_TAG),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        // Who is signed in, and the way to Switch user and Sign out, lead the header (T-1).
-                        AccountChip(
-                            account.user.name,
-                            serverLabel,
-                            enabled = !state.busy,
-                            onClick = {
-                                selectedRow = "account"
-                                accountMenu = true
-                            },
-                            modifier = target(Modifier, restoreAction == "account").focusRequester(accountFocus).testTag("home:account")
-                                .staysInRow(first = true, last = false)
-                                .onFocusChanged { if (it.isFocused && (restored || initialNavigation)) selectedRow = "account" }
-                                .onPreviewKeyEvent { headerDown(it) }
+        Box(Modifier.fillMaxSize().background(CatalogBackground)) {
+            HeroBackdrop(
+                heroShown,
+                account,
+                CatalogBackground,
+                Modifier.align(Alignment.TopEnd).fillMaxWidth(HOME_BACKDROP_WIDTH_FRACTION).fillMaxHeight(HOME_BACKDROP_HEIGHT_FRACTION)
+                    .testTag("home:backdrop")
+            )
+            Column(Modifier.fillMaxSize().padding(start = RailCollapsedWidth)) {
+                // HOME-20..22: the focused title's logo or name, facts and summary, above the shelves.
+                // At large type a shelf's card is taller, so the hero gives up its summary and some height to keep it whole.
+                val largeType = LocalDensity.current.fontScale > UNBOUNDED_TITLE_FONT_SCALE
+                Box(
+                    Modifier.fillMaxWidth().height(if (largeType) HOME_HERO_HEIGHT_LARGE_TYPE else HOME_HERO_HEIGHT)
+                        .padding(start = 24.dp, top = if (largeType) 12.dp else 32.dp, end = 48.dp)
+                        .catalogFocusTarget(!handoff).testTag("home:hero"),
+                    contentAlignment = Alignment.TopStart
+                ) {
+                    if (heroShown != null) {
+                        HeroTitleBlock(
+                            heroShown,
+                            account,
+                            Modifier.fillMaxWidth(.56f),
+                            summaryLines = if (largeType) 0 else 3,
+                            logoHeight = if (largeType) 36.dp else 72.dp,
+                            subtitle = heroSubtitle(heroShown).takeUnless { largeType },
+                            compact = largeType
                         )
-                        Button(
-                            onClick = {
-                                selectedRow = "search"
-                                onSearch()
-                            },
-                            modifier = target(Modifier, restoreAction == "search").focusRequester(search).testTag("home:search")
-                                .staysInRow(first = false, last = false)
-                                .onFocusChanged {
-                                    // The first attached target during the first load, like the profile actions below.
-                                    if (it.isFocused && (restored || initialNavigation)) selectedRow = "search"
-                                }
-                                .onPreviewKeyEvent { headerDown(it) }
-                        ) { Text("Search") }
-                        Button(
-                            onClick = {
-                                selectedRow = "settings"
-                                onSettings()
-                            },
-                            enabled = !state.busy,
-                            modifier = target(Modifier, restoreAction == "settings").focusRequester(settingsFocus).testTag("home:settings")
-                                .staysInRow(first = false, last = false)
-                                .onFocusChanged { if (it.isFocused && (restored || initialNavigation)) selectedRow = "settings" }
-                                .onPreviewKeyEvent { headerDown(it) }
-                        ) { Text("Settings") }
-                        Button(
-                            onClick = {
-                                selectedRow = "live-tv"
-                                onLiveTv()
-                            },
-                            modifier = target(Modifier, restoreAction == "live-tv").focusRequester(liveFocus).testTag("home:live-tv")
-                                .staysInRow(first = false, last = onRequests == null && onCustomize == null && onDownloads == null)
-                                .onFocusChanged { if (it.isFocused && (restored || initialNavigation)) selectedRow = "live-tv" }
-                                .onPreviewKeyEvent { headerDown(it) }
-                        ) { Text("Live TV") }
-                        if (onRequests != null) {
-                            Button(
-                                onClick = {
-                                    selectedRow = "requests"
-                                    onRequests()
-                                },
-                                modifier = target(Modifier, restoreAction == "requests").focusRequester(requestsFocus)
-                                    .testTag("home:requests").staysInRow(first = false, last = onCustomize == null && onDownloads == null)
-                                    .onFocusChanged { if (it.isFocused && (restored || initialNavigation)) selectedRow = "requests" }
-                                    .onPreviewKeyEvent { headerDown(it) }
-                            ) { Text(requestsLabel) }
-                        }
-                        if (onCustomize != null) {
-                            Button(
-                                enabled = app.pictureshow.core.canOpenHomeEditor(state.preferencesReady),
-                                onClick = {
-                                    if (app.pictureshow.core.canOpenHomeEditor(state.preferencesReady)) {
-                                        selectedRow = "customize"
-                                        onCustomize()
-                                    }
-                                },
-                                modifier = target(Modifier, restoreAction == "customize").focusRequester(customizeFocus)
-                                    .testTag("home:customize").staysInRow(first = false, last = onDownloads == null)
-                                    .onFocusChanged { if (it.isFocused && (restored || initialNavigation)) selectedRow = "customize" }
-                                    .onPreviewKeyEvent { headerDown(it) }
-                            ) { Text("Customize home") }
-                        }
-                        // Reachable with the server down: the home error above never hides the way to saved media.
-                        if (onDownloads != null) {
-                            Button(
-                                onClick = onDownloads,
-                                modifier = Modifier.testTag("home:downloads").staysInRow(first = false, last = true)
-                                    .onPreviewKeyEvent { headerDown(it) }
-                            ) { Text("Downloads") }
-                        }
-                    }
-                    Column(Modifier.catalogFocusTarget(!handoff), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    } else {
                         CatalogHeading("Pictureshow")
                     }
-                    if (state.loading) Text("Loading your home…", modifier = Modifier.catalogFocusTarget(!handoff))
-                    CatalogError(
-                        if (onWatchDownloads != null) OFFLINE_UNREACHABLE_TEXT else state.error,
-                        onRetry,
-                        target(Modifier, restoreAction == "retry").focusRequester(retry).onPreviewKeyEvent {
-                            if (it.key == Key.DirectionDown && it.type == KeyEventType.KeyDown && rows.isNotEmpty()) {
-                                moveRow(0)
-                                true
-                            } else {
-                                false
-                            }
-                        },
-                        announceMessage = !handoff,
-                        onWatchDownloads = onWatchDownloads,
-                        secondary = target(Modifier, false)
-                    )
-                    if (!state.loading && rows.isEmpty() && state.error == null) {
-                        Text(
-                            "There are no libraries or videos available for this user yet.",
-                            modifier = Modifier.catalogFocusTarget(!handoff)
-                        )
-                    }
                 }
-            }
-            rows.forEachIndexed { rowIndex, row ->
-                item(key = row.key) {
-                    Column(modifier = Modifier.accessibilityGroup(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Box(Modifier.catalogFocusTarget(!handoff)) { CatalogHeading(row.title, large = false) }
-                        // Only the outer vertical list changes its pivot; shelves retain platform scrolling.
-                        CompositionLocalProvider(LocalBringIntoViewSpec provides platformBringIntoView) {
-                            ShelfWithEnds(row.title, rowStates.getValue(row.key), row.items.lastIndex) { endCard, rowSemantics ->
-                                LazyRow(
-                                    state = rowStates.getValue(row.key),
-                                    // Explicit stable-ID restoration in focusRow owns shelf entry. A focusRestorer
-                                    // here can intercept its request after lazy disposal and select another child.
-                                    modifier = Modifier.fillMaxWidth().then(rowSemantics),
-                                    // Reserve the 1.1x focus scale and centered border inside the shelf clip.
-                                    contentPadding = PaddingValues(16.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(18.dp)
-                                ) {
-                                    itemsIndexed(row.items, key = { _, item -> item.id }) { itemIndex, item ->
-                                        endCard(itemIndex) { endModifier ->
-                                            CatalogCard(
-                                                item = item,
-                                                account = account,
-                                                wide = row.wide || row.library || item.type == "Episode",
-                                                subtitle = homeRowSubtitle(row, item),
-                                                // A library's name sits inside its tile's top edge, so a row peeking at the
-                                                // bottom of the first screen still says what it is (T-15).
-                                                nameInArtwork = row.library,
-                                                onClick = {
-                                                    select(rowIndex, itemIndex)
-                                                    onOpen(item)
-                                                },
-                                                modifier = target(
-                                                    Modifier,
-                                                    restoreAction == null && row.key == restoreRow?.key && item.id == restoreItem?.id
-                                                ).focusRequester(requesters.getValue("${row.key}:${item.id}"))
-                                                    .testTag("home:${row.key}:${item.id}")
-                                                    .staysInRow(itemIndex == 0, itemIndex == row.items.lastIndex)
-                                                    .then(endModifier)
-                                                    .onFocusChanged {
-                                                        if (it.isFocused && (restored || initialNavigation)) select(rowIndex, itemIndex)
-                                                    }.onPreviewKeyEvent {
-                                                        if (it.type != KeyEventType.KeyDown) {
-                                                            false
-                                                        } else if (it.key == Key.DirectionDown) {
-                                                            moveRow(rowIndex + 1)
-                                                            true
-                                                        } else if (it.key == Key.DirectionUp) {
-                                                            moveRow(rowIndex - 1)
-                                                            true
-                                                        } else {
-                                                            false
-                                                        }
-                                                    }
-                                            )
+                LazyColumn(
+                    state = list,
+                    modifier = reveal.fillMaxWidth().weight(1f).testTag("home").accessibilityGroup().onPreviewKeyEvent {
+                        if (it.type == KeyEventType.KeyDown) {
+                            if (BuildConfig.DEBUG && returning) {
+                                android.util.Log.d("CatalogFocus", "home-key key=${it.key} lifecycle=$homeLifecycle restored=$restored")
+                            }
+                            // The Back that reveals this destination is not a new catalog selection.
+                            if (it.key != Key.Back && it.key != Key.Escape) {
+                                initialNavigation = true
+                                if (returning) restored = true
+                            }
+                        }
+                        false
+                    },
+                    contentPadding = PaddingValues(start = 24.dp, end = 48.dp, top = 0.dp, bottom = 32.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    item(key = "header") {
+                        // Navigation lives in the rail (HOME-24); this slot keeps loading, error and empty states above the shelves.
+                        Column(modifier = Modifier.accessibilityGroup(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            if (state.loading) Text("Loading your home…", modifier = Modifier.catalogFocusTarget(!handoff))
+                            CatalogError(
+                                if (onWatchDownloads != null) OFFLINE_UNREACHABLE_TEXT else state.error,
+                                onRetry,
+                                target(Modifier, restoreAction == "retry").focusRequester(retry).onPreviewKeyEvent {
+                                    if (it.key == Key.DirectionDown && it.type == KeyEventType.KeyDown && rows.isNotEmpty()) {
+                                        moveRow(0)
+                                        true
+                                    } else {
+                                        false
+                                    }
+                                },
+                                announceMessage = !handoff,
+                                onWatchDownloads = onWatchDownloads,
+                                secondary = target(Modifier, false)
+                            )
+                            if (!state.loading && rows.isEmpty() && state.error == null) {
+                                Text(
+                                    "There are no libraries or videos available for this user yet.",
+                                    modifier = Modifier.catalogFocusTarget(!handoff)
+                                )
+                            }
+                        }
+                    }
+                    rows.forEachIndexed { rowIndex, row ->
+                        item(key = row.key) {
+                            Column(modifier = Modifier.accessibilityGroup(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Box(Modifier.catalogFocusTarget(!handoff)) { CatalogHeading(row.title, large = false) }
+                                // Only the outer vertical list changes its pivot; shelves retain platform scrolling.
+                                CompositionLocalProvider(LocalBringIntoViewSpec provides platformBringIntoView) {
+                                    ShelfWithEnds(row.title, rowStates.getValue(row.key), row.items.lastIndex) { endCard, rowSemantics ->
+                                        LazyRow(
+                                            state = rowStates.getValue(row.key),
+                                            // Explicit stable-ID restoration in focusRow owns shelf entry. A focusRestorer
+                                            // here can intercept its request after lazy disposal and select another child.
+                                            modifier = Modifier.fillMaxWidth().then(rowSemantics),
+                                            // Reserve the 1.1x focus scale and centered border inside the shelf clip.
+                                            contentPadding = PaddingValues(16.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(18.dp)
+                                        ) {
+                                            itemsIndexed(row.items, key = { _, item -> item.id }) { itemIndex, item ->
+                                                endCard(itemIndex) { endModifier ->
+                                                    CatalogCard(
+                                                        item = item,
+                                                        account = account,
+                                                        wide = row.wide || row.library || item.type == "Episode",
+                                                        subtitle = homeRowSubtitle(row, item),
+                                                        // A library's name sits inside its tile's top edge, so a row peeking at the
+                                                        // bottom of the first screen still says what it is (T-15).
+                                                        nameInArtwork = row.library,
+                                                        onClick = {
+                                                            select(rowIndex, itemIndex)
+                                                            onOpen(item)
+                                                        },
+                                                        modifier = target(
+                                                            Modifier,
+                                                            restoreAction == null &&
+                                                                row.key == restoreRow?.key &&
+                                                                item.id == restoreItem?.id
+                                                        ).focusRequester(requesters.getValue("${row.key}:${item.id}"))
+                                                            .testTag("home:${row.key}:${item.id}")
+                                                            // HOME-24: Left at a shelf's start opens the rail on Home.
+                                                            .then(if (itemIndex == 0) Modifier.leadsToRail(railHome) else Modifier)
+                                                            .staysInRow(itemIndex == 0, itemIndex == row.items.lastIndex)
+                                                            .then(endModifier)
+                                                            .onFocusChanged {
+                                                                if (it.isFocused) heroCandidate = item
+                                                                if (it.isFocused &&
+                                                                    (restored || initialNavigation)
+                                                                ) {
+                                                                    select(rowIndex, itemIndex)
+                                                                }
+                                                            }.onPreviewKeyEvent {
+                                                                if (it.type != KeyEventType.KeyDown) {
+                                                                    false
+                                                                } else if (it.key == Key.DirectionDown) {
+                                                                    moveRow(rowIndex + 1)
+                                                                    true
+                                                                } else if (it.key == Key.DirectionUp) {
+                                                                    // The hero takes no focus: Up from the first shelf
+                                                                    // opens the rail on Search.
+                                                                    moveRow(rowIndex - 1)
+                                                                    true
+                                                                } else {
+                                                                    false
+                                                                }
+                                                            }
+                                                    )
+                                                }
+                                            }
                                         }
                                     }
                                 }
                             }
                         }
                     }
+                    item(key = "profile") {
+                        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                            Button(
+                                onClick = {
+                                    selectedRow = "profile"
+                                    onSwitchUser()
+                                },
+                                enabled = !state.busy,
+                                modifier = target(Modifier, restoreAction == "profile").focusRequester(profile).testTag("home:switch-user")
+                                    .staysInRow(first = true, last = false)
+                                    .onFocusChanged {
+                                        // During the first load these are the only attached targets. Automatic focus is
+                                        // not a saved user choice and must not outrank the first arriving catalog card.
+                                        if (it.isFocused && BuildConfig.DEBUG) {
+                                            val callers = Throwable().stackTrace.filter {
+                                                it.className.startsWith("app.pictureshow") ||
+                                                    it.className.contains("Accessibility") ||
+                                                    it.className.contains("Focus")
+                                            }.take(24).joinToString(" <- ") { "${it.className}.${it.methodName}" }
+                                            android.util.Log.d(
+                                                "CatalogFocus",
+                                                "home-profile-focus restored=$restored viewer=$initialNavigation " +
+                                                    "handoff=$handoff callers=$callers"
+                                            )
+                                        }
+                                        if (it.isFocused && (restored || initialNavigation)) selectedRow = "profile"
+                                    }
+                                    .onPreviewKeyEvent {
+                                        if (it.key == Key.DirectionUp && it.type == KeyEventType.KeyDown && rows.isNotEmpty()) {
+                                            moveRow(rows.lastIndex)
+                                            true
+                                        } else {
+                                            false
+                                        }
+                                    }
+                            ) { Text("Switch user") }
+                            Button(
+                                onClick = { confirmSignOut = "profile" },
+                                enabled = !state.busy,
+                                modifier = target(Modifier, false).focusRequester(signOutFocus).testTag("home:sign-out")
+                                    .staysInRow(first = false, last = true)
+                                    .onFocusChanged {
+                                        if (it.isFocused && (restored || initialNavigation)) selectedRow = "profile"
+                                    }.onPreviewKeyEvent {
+                                        if (it.key == Key.DirectionUp && it.type == KeyEventType.KeyDown && rows.isNotEmpty()) {
+                                            moveRow(rows.lastIndex)
+                                            true
+                                        } else {
+                                            false
+                                        }
+                                    }
+                            ) { Text(if (state.busy) "Please wait…" else "Sign out") }
+                        }
+                    }
                 }
             }
-            item(key = "profile") {
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Button(
-                        onClick = {
-                            selectedRow = "profile"
-                            onSwitchUser()
-                        },
-                        enabled = !state.busy,
-                        modifier = target(Modifier, restoreAction == "profile").focusRequester(profile).testTag("home:switch-user")
-                            .staysInRow(first = true, last = false)
-                            .onFocusChanged {
-                                // During the first load these are the only attached targets. Automatic focus is
-                                // not a saved user choice and must not outrank the first arriving catalog card.
-                                if (it.isFocused && BuildConfig.DEBUG) {
-                                    val callers = Throwable().stackTrace.filter {
-                                        it.className.startsWith("app.pictureshow") ||
-                                            it.className.contains("Accessibility") ||
-                                            it.className.contains("Focus")
-                                    }.take(24).joinToString(" <- ") { "${it.className}.${it.methodName}" }
-                                    android.util.Log.d(
-                                        "CatalogFocus",
-                                        "home-profile-focus restored=$restored viewer=$initialNavigation handoff=$handoff callers=$callers"
-                                    )
-                                }
-                                if (it.isFocused && (restored || initialNavigation)) selectedRow = "profile"
-                            }
-                            .onPreviewKeyEvent {
-                                if (it.key == Key.DirectionUp && it.type == KeyEventType.KeyDown && rows.isNotEmpty()) {
-                                    moveRow(rows.lastIndex)
-                                    true
-                                } else {
-                                    false
-                                }
-                            }
-                    ) { Text("Switch user") }
-                    Button(
-                        onClick = { confirmSignOut = "profile" },
-                        enabled = !state.busy,
-                        modifier = target(Modifier, false).focusRequester(signOutFocus).testTag("home:sign-out")
-                            .staysInRow(first = false, last = true)
-                            .onFocusChanged {
-                                if (it.isFocused && (restored || initialNavigation)) selectedRow = "profile"
-                            }.onPreviewKeyEvent {
-                                if (it.key == Key.DirectionUp && it.type == KeyEventType.KeyDown && rows.isNotEmpty()) {
-                                    moveRow(rows.lastIndex)
-                                    true
-                                } else {
-                                    false
-                                }
-                            }
-                    ) { Text(if (state.busy) "Please wait…" else "Sign out") }
-                }
-            }
+            TvNavRail(railEntries, onExit = ::leaveRail, modifier = Modifier.align(Alignment.CenterStart))
         }
     }
     if (accountMenu) {
@@ -766,41 +860,6 @@ fun CatalogHome(
             } else {
                 focusAction("profile", rows.size + 1, profile)
             }
-        }
-    }
-}
-
-internal fun accountChipLabel(user: String, server: String) = "$user · $server"
-
-/** The header's account chip: an initial, who is signed in and where, and a mark that it opens a menu. */
-@Composable
-private fun AccountChip(user: String, server: String, enabled: Boolean, onClick: () -> Unit, modifier: Modifier) {
-    Button(
-        onClick = onClick,
-        enabled = enabled,
-        // A long name ellipsizes at a fixed width; the menu shows it in full.
-        modifier = modifier.semantics {
-            contentDescription = "Account: ${accountChipLabel(user, server)}"
-            onClick(label = "Account options", action = null)
-        },
-        contentPadding = PaddingValues(start = 8.dp, end = 16.dp, top = 6.dp, bottom = 6.dp)
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Box(
-                Modifier.size(26.dp).background(Color(0xFF5B6AA8), androidx.compose.foundation.shape.CircleShape)
-                    .clearAndSetSemantics {},
-                contentAlignment = Alignment.Center
-            ) {
-                Text(user.trim().take(1).uppercase().ifEmpty { "?" }, color = Color.White, style = MaterialTheme.typography.labelMedium)
-            }
-            // Large type ellipsizes sooner, so the header's last button doesn't wrap at 960x540 (the whole label is spoken).
-            Text(
-                accountChipLabel(user, server),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.widthIn(max = if (LocalDensity.current.fontScale > UNBOUNDED_TITLE_FONT_SCALE) 110.dp else 180.dp)
-            )
-            Text("▾", modifier = Modifier.clearAndSetSemantics {})
         }
     }
 }
@@ -2250,8 +2309,9 @@ fun CatalogDetail(
             add("episodes" to state.episodes)
         }
         if (!playbackWaiting && !state.loading && state.error == null) {
-            discovery.filter { it.key != "similar" }.forEach { row -> add(row.key to row.entries.map(DiscoveryEntry::card)) }
+            // CAT-05: cast and crew come before extras and the other discovery shelves.
             if (cast.isNotEmpty()) add("people" to cast.map { it.touchPersonItem() })
+            discovery.filter { it.key != "similar" }.forEach { row -> add(row.key to row.entries.map(DiscoveryEntry::card)) }
             discovery.filter { it.key == "similar" }.forEach { row -> add(row.key to row.entries.map(DiscoveryEntry::card)) }
         }
     }
@@ -2339,10 +2399,18 @@ fun CatalogDetail(
                     state.account,
                     Modifier.align(Alignment.TopStart).fillMaxWidth().fillMaxHeight(.64f).testTag("detail:recording-backdrop")
                 )
+            } else if (headerItem != null) {
+                // CAT-05: the title's backdrop fills the page behind its header and fades into the shelves below.
+                HeroBackdrop(
+                    headerItem,
+                    state.account,
+                    CatalogBackground,
+                    Modifier.align(Alignment.TopEnd).fillMaxWidth(.86f).fillMaxHeight(.8f).testTag("detail:backdrop")
+                )
             }
             LazyColumn(
                 state = list,
-                modifier = reveal.fillMaxSize().background(if (recordingContext) Color.Transparent else CatalogBackground)
+                modifier = reveal.fillMaxSize()
                     .testTag("detail").semantics { testTagsAsResourceId = true }
                     // A returning page must expose its restored input target before TalkBack can
                     // choose a heading or overview as a replacement for the departing player.
@@ -2440,25 +2508,51 @@ fun CatalogDetail(
                         Column(modifier = Modifier.accessibilityGroup(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                             if (!playbackWaiting && state.loading && item == null) Text("Loading item…")
                             if (item != null && headerItem != null) {
-                                val backdrop = if (headerItem.backdropImageTags.isNotEmpty() ||
-                                    headerItem.parentBackdropImageTags.isNotEmpty()
-                                ) {
-                                    headerItem.copy(imageTags = emptyMap())
-                                } else {
-                                    headerItem
-                                }
                                 if (!recordingContext) {
-                                    CatalogArtwork(
-                                        backdrop,
-                                        state.account,
-                                        wide = true,
-                                        // Actions that wrap get the room back from the hero, so the second line stays on screen (T-8).
-                                        modifier = Modifier.fillMaxWidth().height(if (actionsWrapped) 140.dp else 220.dp)
-                                            .testTag("detail:hero"),
-                                        alignment = BiasAlignment(0f, -.5f)
-                                    )
+                                    // The hero is the open top of the page over the backdrop, holding the title's logo; the
+                                    // name stands in until the logo loads and stays the spoken heading (CAT-05).
+                                    // Actions that wrap get the room back from the hero, so the second line stays on screen (T-8).
+                                    var logoShown by remember(headerItem.id) { mutableStateOf(false) }
+                                    // An episode wears its series' logo above its own name; a film or series is its logo.
+                                    val episode = headerItem.type == "Episode"
+                                    val logo = app.pictureshow.core.heroLogo(headerItem)
+                                    Column(
+                                        Modifier.fillMaxWidth().height(if (actionsWrapped) 140.dp else 220.dp).testTag("detail:hero"),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.Bottom)
+                                    ) {
+                                        Box(contentAlignment = Alignment.BottomStart) {
+                                            if (logo != null) {
+                                                AsyncImage(
+                                                    model = heroImageRequest(
+                                                        app.pictureshow.core.imageRefUrl(state.account.server, logo, 800)
+                                                    ),
+                                                    contentDescription = null,
+                                                    contentScale = ContentScale.Fit,
+                                                    alignment = Alignment.BottomStart,
+                                                    onSuccess = { logoShown = true },
+                                                    onError = { logoShown = false },
+                                                    modifier = Modifier.fillMaxWidth(.5f)
+                                                        .height(if (episode || actionsWrapped) 72.dp else 120.dp).clearAndSetSemantics {}
+                                                )
+                                            }
+                                            if (!episode) {
+                                                CatalogHeading(
+                                                    headerItem.name,
+                                                    modifier = arrivalMetadataSemantics.fillMaxWidth(.6f).alpha(if (logoShown) 0f else 1f)
+                                                        .testTag("detail:title")
+                                                )
+                                            }
+                                        }
+                                        if (episode) {
+                                            CatalogHeading(
+                                                headerItem.name,
+                                                modifier = arrivalMetadataSemantics.fillMaxWidth(.6f).testTag("detail:title")
+                                            )
+                                        }
+                                    }
+                                } else {
+                                    CatalogHeading(headerItem.name, modifier = arrivalMetadataSemantics.testTag("detail:title"))
                                 }
-                                CatalogHeading(headerItem.name, modifier = arrivalMetadataSemantics.testTag("detail:title"))
                                 if (headerItem.type == "Episode") {
                                     Text(
                                         listOfNotNull(
@@ -2482,12 +2576,35 @@ fun CatalogDetail(
                                     headerItem.communityRating?.let(::communityRatingLabel),
                                     headerItem.runTimeTicks?.let(::runtimeLabel)?.takeIf(String::isNotBlank)
                                 ) + app.pictureshow.core.mediaBadges(headerItem).ifEmpty { app.pictureshow.core.mediaBadges(item) }
-                                if (metadata.isNotEmpty()) {
-                                    Text(
-                                        metadata.joinToString(" · "),
-                                        color = CatalogMuted,
-                                        modifier = arrivalMetadataSemantics
-                                    )
+                                // HOME-21 on Detail: when it would end if started now, from what is left of it.
+                                val endsAt = if (recordingContext) {
+                                    null
+                                } else {
+                                    app.pictureshow.core.heroFacts(
+                                        headerItem,
+                                        System.currentTimeMillis()
+                                    ).endsAtEpochMillis
+                                }
+                                if (metadata.isNotEmpty() || endsAt != null) {
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        if (metadata.isNotEmpty()) {
+                                            Text(
+                                                metadata.joinToString(" · "),
+                                                color = if (recordingContext) CatalogMuted else Color(0xFFDDE2EE),
+                                                modifier = arrivalMetadataSemantics
+                                            )
+                                        }
+                                        endsAt?.let {
+                                            Text(
+                                                endsAtLabel(it),
+                                                color = CatalogMuted,
+                                                modifier = arrivalMetadataSemantics.testTag("detail:ends-at")
+                                            )
+                                        }
+                                    }
                                 }
                                 // PLAY-17: the return from a viewing that played to its end says so, above the actions.
                                 state.finishedLine?.let { line ->
@@ -2548,10 +2665,9 @@ fun CatalogDetail(
                                 headerItem.overview?.takeIf(String::isNotBlank)?.let {
                                     Text(
                                         it,
-                                        modifier = arrivalMetadataSemantics.then(
-                                            if (recordingContext) Modifier.fillMaxWidth(.6f) else Modifier
-                                        ),
-                                        maxLines = if (recordingContext) 4 else Int.MAX_VALUE,
+                                        // Four lines beside the art, as on Home's hero; the full text is still the node's text.
+                                        modifier = arrivalMetadataSemantics.fillMaxWidth(.62f),
+                                        maxLines = 4,
                                         overflow = TextOverflow.Ellipsis
                                     )
                                 }
@@ -3482,6 +3598,42 @@ private fun DetailActions(
                 }
             }
         } else {
+            val playedSlot: @Composable () -> Unit = {
+                key("played") {
+                    Box {
+                        val click = pending?.onPlayed ?: onPlayed
+                        Button(
+                            colors = detailButtonColors(primary = false),
+                            onClick = { if (!blocked) click() },
+                            enabled = !blocked && (pending != null || (!item.isEmptyContainer && (stableLayout || !busy))),
+                            modifier = (
+                                if (pending == null &&
+                                    playItem == null &&
+                                    !item.isEmptyContainer
+                                ) {
+                                    Modifier.focusRequester(initial)
+                                } else {
+                                    Modifier
+                                }
+                                )
+                                .then(playedFocus?.let { Modifier.focusRequester(it) } ?: Modifier)
+                                .then(actionModifier("played", "played", click)).semantics {
+                                    if (!blocked && pending?.available != false && activeRequestCue != "played") {
+                                        toggleableState = ToggleableState(item.isWatched)
+                                    }
+                                }
+                        ) {
+                            DetailActionLabel(
+                                labels.getValue("played"),
+                                if (stableLayout || compact) "played" else null,
+                                Modifier.testTag("detail:played$suffix-label").then(labelSemantics("played")),
+                                compact = compact,
+                                icon = if (item.isWatched) "check" else "eye"
+                            )
+                        }
+                    }
+                }
+            }
             // TV Material raises the focused surface. Stable parents keep native traversal order
             // and node identities unchanged as pending labels become authoritative actions.
             key("primary") {
@@ -3492,6 +3644,7 @@ private fun DetailActions(
                     }
                     Button(
                         onClick = { if (!blocked) click() },
+                        colors = detailButtonColors(primary = true),
                         enabled = !blocked && (pending != null || playItem != null),
                         modifier = (if (pending != null || playItem != null) Modifier.focusRequester(initial) else Modifier)
                             .then(actionModifier("primary", "play", click))
@@ -3507,7 +3660,8 @@ private fun DetailActions(
                             labels.getValue("primary"),
                             if (stableLayout || compact) primaryStable else null,
                             Modifier.testTag("detail:play$suffix-label").then(labelSemantics("primary")),
-                            compact = compact
+                            compact = compact,
+                            icon = "play"
                         )
                     }
                 }
@@ -3516,45 +3670,14 @@ private fun DetailActions(
                 key("from-start") {
                     Box {
                         Button(
+                            colors = detailButtonColors(primary = false),
                             onClick = { if (!blocked) playItem?.let { onPlay(it, false) } },
                             enabled = !blocked,
                             modifier = Modifier.detailFocusDiagnostic("from-start")
                                 .then(
                                     if (compact) Modifier.width(detailActionWidth("from-start", true)).heightIn(min = 48.dp) else Modifier
                                 )
-                        ) { Text("Play from start") }
-                    }
-                }
-            }
-            key("played") {
-                Box {
-                    val click = pending?.onPlayed ?: onPlayed
-                    Button(
-                        onClick = { if (!blocked) click() },
-                        enabled = !blocked && (pending != null || (!item.isEmptyContainer && (stableLayout || !busy))),
-                        modifier = (
-                            if (pending == null &&
-                                playItem == null &&
-                                !item.isEmptyContainer
-                            ) {
-                                Modifier.focusRequester(initial)
-                            } else {
-                                Modifier
-                            }
-                            )
-                            .then(playedFocus?.let { Modifier.focusRequester(it) } ?: Modifier)
-                            .then(actionModifier("played", "played", click)).semantics {
-                                if (!blocked && pending?.available != false && activeRequestCue != "played") {
-                                    toggleableState = ToggleableState(item.isWatched)
-                                }
-                            }
-                    ) {
-                        DetailActionLabel(
-                            labels.getValue("played"),
-                            if (stableLayout || compact) "played" else null,
-                            Modifier.testTag("detail:played$suffix-label").then(labelSemantics("played")),
-                            compact = compact
-                        )
+                        ) { DetailActionLabel("Play from start", null, Modifier, icon = "restart") }
                     }
                 }
             }
@@ -3562,6 +3685,7 @@ private fun DetailActions(
                 Box {
                     val click = pending?.onFavorite ?: onFavorite
                     Button(
+                        colors = detailButtonColors(primary = false),
                         onClick = { if (!blocked) click() },
                         enabled = !blocked && (pending != null || stableLayout || !busy),
                         modifier = (
@@ -3585,7 +3709,8 @@ private fun DetailActions(
                             labels.getValue("favorite"),
                             if (stableLayout || compact) "favorite" else null,
                             Modifier.testTag("detail:favorite$suffix-label").then(labelSemantics("favorite")),
-                            compact = compact
+                            compact = compact,
+                            icon = if (item.userData.isFavorite) "heart" else "heart-outline"
                         )
                     }
                 }
@@ -3593,6 +3718,7 @@ private fun DetailActions(
             if (onDownload != null && pending == null) {
                 key("download") {
                     Button(
+                        colors = detailButtonColors(primary = false),
                         onClick = {
                             if (!blocked) onDownload()
                         },
@@ -3611,10 +3737,11 @@ private fun DetailActions(
                                 "Download",
                                 "download",
                                 Modifier.testTag("detail:download-label"),
-                                compact = compact
+                                compact = compact,
+                                icon = "download"
                             )
                         } else {
-                            Text("Download")
+                            DetailActionLabel("Download", null, Modifier, icon = "download")
                         }
                     }
                 }
@@ -3622,6 +3749,7 @@ private fun DetailActions(
             if (onSubtitles != null && pending == null && !compact) {
                 key("subtitles") {
                     Button(
+                        colors = detailButtonColors(primary = false),
                         onClick = { if (!blocked) onSubtitles() },
                         enabled = !blocked,
                         modifier = Modifier.testTag("detail:subtitles").then(
@@ -3636,13 +3764,17 @@ private fun DetailActions(
                         DetailActionLabel(
                             androidx.compose.ui.res.stringResource(R.string.subtitle_find_action),
                             if (stableLayout) "subtitles" else null,
-                            Modifier.testTag("detail:subtitles-label")
+                            Modifier.testTag("detail:subtitles-label"),
+                            icon = "captions"
                         )
                     }
                 }
             }
-            // After playback Play from start keeps its last place, so the pending handoff and the ready row agree on Right
-            // from the primary landing on Mark watched (CAT-08..12); the shorter hero keeps a wrapped second row on screen (T-8).
+            // CAT-05: Mark watched sits after the other actions, away from Play (a viewer pressed it by accident beside Play).
+            // The pending and ready rows share this order, so Right from the primary lands on Favorite in both (CAT-08..12).
+            playedSlot()
+            // In the fixed playback layout Play from start keeps its last place, so the pending handoff and the ready row
+            // agree; the shorter hero keeps a wrapped second row on screen (T-8).
             if (offersFromStart && stableLayout) {
                 key("from-start") {
                     Box {
@@ -3651,6 +3783,7 @@ private fun DetailActions(
                             Unit
                         }
                         Button(
+                            colors = detailButtonColors(primary = false),
                             onClick = { if (!blocked) click() },
                             enabled = !blocked && (pending != null || playItem != null),
                             modifier = (fromStartFocus?.let { Modifier.focusRequester(it) } ?: Modifier)
@@ -3660,7 +3793,8 @@ private fun DetailActions(
                                 labels.getValue("from-start"),
                                 if (stableLayout || compact) "from-start" else null,
                                 Modifier.testTag("detail:from-start$suffix-label").then(labelSemantics("from-start")),
-                                compact = compact
+                                compact = compact,
+                                icon = "restart"
                             )
                         }
                     }
@@ -3673,8 +3807,10 @@ private fun DetailActions(
 private val DETAIL_STABLE_HEIGHT = 72.dp
 
 private fun detailStableWidth(target: String) = when (target) {
-    "primary", "from-start", "download" -> 200.dp
-    "primary-wide" -> 320.dp
+    // The primary carries a play mark beside its centred wording, so it gets the room "Resume from 1:23:45" needs on one line.
+    "primary" -> 240.dp
+    "from-start", "download" -> 200.dp
+    "primary-wide" -> 340.dp
     else -> 260.dp
 }
 
@@ -3693,23 +3829,55 @@ private fun detailActionWidth(target: String, compact: Boolean) = if (!compact) 
  * the surface's top start, so the wording has to fill the room inside the button's padding to sit in the middle.
  */
 @Composable
-private fun DetailActionLabel(label: String, stableTarget: String?, modifier: Modifier, compact: Boolean = false) {
+private fun DetailActionLabel(label: String, stableTarget: String?, modifier: Modifier, compact: Boolean = false, icon: String? = null) {
+    @Composable
+    fun Mark() {
+        if (icon != null) {
+            Icon(tvIcon(icon), contentDescription = null, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(10.dp))
+        }
+    }
     if (compact) {
         Box(Modifier.heightIn(min = RECORDING_DETAIL_LABEL_MIN_HEIGHT_DP.dp), contentAlignment = Alignment.Center) {
             Text(label, modifier = modifier, maxLines = 1, softWrap = false)
         }
     } else if (stableTarget == null) {
-        Text(label, modifier = modifier)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Mark()
+            Text(label, modifier = modifier, fontWeight = FontWeight.Medium)
+        }
     } else {
+        // The fixed pill keeps its wording centred (CAT-08..12); the mark sits at its start, outside the text's room.
         Box(
             Modifier.width(detailActionWidth(stableTarget, compact) - 32.dp)
                 .heightIn(min = (if (compact) 48.dp else DETAIL_STABLE_HEIGHT) - 20.dp),
             contentAlignment = Alignment.Center
         ) {
-            Text(label, modifier = modifier, textAlign = TextAlign.Center)
+            if (icon != null) {
+                Icon(tvIcon(icon), contentDescription = null, modifier = Modifier.align(Alignment.CenterStart).size(20.dp))
+            }
+            Text(
+                label,
+                modifier = modifier.padding(horizontal = if (icon != null) 26.dp else 0.dp),
+                textAlign = TextAlign.Center,
+                fontWeight = FontWeight.Medium
+            )
         }
     }
 }
+
+/** CAT-05: Play is the one filled action; the rest are quiet glass until focused, when they turn light like Play. */
+@Composable
+private fun detailButtonColors(primary: Boolean) = androidx.tv.material3.ButtonDefaults.colors(
+    containerColor = if (primary) Color(0xFFE6E9F2) else Color(0x2EFFFFFF),
+    contentColor = if (primary) Color(0xFF10131C) else Color(0xFFE8EBF2),
+    focusedContainerColor = Color.White,
+    focusedContentColor = Color(0xFF10131C),
+    pressedContainerColor = Color(0xFFD5DAE6),
+    pressedContentColor = Color(0xFF10131C),
+    disabledContainerColor = Color(0x1AFFFFFF),
+    disabledContentColor = Color(0x99E8EBF2)
+)
 
 @Composable
 private fun DetailRow(
@@ -4023,23 +4191,32 @@ internal fun CatalogArtwork(
     placeholderName: Boolean = true,
     artworkUrl: String? = null
 ) {
-    BoxWithConstraints(
-        modifier.clearAndSetSemantics {}.then(if (showPlaceholder) Modifier.background(Color(0xFF262D3D)) else Modifier),
-        contentAlignment = Alignment.Center
-    ) {
+    BoxWithConstraints(modifier.clearAndSetSemantics {}, contentAlignment = Alignment.Center) {
         val pixels = with(LocalDensity.current) { maxWidth.roundToPx() }
         // Outside art never falls back to the server: an empty override means none (a Seerr title without a poster).
         val url = if (artworkUrl != null) artworkUrl.takeIf(String::isNotBlank) else imageUrl(account.server, item, pixels, wide = wide)
         var loaded by remember(url) { mutableStateOf(false) }
-        if (!loaded && showPlaceholder && placeholderName) {
+        // HOME-23: the tile's own BlurHash (or a tint) while the art loads, never flat grey.
+        val ref = if (artworkUrl == null && url != null) cardImage(item, wide) else null
+        val blurred = ref != null && blurHashFor(item, ref) != null
+        if (showPlaceholder && !loaded) ArtPlaceholder(item, ref, Modifier.matchParentSize())
+        if (!loaded && showPlaceholder && placeholderName && !blurred) {
             Text(item.name, modifier = Modifier.padding(14.dp), maxLines = 4, overflow = TextOverflow.Ellipsis)
         }
         if (url != null) {
+            // Fades in over its placeholder on the composition clock (Coil's own crossfade runs on wall time).
+            val shown by androidx.compose.animation.core.animateFloatAsState(
+                if (loaded || !showPlaceholder) 1f else 0f,
+                androidx.compose.animation.core.tween(if (showPlaceholder) 200 else 0),
+                label = "artwork"
+            )
             AsyncImage(
                 model = url,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 alignment = alignment,
+                // Paint alpha, not a layer: no offscreen buffer per arriving tile.
+                alpha = shown,
                 modifier = Modifier.fillMaxSize(),
                 onSuccess = { loaded = true },
                 onError = { loaded = false }

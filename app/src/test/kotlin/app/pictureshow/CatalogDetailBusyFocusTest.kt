@@ -66,10 +66,8 @@ class CatalogDetailBusyFocusTest {
                 )
             }
         }
-        compose.onNodeWithTag("detail:play-pending").performKeyInput {
-            pressKey(Key.DirectionRight)
-            pressKey(Key.DirectionRight)
-        }
+        // CAT-05: Favorite is next to the primary.
+        compose.onNodeWithTag("detail:play-pending").performKeyInput { pressKey(Key.DirectionRight) }
         compose.onNodeWithTag("detail:favorite-pending").assertIsFocused()
         compose.onNodeWithTag("detail:played-pending").performSemanticsAction(SemanticsActions.OnClick) { it() }
         compose.onRoot().performKeyInput { keyDown(Key.DirectionCenter) }

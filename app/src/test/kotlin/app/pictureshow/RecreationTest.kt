@@ -145,7 +145,7 @@ class RecreationTest {
             )
         }
         if (activityRecreation) compose.setContent(screenContent) else restoration.setContent(screenContent)
-        waitFor(if (signedIn) "Viewer · Screen room" else "Find your Jellyfin server")
+        waitFor(if (signedIn) "Viewer" else "Find your Jellyfin server")
     }
 
     private fun waitFor(text: String) {
@@ -310,7 +310,7 @@ class RecreationTest {
         recreateActivity()
         waitFor("Signing in…")
         compose.runOnIdle { authentication!!.complete(account) }
-        waitFor("Viewer · Screen room")
+        waitFor("Viewer")
     }
 
     @Test

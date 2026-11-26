@@ -307,7 +307,7 @@ class QuickConnectNavigationTest {
         homeReady.complete(Unit)
         runBlocking { accounts.remember(account) }
         launch()
-        waitForText("Viewer · Screen room")
+        waitForText("Viewer")
         compose.onNodeWithTag("home:switch-user").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
         key(Key.DirectionCenter)
         waitForText("Who’s watching?")
@@ -351,7 +351,7 @@ class QuickConnectNavigationTest {
         homeReady.complete(Unit)
         runBlocking { accounts.remember(account) }
         launch()
-        waitForText("Viewer · Screen room")
+        waitForText("Viewer")
         compose.onNodeWithTag("home:switch-user").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
         key(Key.DirectionCenter)
         waitForText("Sign in another user on Screen room")

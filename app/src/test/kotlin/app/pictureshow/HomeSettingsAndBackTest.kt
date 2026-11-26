@@ -9,6 +9,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.ViewRootForTest
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
@@ -62,7 +64,7 @@ class HomeSettingsAndBackTest {
         rows = listOf(
             HomeRow("resume", "Continue watching", movies, wide = true),
             HomeRow("nextup", "Next up", movies, wide = true),
-            HomeRow("libraries", "Libraries", listOf(MediaItem("library", "Cinema", "CollectionFolder", isFolder = true))),
+            HomeRow("libraries", "Libraries", listOf(MediaItem("library", "Cinema", "CollectionFolder", isFolder = true)), library = true),
             HomeRow("latest:library", "Latest in Cinema", movies)
         ),
         loading = false
@@ -98,30 +100,60 @@ class HomeSettingsAndBackTest {
         compose.waitForIdle()
     }
 
+    /** Down through the rail until [tag] has focus (HOME-24 lists libraries between Home and Live TV). */
+    private fun railDownTo(tag: String) {
+        repeat(12) {
+            if (compose.onNodeWithTag(tag).fetchSemanticsNode().config.getOrNull(SemanticsProperties.Focused) == true) return
+            key(Key.DirectionDown)
+        }
+        compose.onNodeWithTag(tag).assertIsFocused()
+    }
+
     @Test
-    fun settingsIsUpAndRightFromWhereHomeOpensAndBackReturnsToIt() {
+    fun settingsIsInTheRailFromWhereHomeOpensAndBackReturnsToIt() {
         compose.setContent { Harness() }
         compose.onNodeWithTag("home:resume:film-0").assertIsFocused()
+        // HOME-24: Up from the first shelf opens the rail on Search; Settings is its last entry.
         key(Key.DirectionUp)
         compose.onNodeWithTag("home:search").assertIsFocused()
-        key(Key.DirectionRight)
-        compose.onNodeWithTag("home:settings").assertIsFocused().assertIsDisplayed()
+        railDownTo("home:settings")
+        compose.onNodeWithTag("home:settings").assertIsDisplayed()
         key(Key.DirectionCenter)
         compose.onNodeWithTag("settings:advanced:Network quality").assertIsFocused()
         key(Key.Back)
         compose.onNodeWithTag("home:settings").assertIsFocused().assertIsDisplayed()
-        key(Key.DirectionDown)
+        key(Key.DirectionRight)
         compose.onNodeWithTag("home:resume:film-0").assertIsFocused()
+    }
+
+    @Test
+    fun leftAtAShelfStartOpensTheRailOnHomeAndRightReturnsToTheCard() {
+        compose.setContent { Harness() }
+        key(Key.DirectionDown)
+        key(Key.DirectionRight)
+        compose.onNodeWithTag("home:nextup:film-1").assertIsFocused()
+        key(Key.DirectionLeft)
+        compose.onNodeWithTag("home:nextup:film-0").assertIsFocused()
+        key(Key.DirectionLeft)
+        compose.onNodeWithTag("home:home").assertIsFocused().assertIsDisplayed()
+        // Libraries from the Libraries row are rail entries too.
+        compose.onNodeWithTag("home:library:library").assertIsDisplayed()
+        key(Key.DirectionRight)
+        compose.onNodeWithTag("home:nextup:film-0").assertIsFocused()
+        key(Key.DirectionLeft)
+        key(Key.Back)
+        assertFalse(compose.activity.isFinishing)
+        compose.onNodeWithTag("home:nextup:film-0").assertIsFocused()
     }
 
     @Test
     fun signOutSitsApartFromSettings() {
         compose.setContent { Harness() }
-        // Settings is on screen where home opens, beside Search; the account buttons are below every shelf.
+        // Settings is in the rail, on screen where home opens; the account buttons are below every shelf.
         compose.onNodeWithTag("home:settings").assertIsDisplayed()
         val search = compose.onNodeWithTag("home:search").getUnclippedBoundsInRoot()
         val settings = compose.onNodeWithTag("home:settings").getUnclippedBoundsInRoot()
-        assertEquals(search.top, settings.top)
+        assertEquals(search.left, settings.left)
         // From Switch user, Right reaches Sign out and nothing lies beyond it.
         repeat(4) { key(Key.DirectionDown) }
         compose.onNodeWithTag("home:switch-user").assertIsFocused()
@@ -146,6 +178,7 @@ class HomeSettingsAndBackTest {
         // The top of home: the first shelf where the viewer left it, with the header on screen.
         compose.onNodeWithTag("home:resume:film-1").assertIsFocused().assertIsDisplayed()
         compose.onNodeWithTag("home:search").assertIsDisplayed()
+        compose.onNodeWithTag("home:hero").assertIsDisplayed()
         key(Key.Back)
         assertTrue(compose.activity.isFinishing)
     }
@@ -161,10 +194,13 @@ class HomeSettingsAndBackTest {
     }
 
     @Test
-    fun backFromTheHeaderLeaves() {
+    fun backFromTheRailClosesItThenLeaves() {
         compose.setContent { Harness() }
         key(Key.DirectionUp)
         compose.onNodeWithTag("home:search").assertIsFocused()
+        key(Key.Back)
+        assertFalse(compose.activity.isFinishing)
+        compose.onNodeWithTag("home:resume:film-0").assertIsFocused()
         key(Key.Back)
         assertTrue(compose.activity.isFinishing)
     }
@@ -189,11 +225,16 @@ class HomeSettingsAndBackTest {
         compose.onNodeWithTag("home:libraries:library").assertIsFocused()
         key(Key.DirectionRight)
         compose.onNodeWithTag("home:libraries:library").assertIsFocused()
+        // Left at a shelf's start is the rail (HOME-24), never Sign out.
         key(Key.DirectionLeft)
+        compose.onNodeWithTag("home:home").assertIsFocused()
+        key(Key.DirectionRight)
         compose.onNodeWithTag("home:libraries:library").assertIsFocused()
         key(Key.DirectionDown)
         compose.onNodeWithTag("home:latest:library:film-0").assertIsFocused()
         key(Key.DirectionLeft)
+        compose.onNodeWithTag("home:home").assertIsFocused()
+        key(Key.DirectionRight)
         compose.onNodeWithTag("home:latest:library:film-0").assertIsFocused()
         key(Key.DirectionRight)
         compose.onNodeWithTag("home:latest:library:film-1").assertIsFocused()
@@ -219,7 +260,7 @@ class HomeSettingsAndBackTest {
     private fun openAccountMenu() {
         key(Key.DirectionUp)
         compose.onNodeWithTag("home:search").assertIsFocused()
-        key(Key.DirectionLeft)
+        key(Key.DirectionUp)
         compose.onNodeWithTag("home:account").assertIsFocused().assertIsDisplayed()
         key(Key.DirectionCenter)
         compose.onNodeWithTag("home:account-menu").assertIsDisplayed()
@@ -227,40 +268,37 @@ class HomeSettingsAndBackTest {
     }
 
     @Test
-    fun atLargeTypeTheChipStaysNarrowAndTheHeaderKeepsOneLine() {
-        // At 1.3x type on 960x540 "user · server" pushed the header's last button onto two lines.
+    fun atLargeTypeTheRailKeepsOneLineEntries() {
         // The scale is process-wide under Robolectric, so later test classes would inherit it without the reset.
         RuntimeEnvironment.setFontScale(1.3f)
         try {
             compose.setContent { Harness() }
-            compose.onNodeWithTag("home:account")
-                .assert(hasContentDescription("Account: Jamie · Screen room"))
-            val chip = compose.onNodeWithTag("home:account").getUnclippedBoundsInRoot()
-            assertTrue(chip.right - chip.left <= 200.dp, "the chip ellipsizes sooner at large type")
             val search = compose.onNodeWithTag("home:search").getUnclippedBoundsInRoot()
             val settings = compose.onNodeWithTag("home:settings").getUnclippedBoundsInRoot()
-            assertEquals(search.bottom - search.top, settings.bottom - settings.top, "header buttons keep one line")
+            assertEquals(search.bottom - search.top, settings.bottom - settings.top, "rail entries keep one height")
+            assertTrue(settings.bottom <= 540.dp, "Settings stays on screen at large type")
         } finally {
             RuntimeEnvironment.setFontScale(1f)
         }
     }
 
     @Test
-    fun theAccountChipLeadsTheHeaderAndSaysWhoIsSignedInWhere() {
-        // T-1: two of three viewers searched the header for Sign out and gave up. Who is signed in leads it, and takes focus.
+    fun theAccountLeadsTheRailAndNamesWhoIsSignedInButNotTheServer() {
+        // T-1: two of three viewers searched the header for Sign out and gave up. Who is signed in leads the rail.
+        // Round 1: the server's name (often a container id) is not part of the account label; the menu still says it.
         compose.setContent { Harness() }
-        val chip = compose.onNodeWithTag("home:account").getUnclippedBoundsInRoot()
+        val account = compose.onNodeWithTag("home:account").getUnclippedBoundsInRoot()
         val search = compose.onNodeWithTag("home:search").getUnclippedBoundsInRoot()
-        assertEquals(chip.top, search.top)
-        assertTrue(chip.right <= search.left, "the account chip comes first in the header row")
-        compose.onNodeWithTag("home:account").assert(hasContentDescription("Account: Jamie · Screen room"))
+        assertEquals(account.left, search.left)
+        assertTrue(account.bottom <= search.top, "the account comes first in the rail")
+        compose.onNodeWithTag("home:account").assert(hasContentDescription("Account: Jamie"))
         key(Key.DirectionUp)
-        key(Key.DirectionLeft)
+        key(Key.DirectionUp)
         compose.onNodeWithTag("home:account").assertIsFocused()
-        // Nothing lies left of it.
-        key(Key.DirectionLeft)
+        // Nothing lies above it.
+        key(Key.DirectionUp)
         compose.onNodeWithTag("home:account").assertIsFocused()
-        key(Key.DirectionDown)
+        key(Key.DirectionRight)
         compose.onNodeWithTag("home:resume:film-0").assertIsFocused()
     }
 

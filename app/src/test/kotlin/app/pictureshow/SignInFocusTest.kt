@@ -230,12 +230,15 @@ class SignInFocusTest {
         }
         homeReady.complete(Unit)
         launch()
-        waitForText("Sam · Screen room")
+        waitForText("Sam")
         compose.onNodeWithTag("home:libraries:library").assertIsFocused()
         // The public-info request is still suspended, but the saved account and home are usable.
         assertFalse(probeReady!!.isCompleted)
         compose.runOnIdle { probeReady!!.complete(Unit) }
-        waitForText("Sam · Renamed Cinema")
+        // Home's rail names the viewer only; the rename reaches the account menu and the store.
+        waitFor("the renamed server in the account store") {
+            accounts.snapshots.value.accounts.all { it.server.name == "Renamed Cinema" }
+        }
         compose.onNodeWithTag("home:libraries:library").assertIsFocused()
         val expected = listOf(other.copy(server = renamed), account.copy(server = renamed))
         assertEquals(expected, accounts.snapshots.value.accounts)

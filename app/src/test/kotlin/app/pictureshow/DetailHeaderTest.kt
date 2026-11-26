@@ -166,9 +166,10 @@ class DetailHeaderTest {
             val bitmap = Bitmap.createBitmap(1920, 1080, Bitmap.Config.ARGB_8888)
             compose.runOnIdle { compose.activity.window.decorView.draw(Canvas(bitmap)) }
             try {
-                // The hero starts at 32dp and is 220dp tall; its lower quarter should still retain
-                // the upper half of a 16:9 image, rather than the center crop's lower half.
-                assertEquals(Color.RED, bitmap.getPixel(960, (32 + 220 * .75).toInt() * 2))
+                // CAT-05: the backdrop fills the page's upper right behind the header, anchored at the image's top, so
+                // the upper half of a 16:9 image shows at the top of the screen, clear of the scrims.
+                assertEquals(Color.RED, bitmap.getPixel(1800, 60))
+                assertEquals(Color.RED, bitmap.getPixel(1800, 300))
             } finally {
                 bitmap.recycle()
             }

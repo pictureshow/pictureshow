@@ -214,7 +214,7 @@ class SignInAccountsTest {
         key(Key.DirectionCenter)
     }
 
-    private fun chooser(home: String = "Viewer one · Screen room") {
+    private fun chooser(home: String = "Viewer one") {
         runBlocking { accounts.remember(account) }
         homeReady.complete(Unit)
         launch()
@@ -352,7 +352,7 @@ class SignInAccountsTest {
             waitForText("Who’s watching?")
         }
         compose.runOnIdle { compose.activity.onBackPressedDispatcher.onBackPressed() }
-        waitForText("Viewer one · Screen room")
+        waitForText("Viewer one")
         // A new Add a server is fresh, rather than a retained bad-address entry.
         compose.onNodeWithTag("home:switch-user").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
         key(Key.DirectionCenter)
@@ -536,7 +536,7 @@ class SignInAccountsTest {
     fun removeServerConfirmsWhichOfTwoSameNamedServers() {
         val twin = other.copy(server = server.copy(id = "twin", url = "https://twin.example.test"))
         runBlocking { accounts.remember(twin) }
-        chooser(home = "Viewer one · Screen room · https://media.example.test")
+        chooser(home = "Viewer one")
         click("Remove server Screen room · https://media.example.test")
         waitForText("Remove server?")
         compose.onNodeWithText("This removes Screen room · https://media.example.test", substring = true).assertExists()
@@ -568,7 +568,7 @@ class SignInAccountsTest {
     fun selectingCurrentViewerReturnsToHomeWithoutChooserOnBack() {
         chooser()
         click("Viewer one on Screen room")
-        waitForText("Viewer one · Screen room")
+        waitForText("Viewer one")
         compose.runOnIdle { compose.activity.onBackPressedDispatcher.onBackPressed() }
         compose.onNodeWithText("Who’s watching?").assertDoesNotExist()
     }
@@ -596,7 +596,7 @@ class SignInAccountsTest {
             it(androidx.compose.ui.text.AnnotatedString("test-password"))
         }
         click("Sign in")
-        waitForText("${authorized.user.name} · Screen room")
+        waitForText(authorized.user.name)
         assertEquals(authorized, accounts.snapshots.value.currentAccount)
         assertEquals(authorized.accessToken, catalogTokens.last(), "Home must use the completed credential")
         assertEquals(authorized.user.name to "test-password", signedIn)
@@ -612,7 +612,7 @@ class SignInAccountsTest {
         click("Use Quick Connect")
         waitForText("123456")
         quickAuthorized.complete(authorized)
-        waitForText("Viewer one · Screen room")
+        waitForText("Viewer one")
         compose.onNodeWithText("123456").assertDoesNotExist()
         assertEquals(authorized, accounts.snapshots.value.currentAccount)
         assertEquals(authorized.accessToken, catalogTokens.last(), "Home must load with the newly saved credential")
