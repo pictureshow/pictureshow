@@ -8,7 +8,11 @@ package app.pictureshow
 import android.content.Context
 import android.os.Build
 import android.view.accessibility.AccessibilityManager
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -16,9 +20,14 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -29,16 +38,24 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.Player
 import androidx.media3.common.util.Util
 import androidx.tv.material3.Button
 import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.ButtonScale
+import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.Icon
+import androidx.tv.material3.LocalContentColor
+import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.ProvideTextStyle
+import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import kotlinx.coroutines.delay
 
@@ -165,6 +182,7 @@ internal fun PlaybackToggle(
         liveStyle = liveStyle,
         fillContentWidth = liveStyle,
         scale = playerButtonScale(),
+        icon = if (liveStyle) null else playerActionIcon(if (showPlayButton) "play" else "pause"),
         modifier = modifier.onFocusChanged { focused = it.isFocused }.semantics {
             stateDescription = if (ended && focused && primaryState == null) beforeEnd[0] else current
         }
@@ -173,14 +191,17 @@ internal fun PlaybackToggle(
             Icon(touchActionIcon(if (showPlayButton) "play" else "pause"), null, Modifier.size(18.dp))
             Spacer(Modifier.width(6.dp))
         }
-        Text(actionLabel ?: if (showPlayButton) "Play" else "Pause")
+        Text(actionLabel ?: if (showPlayButton) "Play" else "Pause", maxLines = 1, softWrap = false)
     }
 }
 
 /** Media events reveal controls outside Compose's key path; do not steal an existing control's focus. */
 internal fun livePauseRequestsControlFocus(live: Boolean, surfaceFocused: Boolean): Boolean = live && surfaceFocused
 
-/** One native family and height for live actions; ordinary playback retains its original native defaults. */
+/**
+ * TV player actions: round icon badge with always-visible word caption below (PLAY-03). Live TV keeps its pill row
+ * unchanged via [liveStyle].
+ */
 @Composable
 internal fun PlayerActionButton(
     onClick: () -> Unit,
@@ -189,8 +210,83 @@ internal fun PlayerActionButton(
     liveStyle: Boolean = false,
     fillContentWidth: Boolean = false,
     scale: ButtonScale = playerButtonScale(),
+    icon: ImageVector? = null,
     content: @Composable RowScope.() -> Unit
 ) {
+    if (!liveStyle && icon != null) {
+        var focused by remember { mutableStateOf(false) }
+        val accessible = rememberAssistiveServiceInUse()
+        Surface(
+            onClick = onClick,
+            enabled = enabled,
+            modifier = modifier
+                .wholePlayerActionPaint()
+                .widthIn(min = 56.dp)
+                .onFocusChanged { focused = it.isFocused },
+            shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(14.dp)),
+            colors = ClickableSurfaceDefaults.colors(
+                containerColor = Color.Transparent,
+                contentColor = Color(0xFFD0D5E2),
+                focusedContainerColor = Color.Transparent,
+                focusedContentColor = Color.White,
+                pressedContainerColor = Color.Transparent,
+                pressedContentColor = Color.White,
+                disabledContainerColor = Color.Transparent,
+                disabledContentColor = Color(0xFF7A8090)
+            ),
+            scale = ClickableSurfaceDefaults.scale(focusedScale = if (accessible) 1f else 1.08f)
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                val circleBg = when {
+                    !enabled -> Color.White.copy(alpha = 0.08f)
+                    focused -> Color.White
+                    else -> Color.White.copy(alpha = 0.14f)
+                }
+                val circleBorder = when {
+                    !enabled -> Color.White.copy(alpha = 0.10f)
+                    focused -> Color.White
+                    else -> Color.White.copy(alpha = 0.24f)
+                }
+                val iconTint = when {
+                    !enabled -> Color.White.copy(alpha = 0.35f)
+                    focused -> Color(0xFF10131C)
+                    else -> Color(0xFFF0F3FA)
+                }
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .background(circleBg, CircleShape)
+                        .border(1.dp, circleBorder, CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(22.dp))
+                }
+                val captionColor = when {
+                    !enabled -> Color(0xFF7A8090)
+                    focused -> Color.White
+                    else -> Color(0xFFD0D5E2)
+                }
+                CompositionLocalProvider(LocalContentColor provides captionColor) {
+                    ProvideTextStyle(
+                        MaterialTheme.typography.labelMedium.copy(
+                            fontWeight = if (focused) FontWeight.SemiBold else FontWeight.Normal
+                        )
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center,
+                            content = content
+                        )
+                    }
+                }
+            }
+        }
+        return
+    }
     Button(
         onClick = onClick,
         modifier = modifier.wholePlayerActionPaint().then(if (liveStyle) Modifier.height(48.dp) else Modifier),

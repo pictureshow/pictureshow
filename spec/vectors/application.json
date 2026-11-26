@@ -10175,6 +10175,279 @@
         "state": "HIDDEN",
         "canCreate": false
       }
+    },
+    {
+      "id": "held-seek-step-initial",
+      "operation": "held-seek-step",
+      "input": {
+        "heldMs": 0,
+        "durationMs": 5400000
+      },
+      "expected": 10000
+    },
+    {
+      "id": "held-seek-step-before-tier-two",
+      "operation": "held-seek-step",
+      "input": {
+        "heldMs": 1499,
+        "durationMs": 5400000
+      },
+      "expected": 10000
+    },
+    {
+      "id": "held-seek-step-tier-two",
+      "operation": "held-seek-step",
+      "input": {
+        "heldMs": 1500,
+        "durationMs": 5400000
+      },
+      "expected": 30000
+    },
+    {
+      "id": "held-seek-step-tier-three",
+      "operation": "held-seek-step",
+      "input": {
+        "heldMs": 3000,
+        "durationMs": 5400000
+      },
+      "expected": 60000
+    },
+    {
+      "id": "held-seek-step-tier-four",
+      "operation": "held-seek-step",
+      "input": {
+        "heldMs": 5000,
+        "durationMs": 5400000
+      },
+      "expected": 120000
+    },
+    {
+      "id": "held-seek-step-capped-by-duration",
+      "operation": "held-seek-step",
+      "input": {
+        "heldMs": 6000,
+        "durationMs": 1200000
+      },
+      "expected": 60000
+    },
+    {
+      "id": "held-seek-step-short-clip-floor",
+      "operation": "held-seek-step",
+      "input": {
+        "heldMs": 6000,
+        "durationMs": 60000
+      },
+      "expected": 10000
+    },
+    {
+      "id": "held-seek-step-unknown-duration",
+      "operation": "held-seek-step",
+      "input": {
+        "heldMs": 6000,
+        "durationMs": 0
+      },
+      "expected": 120000
+    },
+    {
+      "id": "held-seek-step-negative-held",
+      "operation": "held-seek-step",
+      "input": {
+        "heldMs": -250,
+        "durationMs": 5400000
+      },
+      "expected": 10000
+    },
+    {
+      "id": "held-seek-repeat-initial-always-allowed",
+      "operation": "held-seek-repeat",
+      "input": {
+        "repeatCount": 0,
+        "lastStepAtMs": 1000,
+        "eventTimeMs": 1020
+      },
+      "expected": true
+    },
+    {
+      "id": "held-seek-repeat-throttled-under-interval",
+      "operation": "held-seek-repeat",
+      "input": {
+        "repeatCount": 1,
+        "lastStepAtMs": 1000,
+        "eventTimeMs": 1099
+      },
+      "expected": false
+    },
+    {
+      "id": "held-seek-repeat-allowed-at-interval",
+      "operation": "held-seek-repeat",
+      "input": {
+        "repeatCount": 1,
+        "lastStepAtMs": 1000,
+        "eventTimeMs": 1100
+      },
+      "expected": true
+    },
+    {
+      "id": "held-seek-repeat-allowed-without-prior-step",
+      "operation": "held-seek-repeat",
+      "input": {
+        "repeatCount": 2,
+        "lastStepAtMs": null,
+        "eventTimeMs": 1050
+      },
+      "expected": true
+    },
+    {
+      "id": "tv-player-back-hides-visible-controls",
+      "operation": "tv-player-back",
+      "input": {
+        "controlsVisible": true,
+        "autoHiddenAtMs": null,
+        "nowMs": 10000
+      },
+      "expected": "HideControls"
+    },
+    {
+      "id": "tv-player-back-exits-after-deliberate-hide",
+      "operation": "tv-player-back",
+      "input": {
+        "controlsVisible": false,
+        "autoHiddenAtMs": null,
+        "nowMs": 10000
+      },
+      "expected": "Exit"
+    },
+    {
+      "id": "tv-player-back-reshows-within-auto-hide-grace",
+      "operation": "tv-player-back",
+      "input": {
+        "controlsVisible": false,
+        "autoHiddenAtMs": 10000,
+        "nowMs": 12500
+      },
+      "expected": "ShowControls"
+    },
+    {
+      "id": "tv-player-back-reshows-at-grace-boundary",
+      "operation": "tv-player-back",
+      "input": {
+        "controlsVisible": false,
+        "autoHiddenAtMs": 10000,
+        "nowMs": 13000
+      },
+      "expected": "ShowControls"
+    },
+    {
+      "id": "tv-player-back-exits-after-grace-expires",
+      "operation": "tv-player-back",
+      "input": {
+        "controlsVisible": false,
+        "autoHiddenAtMs": 10000,
+        "nowMs": 13001
+      },
+      "expected": "Exit"
+    },
+    {
+      "id": "tv-player-back-clock-backwards-exits",
+      "operation": "tv-player-back",
+      "input": {
+        "controlsVisible": false,
+        "autoHiddenAtMs": 10000,
+        "nowMs": 9999
+      },
+      "expected": "Exit"
+    },
+    {
+      "id": "next-episode-will-auto-advance-default",
+      "operation": "next-episode-will-auto-advance",
+      "input": {
+        "countdownSeconds": 10,
+        "syncParticipating": false,
+        "accessible": false,
+        "foreground": true,
+        "pauseLatched": false,
+        "deferred": false
+      },
+      "expected": true
+    },
+    {
+      "id": "next-episode-will-auto-advance-countdown-off",
+      "operation": "next-episode-will-auto-advance",
+      "input": {
+        "countdownSeconds": 0,
+        "syncParticipating": false,
+        "accessible": false,
+        "foreground": true,
+        "pauseLatched": false,
+        "deferred": false
+      },
+      "expected": false
+    },
+    {
+      "id": "next-episode-will-auto-advance-accessible-off",
+      "operation": "next-episode-will-auto-advance",
+      "input": {
+        "countdownSeconds": 10,
+        "syncParticipating": false,
+        "accessible": true,
+        "foreground": true,
+        "pauseLatched": false,
+        "deferred": false
+      },
+      "expected": false
+    },
+    {
+      "id": "next-episode-will-auto-advance-sync-off",
+      "operation": "next-episode-will-auto-advance",
+      "input": {
+        "countdownSeconds": 10,
+        "syncParticipating": true,
+        "accessible": false,
+        "foreground": true,
+        "pauseLatched": false,
+        "deferred": false
+      },
+      "expected": false
+    },
+    {
+      "id": "next-episode-will-auto-advance-paused-off",
+      "operation": "next-episode-will-auto-advance",
+      "input": {
+        "countdownSeconds": 10,
+        "syncParticipating": false,
+        "accessible": false,
+        "foreground": true,
+        "pauseLatched": true,
+        "deferred": false
+      },
+      "expected": false
+    },
+    {
+      "id": "next-episode-countdown-progress-half",
+      "operation": "next-episode-countdown-progress",
+      "input": {
+        "remainingMs": 5000,
+        "totalMs": 10000
+      },
+      "expected": 0.5
+    },
+    {
+      "id": "next-episode-countdown-progress-clamped-high",
+      "operation": "next-episode-countdown-progress",
+      "input": {
+        "remainingMs": 15000,
+        "totalMs": 10000
+      },
+      "expected": 1.0
+    },
+    {
+      "id": "next-episode-countdown-progress-zero-total",
+      "operation": "next-episode-countdown-progress",
+      "input": {
+        "remainingMs": 5000,
+        "totalMs": 0
+      },
+      "expected": 0.0
     }
 ]
 }

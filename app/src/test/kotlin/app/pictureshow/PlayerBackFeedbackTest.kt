@@ -145,9 +145,56 @@ class PlayerBackFeedbackTest {
         compose.onRoot().performKeyInput { pressKey(Key.Back) }
         compose.onNodeWithContentDescription("Video player")
             .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.StateDescription))
+        compose.onNodeWithTag("player:back-hint").assertIsDisplayed()
+        compose.onNodeWithText("BACK again stops playback").assertIsDisplayed()
         compose.runOnIdle {
             assertEquals(0, exits)
             assertTrue(output.player.value!!.playWhenReady)
+        }
+        compose.onRoot().performKeyInput { pressKey(Key.Back) }
+        compose.waitUntil(10_000) {
+            shadowOf(android.os.Looper.getMainLooper()).idle()
+            exits == 1
+        }
+    }
+
+    @Test fun backWithinAutoHideGraceReshowsControlsInsteadOfExiting() {
+        launch(false)
+        compose.mainClock.autoAdvance = false
+        compose.onRoot().performKeyInput { pressKey(Key.DirectionUp) }
+        compose.mainClock.advanceTimeByFrame()
+        compose.waitForIdle()
+        compose.onNodeWithText("Subtitles").assertIsDisplayed()
+        // Wait for the 10 s auto-hide to trigger while playback is playing.
+        compose.mainClock.advanceTimeBy(11_000)
+        compose.waitForIdle()
+        compose.onNodeWithText("Subtitles").assertDoesNotExist()
+        // BACK within 3 s of auto-hide re-shows controls instead of exiting.
+        org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofMillis(1_500))
+        compose.onRoot().performKeyInput { pressKey(Key.Back) }
+        compose.mainClock.advanceTimeByFrame()
+        compose.waitForIdle()
+        compose.onNodeWithText("Subtitles").assertIsDisplayed()
+        compose.runOnIdle { assertEquals(0, exits) }
+    }
+
+    @Test fun backAfterAutoHideGraceExpiresExitsPlayback() {
+        launch(false)
+        compose.mainClock.autoAdvance = false
+        compose.onRoot().performKeyInput { pressKey(Key.DirectionUp) }
+        compose.mainClock.advanceTimeByFrame()
+        compose.waitForIdle()
+        compose.onNodeWithText("Subtitles").assertIsDisplayed()
+        compose.mainClock.advanceTimeBy(11_000)
+        compose.waitForIdle()
+        compose.onNodeWithText("Subtitles").assertDoesNotExist()
+        // Wait past the 3 s auto-hide grace window.
+        org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofMillis(3_500))
+        compose.onRoot().performKeyInput { pressKey(Key.Back) }
+        compose.mainClock.advanceTimeByFrame()
+        compose.waitUntil(10_000) {
+            shadowOf(android.os.Looper.getMainLooper()).idle()
+            exits == 1
         }
     }
 

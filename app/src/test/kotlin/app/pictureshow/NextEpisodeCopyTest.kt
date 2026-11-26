@@ -11,6 +11,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.tv.material3.MaterialTheme
 import app.pictureshow.core.Account
@@ -72,6 +73,34 @@ class NextEpisodeCopyTest {
         compose.mainClock.advanceTimeBy(20_000)
         compose.onNodeWithContentDescription("Next episode, Next story").assertExists()
         compose.onNodeWithText("Next episode", useUnmergedTree = true).assertDoesNotExist() // heading owns one spoken label
+        compose.onNodeWithTag("next:countdown-ring").assertDoesNotExist()
+        compose.runOnIdle { assertEquals(0, plays) }
+    }
+
+    @Test fun keepScenesCardShowsCountdownRingAndSecondsWheneverItWillAutoAdvanceAtEnd() {
+        var plays = 0
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            MaterialTheme {
+                NextEpisodeControl(
+                    account = account,
+                    next = next,
+                    eligible = true,
+                    ended = false,
+                    paused = false,
+                    onFocusRemoved = {},
+                    onPlay = { plays++ },
+                    remainingMs = 9_200,
+                    autoPlay = false,
+                    showCountdown = true,
+                    countdownWindowMs = 15_000
+                )
+            }
+        }
+        compose.mainClock.advanceTimeBy(500)
+        compose.onNodeWithText("Next episode · 10 s left").assertIsDisplayed()
+        compose.onNodeWithTag("next:countdown-ring").assertIsDisplayed()
+        compose.mainClock.advanceTimeBy(20_000)
         compose.runOnIdle { assertEquals(0, plays) }
     }
 }

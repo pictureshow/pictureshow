@@ -80,6 +80,42 @@ class ApplicationParityVectorsTest {
                             input.getValue("nowMs").jsonPrimitive.content.toLong()
                         )
                     )
+                    "held-seek-step" -> JsonPrimitive(
+                        app.pictureshow.core.playback.SeekSteps.heldStepMs(
+                            input.getValue("heldMs").jsonPrimitive.long,
+                            input.getValue("durationMs").jsonPrimitive.long
+                        )
+                    )
+                    "held-seek-repeat" -> JsonPrimitive(
+                        app.pictureshow.core.playback.SeekSteps.allowRepeat(
+                            input.getValue("repeatCount").jsonPrimitive.int,
+                            input["lastStepAtMs"]?.takeUnless { it is JsonNull }?.jsonPrimitive?.longOrNull,
+                            input.getValue("eventTimeMs").jsonPrimitive.long
+                        )
+                    )
+                    "tv-player-back" -> JsonPrimitive(
+                        app.pictureshow.core.playback.tvPlayerBackAction(
+                            input.getValue("controlsVisible").jsonPrimitive.boolean,
+                            input["autoHiddenAtMs"]?.takeUnless { it is JsonNull }?.jsonPrimitive?.longOrNull,
+                            input.getValue("nowMs").jsonPrimitive.long
+                        ).name
+                    )
+                    "next-episode-will-auto-advance" -> JsonPrimitive(
+                        nextEpisodeWillAutoAdvance(
+                            input.getValue("countdownSeconds").jsonPrimitive.int,
+                            input.getValue("syncParticipating").jsonPrimitive.boolean,
+                            input.getValue("accessible").jsonPrimitive.boolean,
+                            input.getValue("foreground").jsonPrimitive.boolean,
+                            input.getValue("pauseLatched").jsonPrimitive.boolean,
+                            input.getValue("deferred").jsonPrimitive.boolean
+                        )
+                    )
+                    "next-episode-countdown-progress" -> JsonPrimitive(
+                        nextEpisodeCountdownProgress(
+                            input.getValue("remainingMs").jsonPrimitive.long,
+                            input.getValue("totalMs").jsonPrimitive.long
+                        ).toDouble()
+                    )
                     "touch-player-back" -> JsonPrimitive(
                         app.pictureshow.core.playback.touchPlayerBack(
                             input.getValue("sheetOpen").jsonPrimitive.boolean,

@@ -116,3 +116,28 @@ fun chooseTrickplay(item: MediaItem, mediaSourceId: String?, preferredWidth: Int
     val valid = widths.orEmpty().values.filter { trickplayTile(it, 0) != null }.sortedBy { it.width }
     return valid.firstOrNull { it.width >= preferredWidth } ?: valid.lastOrNull()
 }
+
+/** Active chapter at [positionMs], or null when [chapters] is empty or before the first chapter start. */
+fun chapterAt(chapters: List<Chapter>, positionMs: Long): Chapter? {
+    val clamped = positionMs.coerceAtLeast(0L)
+    return chapters.lastOrNull { it.startMs <= clamped }
+}
+
+/**
+ * PLAY-17/PLAY-30: whether the next-episode card will automatically start the next episode (either at credits
+ * countdown zero or when physical playback ends under KeepScenes). Drives showing the countdown ring and remaining seconds.
+ */
+fun nextEpisodeWillAutoAdvance(
+    countdownSeconds: Int,
+    syncParticipating: Boolean,
+    accessible: Boolean,
+    foreground: Boolean,
+    pauseLatched: Boolean,
+    deferred: Boolean
+): Boolean = countdownSeconds > 0 && !syncParticipating && !accessible && foreground && !pauseLatched && !deferred
+
+/** Remaining fraction in 0..1 for the next-episode countdown ring. */
+fun nextEpisodeCountdownProgress(remainingMs: Long, totalMs: Long): Float {
+    if (totalMs <= 0L) return 0f
+    return (remainingMs.coerceAtLeast(0L).toFloat() / totalMs.toFloat()).coerceIn(0f, 1f)
+}

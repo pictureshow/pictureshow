@@ -65,7 +65,7 @@ internal fun TvPlayerActions(
             CompositionLocalProvider(LocalPlayerActionsViewport provides viewport) {
                 Row(
                     Modifier.horizontalScroll(scroll).focusGroup(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
                     verticalAlignment = verticalAlignment,
                     content = content
                 )

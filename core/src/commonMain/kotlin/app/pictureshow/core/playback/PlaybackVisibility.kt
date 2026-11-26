@@ -18,3 +18,26 @@ const val LAST_ACTION_WINDOW_MS = 30_000L
  * recorded hide, they open on Play/Pause as before. A clock that went backwards never restores.
  */
 fun restoresLastAction(hiddenAtMs: Long?, nowMs: Long): Boolean = hiddenAtMs != null && nowMs - hiddenAtMs in 0..LAST_ACTION_WINDOW_MS
+
+/** PLAY-05: BACK pressed shortly after controls auto-hide re-shows them instead of leaving the player. */
+const val BACK_AUTO_HIDE_GRACE_MS = 3_000L
+
+/** PLAY-05: how long the "BACK again stops playback" visual hint stays visible after Back hides controls. */
+const val BACK_EXIT_HINT_MS = 3_000L
+
+enum class TvPlayerBackAction {
+    HideControls,
+    ShowControls,
+    Exit
+}
+
+/**
+ * PLAY-05: while controls are up, Back hides them. When hidden, a Back arriving within [BACK_AUTO_HIDE_GRACE_MS]
+ * of an *auto*-hide re-shows the controls instead of exiting. A deliberate Back hide clears [autoHiddenAtMs],
+ * so a second Back exits immediately. A clock that went backwards never triggers the grace window.
+ */
+fun tvPlayerBackAction(controlsVisible: Boolean, autoHiddenAtMs: Long?, nowMs: Long): TvPlayerBackAction = when {
+    controlsVisible -> TvPlayerBackAction.HideControls
+    autoHiddenAtMs != null && nowMs - autoHiddenAtMs in 0..BACK_AUTO_HIDE_GRACE_MS -> TvPlayerBackAction.ShowControls
+    else -> TvPlayerBackAction.Exit
+}
