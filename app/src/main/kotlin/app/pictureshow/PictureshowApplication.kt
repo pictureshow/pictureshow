@@ -414,6 +414,7 @@ internal class PersistentIdentityService(
     override suspend fun nextUp(account: Account, seriesId: String?) = call(account.deviceId) { it.nextUp(account, seriesId) }
     override suspend fun latest(account: Account, parentId: String) = call(account.deviceId) { it.latest(account, parentId) }
     override suspend fun items(account: Account, query: BrowseQuery) = call(account.deviceId) { it.items(account, query) }
+    override suspend fun sortNames(account: Account, query: BrowseQuery) = call(account.deviceId) { it.sortNames(account, query) }
     override suspend fun localTrailers(account: Account, id: String) = call(account.deviceId) { it.localTrailers(account, id) }
     override suspend fun specialFeatures(account: Account, id: String) = call(account.deviceId) { it.specialFeatures(account, id) }
     override suspend fun similar(account: Account, id: String) = call(account.deviceId) { it.similar(account, id) }

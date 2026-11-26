@@ -537,6 +537,66 @@
       },
       "expected": false,
       "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"
+    },
+    {
+      "id": "grid-position-label.first-card",
+      "operation": "grid-position-label",
+      "input": {
+        "focusedIndex": 0,
+        "total": 330
+      },
+      "expected": "1 / 330",
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"
+    },
+    {
+      "id": "grid-position-label.counts-from-one",
+      "operation": "grid-position-label",
+      "input": {
+        "focusedIndex": 11,
+        "total": 330
+      },
+      "expected": "12 / 330",
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"
+    },
+    {
+      "id": "grid-position-label.last-card",
+      "operation": "grid-position-label",
+      "input": {
+        "focusedIndex": 329,
+        "total": 330
+      },
+      "expected": "330 / 330",
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"
+    },
+    {
+      "id": "grid-position-label.never-past-the-total",
+      "operation": "grid-position-label",
+      "input": {
+        "focusedIndex": 400,
+        "total": 330
+      },
+      "expected": "330 / 330",
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"
+    },
+    {
+      "id": "grid-position-label.nothing-focused",
+      "operation": "grid-position-label",
+      "input": {
+        "focusedIndex": -1,
+        "total": 330
+      },
+      "expected": null,
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"
+    },
+    {
+      "id": "grid-position-label.empty-library",
+      "operation": "grid-position-label",
+      "input": {
+        "focusedIndex": 0,
+        "total": 0
+      },
+      "expected": null,
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"
     }
   ]
 }

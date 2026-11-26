@@ -390,7 +390,7 @@ class DesktopController(
                 SearchKind.entries.map { kind -> async { kind to client.search(a, term, kind) } }.awaitAll().toMap()
             }
             if (searchSessionEnded(g, a, results.values)) return@page
-            val rows = searchRows(results)
+            val rows = searchRows(results, term)
             val duplicates = searchDuplicateIds(rows.flatMap { it.items })
             val ancestors = coroutineScope {
                 duplicates.map { id -> async { id to client.searchAncestors(a, id) } }.awaitAll().toMap()

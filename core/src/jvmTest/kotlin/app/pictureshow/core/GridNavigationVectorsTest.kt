@@ -8,6 +8,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.boolean
@@ -62,6 +63,8 @@ class GridNavigationVectorsTest {
 
             "fixed-head-in-list" ->
                 JsonPrimitive(fixedHeadInList(input.getValue("fontScale").jsonPrimitive.float, bool("assistiveServiceInUse")))
+
+            "grid-position-label" -> gridPositionLabel(int("focusedIndex"), int("total"))?.let(::JsonPrimitive) ?: JsonNull
 
             else -> error("Unknown operation $operation")
         }

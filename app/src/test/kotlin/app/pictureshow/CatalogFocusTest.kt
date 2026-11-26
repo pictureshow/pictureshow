@@ -483,8 +483,8 @@ class CatalogFocusTest {
         repeat(4) { key(Key.DirectionDown) }
         compose.onRoot().performKeyInput { pressKey(Key.DirectionRight) }
         compose.waitForIdle()
-        // A 960dp window fits five columns after padding and gaps; four Down presses reach index 20.
-        val selected = "film-21"
+        // A 960dp window fits six columns after padding and gaps (leg 194); four Down presses reach index 24.
+        val selected = "film-25"
         compose.onNodeWithTag("grid:$selected").assertIsFocused().assertIsDisplayed()
         key(Key.DirectionCenter)
         compose.onNodeWithTag("detail:play").assertIsFocused()
