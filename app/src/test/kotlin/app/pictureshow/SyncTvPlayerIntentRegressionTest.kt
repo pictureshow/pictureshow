@@ -157,7 +157,7 @@ class SyncTvPlayerIntentRegressionTest {
 
     /** Find the actual primary independently of which of its two labels the product chose. */
     private fun primary() = compose.onNode(
-        hasAnyAncestor(hasTestTag("player:surface")) and hasClickAction() and (hasText("Play") or hasText("Pause"))
+        hasAnyAncestor(hasTestTag("player:frame")) and hasClickAction() and (hasText("Play") or hasText("Pause"))
     )
     private fun transportSent() = sent.filter { it in setOf("Pause", "Unpause", "Stop") }
     private fun launch(id: String): JsonObject {

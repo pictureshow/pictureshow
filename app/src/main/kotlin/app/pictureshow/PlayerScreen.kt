@@ -595,10 +595,8 @@ internal fun PlayerItemScreen(
     }
     PlayerSeekHost((seekOpen || extraPanel != null) && error == null && !switching, player = {
         Box(
-            Modifier.fillMaxSize().background(Color.Black).testTag("player:surface")
+            Modifier.fillMaxSize().background(Color.Black).testTag("player:frame")
                 .onGloballyPositioned { playerTop = it.positionInRoot().y.toInt() }
-                .focusProperties { canFocus = !restoringSeekFocus && !seekOpen && extraPanel == null }.focusRequester(rootFocus)
-                .onFocusChanged { rootFocused = it.isFocused }
                 .playerTouchClick {
                     if (chooser == null && extraPanel == null && !chaptersOpen && !seekOpen && error == null && !switching) {
                         controls = true
@@ -628,66 +626,6 @@ internal fun PlayerItemScreen(
                             }
                         }
                 )
-                .semantics {
-                    // Back returns both input and accessibility focus here. Name that transition
-                    // on the focused node; a sibling live region can be occluded by the video.
-                    // Once controls are visible, their surface is not another screen-reader target.
-                    // A delayed Done click can trigger TalkBack's focus recovery after the
-                    // timeline was restored. Keep the root hidden without hiding its children.
-                    if (!restoringSeekFocus && !controls) contentDescription = controlsFeedback ?: "Video player"
-                    if (!restoringSeekFocus && !controls) {
-                        onClick(label = "Show controls") {
-                            controls = true
-                            focusControls = true
-                            interaction++
-                            true
-                        }
-                        // PLAY-03 with a TV screen reader: TalkBack keeps the D-pad arrows for its own
-                        // navigation, and with the controls hidden this surface is its only node, so an arrow
-                        // ends at "no next item". There TalkBack scrolls a focused scrollable node in the
-                        // arrow's direction, so the arrows keep their meaning: Left/Right seek 10 s and land
-                        // on the position control, Up/Down show the controls. Keys without a reader are unchanged.
-                        val canSeekHere = !host.isLive || (host.liveCanTimeShift && !host.liveBufferExpired)
-                        if (canSeekHere) horizontalScrollAxisRange = ReaderArrowRange
-                        verticalScrollAxisRange = ReaderArrowRange
-                        scrollBy { x, y ->
-                            // Compose mirrors horizontal scroll amounts in RTL; the remote's Right still means forward.
-                            val forward = if (layoutDirection == LayoutDirection.Rtl) x < 0f else x > 0f
-                            when {
-                                x != 0f && canSeekHere && (!forward || forwardSeekAllowed()) -> readerSeek(
-                                    if (forward) 10_000L else -10_000L,
-                                    arrow = true
-                                )
-                                y != 0f -> readerShowControls()
-                                else -> return@scrollBy false
-                            }
-                            true
-                        }
-                        customActions = if (canSeekHere) {
-                            buildList {
-                                add(
-                                    CustomAccessibilityAction("Back 10 seconds") {
-                                        readerSeek(-10_000L)
-                                        true
-                                    }
-                                )
-                                if (forwardSeekAllowed()) {
-                                    add(
-                                        CustomAccessibilityAction("Forward 10 seconds") {
-                                            readerSeek(10_000L)
-                                            true
-                                        }
-                                    )
-                                }
-                            }
-                        } else {
-                            emptyList()
-                        }
-                    } else {
-                        hideFromAccessibility()
-                    }
-                }
-                .focusable()
         ) {
             // The presentation coroutine may be cancelled off-thread by a host/test lifecycle.
             val presentationPlayer = remember(player) { player?.let(::ListenerCleanupPlayer) }
@@ -718,6 +656,76 @@ internal fun PlayerItemScreen(
                 overlayTop?.minus(playerTop),
                 output.subtitleDiagnostics,
                 onTopCues = { topCues = it }
+            )
+            // The surface's reader node is a leaf beside the chrome, not its parent: hiding it while the
+            // controls show must not take the chrome with it (uiautomator's dump skips every child of a node
+            // that is not visible to the user). Keys still bubble to the Box above. It comes after the subtitle view:
+            // Compose leaves out a node that a later sibling covers whole, and that view covers the screen. It comes
+            // before the notices, which the surface would cover in turn.
+            Box(
+                Modifier.fillMaxSize().testTag("player:surface")
+                    .focusProperties { canFocus = !restoringSeekFocus && !seekOpen && extraPanel == null }.focusRequester(rootFocus)
+                    .onFocusChanged { rootFocused = it.isFocused }
+                    .semantics {
+                        // Back returns both input and accessibility focus here. Name that transition
+                        // on the focused node; a sibling live region can be occluded by the video.
+                        // Once controls are visible, their surface is not another screen-reader target.
+                        // A delayed Done click can trigger TalkBack's focus recovery after the
+                        // timeline was restored. Keep the root hidden without hiding its children.
+                        if (!restoringSeekFocus && !controls) contentDescription = controlsFeedback ?: "Video player"
+                        if (!restoringSeekFocus && !controls) {
+                            onClick(label = "Show controls") {
+                                controls = true
+                                focusControls = true
+                                interaction++
+                                true
+                            }
+                            // PLAY-03 with a TV screen reader: TalkBack keeps the D-pad arrows for its own
+                            // navigation, and with the controls hidden this surface is its only node, so an arrow
+                            // ends at "no next item". There TalkBack scrolls a focused scrollable node in the
+                            // arrow's direction, so the arrows keep their meaning: Left/Right seek 10 s and land
+                            // on the position control, Up/Down show the controls. Keys without a reader are unchanged.
+                            val canSeekHere = !host.isLive || (host.liveCanTimeShift && !host.liveBufferExpired)
+                            if (canSeekHere) horizontalScrollAxisRange = ReaderArrowRange
+                            verticalScrollAxisRange = ReaderArrowRange
+                            scrollBy { x, y ->
+                                // Compose mirrors horizontal scroll amounts in RTL; the remote's Right still means forward.
+                                val forward = if (layoutDirection == LayoutDirection.Rtl) x < 0f else x > 0f
+                                when {
+                                    x != 0f && canSeekHere && (!forward || forwardSeekAllowed()) -> readerSeek(
+                                        if (forward) 10_000L else -10_000L,
+                                        arrow = true
+                                    )
+                                    y != 0f -> readerShowControls()
+                                    else -> return@scrollBy false
+                                }
+                                true
+                            }
+                            customActions = if (canSeekHere) {
+                                buildList {
+                                    add(
+                                        CustomAccessibilityAction("Back 10 seconds") {
+                                            readerSeek(-10_000L)
+                                            true
+                                        }
+                                    )
+                                    if (forwardSeekAllowed()) {
+                                        add(
+                                            CustomAccessibilityAction("Forward 10 seconds") {
+                                                readerSeek(10_000L)
+                                                true
+                                            }
+                                        )
+                                    }
+                                }
+                            } else {
+                                emptyList()
+                            }
+                        } else {
+                            hideFromAccessibility()
+                        }
+                    }
+                    .focusable()
             )
             // PLAY-27: top of the frame, away from bottom subtitles and controls; never takes remote focus.
             // It yields while a top-positioned cue (signs, forced translations) is on screen.

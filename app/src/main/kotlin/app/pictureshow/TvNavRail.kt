@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -34,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
@@ -81,6 +83,12 @@ private val RailExpandedWidth = 248.dp
  * HOME-24: TV Home's navigation, a rail of icons along the left edge that opens into labels while it holds focus and
  * closes when focus goes back to the content. Right (or Back) returns to the content through [onExit], so the viewer
  * lands on the card they left rather than wherever spatial search would put them.
+ *
+ * Open, it is a solid panel with its soft edge outside the label column, over a dim of the whole page. The rc42 panel was
+ * a 98%-opaque gradient that faded out over its last fifth, right where the hero's text starts: on the projector the
+ * hero's summary read through beside the labels, half-faded, and white text at 2-5% still shows in a dark room
+ * (leg 190 `rail-open2.jpg`). The account stays pinned at the top, outside the part that scrolls, so it is one press up
+ * from Search however many libraries the rail lists.
  */
 @Composable
 internal fun TvNavRail(entries: List<RailEntry>, onExit: () -> Unit, modifier: Modifier = Modifier) {
@@ -89,37 +97,65 @@ internal fun TvNavRail(entries: List<RailEntry>, onExit: () -> Unit, modifier: M
     val labelAlpha by animateFloatAsState(if (expanded) 1f else 0f, tween(if (expanded) 200 else 90), label = "rail-labels")
     val forward = if (LocalLayoutDirection.current == LayoutDirection.Rtl) Key.DirectionLeft else Key.DirectionRight
     BackHandler(enabled = expanded) { onExit() }
-    Box(
-        modifier.fillMaxHeight().width(width).clipToBounds().background(
-            if (expanded) {
-                // Opaque behind the labels, so hero text underneath never reads through them; only the last edge fades.
-                Brush.horizontalGradient(0f to Color(0xFA080A10), .8f to Color(0xF2080A10), 1f to Color(0x00080A10))
-            } else {
-                Brush.horizontalGradient(listOf(Color(0x99080A10), Color(0x00080A10)))
-            }
-        ).testTag("home:rail")
-    ) {
-        Column(
-            Modifier.fillMaxHeight().width(RailExpandedWidth).verticalScroll(rememberScrollState())
-                .padding(start = 12.dp, end = 16.dp, top = 28.dp, bottom = 20.dp)
-                .onFocusChanged { expanded = it.hasFocus }
-                .onPreviewKeyEvent {
-                    if (it.type == KeyEventType.KeyDown && it.key == forward) {
-                        onExit()
-                        true
+    val pinned = entries.takeWhile { it.avatar != null }
+    val scrolled = entries.drop(pinned.size)
+    Box(modifier.fillMaxSize()) {
+        // The page behind an open rail dims, as a drawer's does, so nothing under the panel's soft edge competes with
+        // the labels. Paint alpha on a plain fill: no offscreen layer.
+        if (labelAlpha > 0f) {
+            Box(Modifier.matchParentSize().background(RailScrim.copy(alpha = RailScrim.alpha * labelAlpha)))
+        }
+        Box(
+            Modifier.align(Alignment.CenterStart).fillMaxHeight().width(width + RailEdgeWidth * labelAlpha).clipToBounds()
+                .drawBehind {
+                    val edge = RailEdgeWidth.toPx() * labelAlpha
+                    val panel = size.width - edge
+                    if (expanded || labelAlpha > 0f) {
+                        drawRect(RailPanel, size = androidx.compose.ui.geometry.Size(panel, size.height))
+                        if (edge > 0f) {
+                            drawRect(
+                                Brush.horizontalGradient(listOf(RailPanel, RailPanel.copy(alpha = 0f)), startX = panel, endX = size.width),
+                                topLeft = androidx.compose.ui.geometry.Offset(panel, 0f),
+                                size = androidx.compose.ui.geometry.Size(edge, size.height)
+                            )
+                        }
                     } else {
-                        false
+                        drawRect(Brush.horizontalGradient(listOf(Color(0x99080A10), Color(0x00080A10))))
                     }
-                }.focusGroup(),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+                }.testTag("home:rail")
         ) {
-            entries.forEach { entry ->
-                if (entry.groupStart) Spacer(Modifier.height(14.dp))
-                RailItem(entry, labelAlpha)
+            Column(
+                Modifier.fillMaxHeight().width(RailExpandedWidth)
+                    .padding(start = 12.dp, end = 16.dp, top = 28.dp, bottom = 20.dp)
+                    .onFocusChanged { expanded = it.hasFocus }
+                    .onPreviewKeyEvent {
+                        if (it.type == KeyEventType.KeyDown && it.key == forward) {
+                            onExit()
+                            true
+                        } else {
+                            false
+                        }
+                    }.focusGroup(),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                pinned.forEach { RailItem(it, labelAlpha) }
+                Column(
+                    Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    scrolled.forEach { entry ->
+                        if (entry.groupStart) Spacer(Modifier.height(14.dp))
+                        RailItem(entry, labelAlpha)
+                    }
+                }
             }
         }
     }
 }
+
+private val RailPanel = Color(0xFF080A10)
+private val RailScrim = Color(0x8C000000)
+private val RailEdgeWidth = 56.dp
 
 @Composable
 private fun RailItem(entry: RailEntry, labelAlpha: Float) {

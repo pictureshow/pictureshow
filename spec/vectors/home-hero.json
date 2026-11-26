@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "suite": "home-hero",
-  "description": "HOME-20..23: which image a TV hero shows (backdrop, logo), the facts line under its title, its summary, and BlurHash placeholders. Items are Jellyfin wire items (PascalCase). endsAtEpochMillis = now + (runtime - resume position) in ms, only for playable, present titles; each platform formats it as a local clock time. BlurHash pixels are #RRGGBB, row-major; a platform may decode at any size, these fix the arithmetic.",
+  "description": "HOME-20..23: which image a TV hero shows (backdrop, logo), the facts line under its title, its summary (links left out), and BlurHash placeholders. Items are Jellyfin wire items (PascalCase). endsAtEpochMillis = now + (runtime - resume position) in ms, only for playable, present titles; each platform formats it as a local clock time. BlurHash pixels are #RRGGBB, row-major; a platform may decode at any size, these fix the arithmetic.",
   "cases": [
     {
       "id": "home-hero-art-movie-own-backdrop-and-logo",
@@ -353,6 +353,61 @@
         }
       },
       "expected": null
+    },
+    {
+      "id": "home-hero-summary-drops-link-lines",
+      "operation": "hero-summary",
+      "input": {
+        "item": {
+          "Id": "x",
+          "Overview": "https://www.youtube.com/watch?v=abc\n\nMicroplastics are accumulating in human brains.\nhttps://www.youtube.com/watch?v=def\n\n00:00 Intro"
+        }
+      },
+      "expected": "Microplastics are accumulating in human brains. 00:00 Intro"
+    },
+    {
+      "id": "home-hero-summary-drops-sentences-built-on-a-link",
+      "operation": "hero-summary",
+      "input": {
+        "item": {
+          "Id": "x",
+          "Overview": "Archaeology explores past cultures. For more, visit https://example.com/learn/\nMade in 2007."
+        }
+      },
+      "expected": "Archaeology explores past cultures. Made in 2007."
+    },
+    {
+      "id": "home-hero-summary-drops-www-links-and-labels",
+      "operation": "hero-summary",
+      "input": {
+        "item": {
+          "Id": "x",
+          "Overview": "Mind Blow 4.\nHidden Mickeys - www.example.org/mickeys\nMerch: HTTP://shop.example.com"
+        }
+      },
+      "expected": "Mind Blow 4."
+    },
+    {
+      "id": "home-hero-summary-only-links-is-none",
+      "operation": "hero-summary",
+      "input": {
+        "item": {
+          "Id": "x",
+          "Overview": "https://a.example/x\nhttp://b.example/y"
+        }
+      },
+      "expected": null
+    },
+    {
+      "id": "home-hero-summary-keeps-words-that-only-look-like-links",
+      "operation": "hero-summary",
+      "input": {
+        "item": {
+          "Id": "x",
+          "Overview": "A story about the www and http protocols."
+        }
+      },
+      "expected": "A story about the www and http protocols."
     },
     {
       "id": "home-hero-blurhash-canonical",

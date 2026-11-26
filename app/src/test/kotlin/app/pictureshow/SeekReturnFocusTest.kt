@@ -108,6 +108,65 @@ class SeekReturnFocusTest {
         compose.runOnIdle { assertEquals(0, exits) }
     }
 
+    /**
+     * rc42 (leg 190): with the controls up, uiautomator saw six bare nodes and no chrome. The hidden surface was the
+     * chrome's parent, and a walk that skips a node the user cannot see skips its children too. Walk the real
+     * provider that way and require the chrome, with and without a screen reader.
+     */
+    @Test fun visibleControlsAreReachableByATreeWalkWithAReader() = chromeReachableByTreeWalk(true)
+
+    @Test fun visibleControlsAreReachableByATreeWalkWithoutAReader() = chromeReachableByTreeWalk(false)
+
+    private fun chromeReachableByTreeWalk(accessible: Boolean) {
+        launch(accessible)
+        if (!accessible) {
+            compose.onRoot().performKeyInput { pressKey(Key.DirectionUp) }
+        }
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("Stop").fetchSemanticsNodes().isNotEmpty() }
+        val labels = compose.runOnIdle { treeWalkLabels() }
+        println("tree-walk accessible=$accessible: $labels")
+        assertTrue(labels.any { it.startsWith("Play") || it.startsWith("Pause") }, "No playback toggle in the walk: $labels")
+        listOf("An episode", "Stop", "Playback position").forEach { label ->
+            assertTrue(labels.any { it.startsWith(label) }, "$label missing from the walk: $labels")
+        }
+        assertTrue(labels.any { it.startsWith("Skip intro") }, "Skip intro missing from the walk: $labels")
+        if (!accessible) {
+            // Hidden controls leave the surface as the walk's one target, named.
+            compose.runOnIdle { compose.activity.onBackPressedDispatcher.onBackPressed() }
+            compose.waitUntil(5_000) { compose.onAllNodesWithText("Stop").fetchSemanticsNodes().isEmpty() }
+            val hidden = compose.runOnIdle { treeWalkLabels() }
+            assertTrue("Video player" in hidden, "The surface is missing from the walk: $hidden")
+        }
+        compose.runOnIdle { assertEquals(0, exits) }
+    }
+
+    /**
+     * What uiautomator's dump reaches: the provider's own child lists from the host down, skipping any node not
+     * visible to the user together with its children.
+     */
+    private fun treeWalkLabels(): List<String> {
+        val provider = host.accessibilityNodeProvider!!
+        val childId = android.view.accessibility.AccessibilityNodeInfo::class.java.getMethod("getChildId", Int::class.java)
+        val virtualId = android.view.accessibility.AccessibilityNodeInfo::class.java
+            .getMethod("getVirtualDescendantId", Long::class.java)
+        val labels = mutableListOf<String>()
+        val seen = mutableSetOf<Int>()
+        fun walk(info: android.view.accessibility.AccessibilityNodeInfo) {
+            repeat(info.childCount) { index ->
+                val id = virtualId.invoke(null, childId.invoke(info, index) as Long) as Int
+                // A real child view (the video surface) has no virtual id; uiautomator dumps it as its own view.
+                if (id == android.view.accessibility.AccessibilityNodeProvider.HOST_VIEW_ID || !seen.add(id)) return@repeat
+                val child = provider.createAccessibilityNodeInfo(id) ?: return@repeat
+                if (!child.isVisibleToUser) return@repeat
+                listOfNotNull(child.contentDescription, child.text).map(CharSequence::toString).filter(String::isNotBlank)
+                    .forEach(labels::add)
+                walk(child)
+            }
+        }
+        walk(checkNotNull(provider.createAccessibilityNodeInfo(android.view.accessibility.AccessibilityNodeProvider.HOST_VIEW_ID)))
+        return labels
+    }
+
     @Test fun aFocusedSkipActionReturnsToTheTimelineWhenItDisappearsWithControlsVisible() = accessibleSkipReturn(false)
 
     @Test fun skipReturnUsesAccessibilityEnabledAfterThePlayerOpened() = accessibleSkipReturn(true)

@@ -4,6 +4,7 @@
 package app.pictureshow
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.ReportDrawnWhen
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -70,6 +71,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
@@ -150,6 +152,7 @@ import app.pictureshow.core.isWatched
 import app.pictureshow.core.progress
 import app.pictureshow.core.runtimeLabel
 import app.pictureshow.core.sortDirectionLabel
+import app.pictureshow.core.summaryWithoutLinks
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -169,7 +172,12 @@ internal const val HOME_ACTIONS_TAG = "home:actions"
 
 /** HOME-20: how long focus rests on a card before the hero changes to it. */
 internal const val HOME_HERO_SETTLE_MILLIS = 140L
-private val HOME_HERO_HEIGHT = 228.dp
+
+// HOME-22/25: tall enough for the logo, facts and a two-line summary, and short enough that a poster shelf (the tallest
+// card, with a two-line title when focused) still fits under it with its heading whole. At 228 dp the list was 312 dp
+// tall, the poster card plus its lead needed about 353, and the heading went under the hero (rc42, leg 190).
+private val HOME_HERO_HEIGHT = 180.dp
+private val HOME_HERO_LOGO_HEIGHT = 64.dp
 private val HOME_HERO_HEIGHT_LARGE_TYPE = 96.dp
 private val HOME_SHELF_LEAD = 60.dp
 private const val HOME_BACKDROP_WIDTH_FRACTION = .74f
@@ -280,6 +288,9 @@ fun CatalogHome(
         if (heroItem != null) delay(HOME_HERO_SETTLE_MILLIS)
         heroItem = candidate
     }
+    // The first focused card is the moment Home is usable: report it as fully drawn, so cold start to a usable Home shows
+    // in logcat ("Fully drawn") and in startup metrics on any build type.
+    ReportDrawnWhen { heroCandidate != null }
     val heroShown = heroItem?.let { shown -> rows.firstNotNullOfOrNull { row -> row.items.firstOrNull { it.id == shown.id } } ?: shown }
         ?: restoreItem
         ?: rows.firstOrNull()?.items?.firstOrNull()
@@ -550,18 +561,25 @@ fun CatalogHome(
                 val largeType = LocalDensity.current.fontScale > UNBOUNDED_TITLE_FONT_SCALE
                 Box(
                     Modifier.fillMaxWidth().height(if (largeType) HOME_HERO_HEIGHT_LARGE_TYPE else HOME_HERO_HEIGHT)
-                        .padding(start = 24.dp, top = if (largeType) 12.dp else 32.dp, end = 48.dp)
+                        .padding(start = 24.dp, top = if (largeType) 12.dp else 24.dp, end = 48.dp)
+                        // Whatever a long title or a large font adds is cut here, never drawn over the shelf below.
+                        .clipToBounds()
                         .catalogFocusTarget(!handoff).testTag("home:hero"),
                     contentAlignment = Alignment.TopStart
                 ) {
                     if (heroShown != null) {
+                        val subtitle = heroSubtitle(heroShown).takeUnless { largeType }
                         HeroTitleBlock(
                             heroShown,
                             account,
                             Modifier.fillMaxWidth(.56f),
-                            summaryLines = if (largeType) 0 else 3,
-                            logoHeight = if (largeType) 36.dp else 72.dp,
-                            subtitle = heroSubtitle(heroShown).takeUnless { largeType },
+                            summaryLines = when {
+                                largeType -> 0
+                                subtitle != null -> 1
+                                else -> 2
+                            },
+                            logoHeight = if (largeType) 36.dp else HOME_HERO_LOGO_HEIGHT,
+                            subtitle = subtitle,
                             compact = largeType
                         )
                     } else {
@@ -2662,7 +2680,8 @@ fun CatalogDetail(
                                         if (trackSelection) selectedSection = "header"
                                     }
                                 }
-                                headerItem.overview?.takeIf(String::isNotBlank)?.let {
+                                // CAT-05 / HOME-22: links left out; a TV can't follow them.
+                                headerItem.overview?.let(::summaryWithoutLinks)?.let {
                                     Text(
                                         it,
                                         // Four lines beside the art, as on Home's hero; the full text is still the node's text.
@@ -4199,17 +4218,19 @@ internal fun CatalogArtwork(
         // HOME-23: the tile's own BlurHash (or a tint) while the art loads, never flat grey.
         val ref = if (artworkUrl == null && url != null) cardImage(item, wide) else null
         val blurred = ref != null && blurHashFor(item, ref) != null
-        if (showPlaceholder && !loaded) ArtPlaceholder(item, ref, Modifier.matchParentSize())
+        // Fades in over its placeholder on the composition clock (Coil's own crossfade runs on wall time).
+        val shown by androidx.compose.animation.core.animateFloatAsState(
+            if (loaded || !showPlaceholder) 1f else 0f,
+            androidx.compose.animation.core.tween(if (showPlaceholder) 200 else 0),
+            label = "artwork"
+        )
+        // The placeholder stays under the art until the fade has finished: removing it as the load lands showed the card's
+        // own grey for the length of the fade (BlurHash, grey, art on the rc42 projector, leg 190).
+        if (showPlaceholder && shown < 1f) ArtPlaceholder(item, ref, Modifier.matchParentSize())
         if (!loaded && showPlaceholder && placeholderName && !blurred) {
             Text(item.name, modifier = Modifier.padding(14.dp), maxLines = 4, overflow = TextOverflow.Ellipsis)
         }
         if (url != null) {
-            // Fades in over its placeholder on the composition clock (Coil's own crossfade runs on wall time).
-            val shown by androidx.compose.animation.core.animateFloatAsState(
-                if (loaded || !showPlaceholder) 1f else 0f,
-                androidx.compose.animation.core.tween(if (showPlaceholder) 200 else 0),
-                label = "artwork"
-            )
             AsyncImage(
                 model = url,
                 contentDescription = null,
