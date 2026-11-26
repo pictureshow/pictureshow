@@ -145,9 +145,73 @@ class PlayerBackFeedbackTest {
         compose.onRoot().performKeyInput { pressKey(Key.Back) }
         compose.onNodeWithContentDescription("Video player")
             .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.StateDescription))
+        compose.onNodeWithTag("player:back-hint").assertIsDisplayed()
+        compose.onNodeWithText("BACK again stops playback").assertIsDisplayed()
         compose.runOnIdle {
             assertEquals(0, exits)
             assertTrue(output.player.value!!.playWhenReady)
+        }
+        compose.onRoot().performKeyInput { pressKey(Key.Back) }
+        compose.waitUntil(10_000) {
+            shadowOf(android.os.Looper.getMainLooper()).idle()
+            exits == 1
+        }
+    }
+
+    @Test fun backWithinAutoHideGraceReshowsControlsInsteadOfExiting() {
+        launch(false)
+        compose.onRoot().performKeyInput { pressKey(Key.DirectionUp) }
+        compose.onNodeWithText("Subtitles").assertIsDisplayed()
+        // Wait for the 10 s auto-hide to trigger while playback is playing.
+        compose.mainClock.autoAdvance = false
+        compose.mainClock.advanceTimeBy(11_000)
+        compose.mainClock.advanceTimeByFrame()
+        compose.waitForIdle()
+        compose.onNodeWithText("Subtitles").assertDoesNotExist()
+        // BACK within 3 s of auto-hide re-shows controls instead of exiting.
+        org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofMillis(1_500))
+        compose.mainClock.autoAdvance = true
+        compose.onRoot().performKeyInput { pressKey(Key.Back) }
+        compose.onNodeWithText("Subtitles").assertIsDisplayed()
+        compose.runOnIdle { assertEquals(0, exits) }
+    }
+
+    @Test fun backAfterAutoHideGraceExpiresExitsPlayback() {
+        launch(false)
+        compose.onRoot().performKeyInput { pressKey(Key.DirectionUp) }
+        compose.onNodeWithText("Subtitles").assertIsDisplayed()
+        compose.mainClock.autoAdvance = false
+        compose.mainClock.advanceTimeBy(11_000)
+        compose.mainClock.advanceTimeByFrame()
+        compose.waitForIdle()
+        compose.onNodeWithText("Subtitles").assertDoesNotExist()
+        // Wait past the 3 s auto-hide grace window.
+        org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofMillis(3_500))
+        compose.mainClock.autoAdvance = true
+        compose.onRoot().performKeyInput { pressKey(Key.Back) }
+        compose.waitUntil(10_000) {
+            shadowOf(android.os.Looper.getMainLooper()).idle()
+            exits == 1
+        }
+    }
+
+    @Test fun pairedKeyAndSystemBackHidesControlsOnceWithoutExitingPlayback() {
+        launch(false)
+        compose.onRoot().performKeyInput { pressKey(Key.DirectionUp) }
+        compose.onNodeWithText("Subtitles").assertIsDisplayed()
+        // Android 14+ predictive back can deliver one physical BACK press to both Key.Back and BackHandler.
+        compose.onRoot().performKeyInput { pressKey(Key.Back) }
+        compose.runOnIdle { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        compose.waitForIdle()
+        compose.onNodeWithText("Subtitles").assertDoesNotExist()
+        compose.onNodeWithTag("player:back-hint").assertIsDisplayed()
+        compose.runOnIdle { assertEquals(0, exits) }
+        // A second physical BACK press (also paired) exits cleanly.
+        compose.onRoot().performKeyInput { pressKey(Key.Back) }
+        compose.runOnIdle { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        compose.waitUntil(10_000) {
+            shadowOf(android.os.Looper.getMainLooper()).idle()
+            exits == 1
         }
     }
 

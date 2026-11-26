@@ -255,4 +255,56 @@ class PlayerRemoteKeysTest {
             assertEquals(0L, seeks)
         }
     }
+
+    @Test
+    fun heldDirectionKeysAccelerateByTimeHeldAndThrottleRepeats() {
+        val root = FocusRequester()
+        var focused by mutableStateOf(false)
+        val steps = mutableListOf<Long>()
+        val tracker = HeldSeekTracker()
+        compose.setContent {
+            MaterialTheme {
+                Column(
+                    Modifier.focusRequester(root).onFocusChanged { focused = it.isFocused }
+                        .playerRemoteKeys(
+                            enabled = true,
+                            rootFocused = focused,
+                            seek = { steps += it },
+                            showControls = {},
+                            interact = {},
+                            back = {},
+                            durationMs = 5_400_000L,
+                            heldSeek = tracker
+                        )
+                        .focusable()
+                ) { Text("Playback surface") }
+            }
+        }
+        compose.runOnIdle { root.requestFocus() }
+        compose.runOnIdle {
+            val down = 1_000L
+            fun dispatch(action: Int, code: Int, eventTime: Long, repeat: Int) {
+                compose.activity.dispatchKeyEvent(KeyEvent(down, eventTime, action, code, repeat))
+            }
+            // Initial press -> 10 s.
+            dispatch(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_RIGHT, down, 0)
+            // Repeat 50 ms later -> throttled (< 100 ms).
+            dispatch(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_RIGHT, down + 50, 1)
+            // Repeat 100 ms later (held < 1.5 s) -> 10 s.
+            dispatch(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_RIGHT, down + 100, 2)
+            // Held 1.6 s -> 30 s.
+            dispatch(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_RIGHT, down + 1_600, 3)
+            // Held 3.2 s -> 60 s.
+            dispatch(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_RIGHT, down + 3_200, 4)
+            // Held 5.1 s -> 120 s.
+            dispatch(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_RIGHT, down + 5_100, 5)
+            // Release resets tracker.
+            dispatch(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DPAD_RIGHT, down + 5_150, 0)
+            // Next fresh press Left -> -10 s.
+            compose.activity.dispatchKeyEvent(KeyEvent(down + 5_200, down + 5_200, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_LEFT, 0))
+        }
+        compose.runOnIdle {
+            assertEquals(listOf(10_000L, 10_000L, 30_000L, 60_000L, 120_000L, -10_000L), steps)
+        }
+    }
 }

@@ -9,6 +9,23 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import app.pictureshow.core.playback.SeekSteps
+
+/** Throttles held D-pad seek repeats and computes time-held step tiers across recompositions. */
+internal class HeldSeekTracker {
+    private var lastStepAtMs: Long? = null
+
+    fun stepMs(repeatCount: Int, downTimeMs: Long, eventTimeMs: Long, durationMs: Long): Long? {
+        if (!SeekSteps.allowRepeat(repeatCount, lastStepAtMs, eventTimeMs)) return null
+        lastStepAtMs = eventTimeMs
+        val heldMs = if (repeatCount <= 0) 0L else (eventTimeMs - downTimeMs).coerceAtLeast(0L)
+        return SeekSteps.heldStepMs(heldMs, durationMs)
+    }
+
+    fun reset() {
+        lastStepAtMs = null
+    }
+}
 
 /**
  * Direction keys seek only on the playback surface. OK on the surface shows the controls on Play/Pause without
@@ -23,7 +40,9 @@ internal fun Modifier.playerRemoteKeys(
     interact: () -> Unit,
     back: () -> Unit,
     skip: (() -> Unit)? = null,
-    menu: (() -> Unit)? = null
+    menu: (() -> Unit)? = null,
+    durationMs: Long = 0L,
+    heldSeek: HeldSeekTracker = HeldSeekTracker()
 ): Modifier = onPreviewKeyEvent { event ->
     val key = event.key
     if (key == Key.Back) {
@@ -39,9 +58,17 @@ internal fun Modifier.playerRemoteKeys(
         return@onPreviewKeyEvent true
     }
     val center = key == Key.DirectionCenter || key == Key.Enter || key == Key.NumPadEnter
-    if (rootFocused && event.type == KeyEventType.KeyDown && (key == Key.DirectionLeft || key == Key.DirectionRight)) {
-        val step = if (event.nativeKeyEvent.repeatCount >= 5) 30_000L else 10_000L
-        seek(if (key == Key.DirectionLeft) -step else step)
+    if (rootFocused && (key == Key.DirectionLeft || key == Key.DirectionRight)) {
+        if (event.type == KeyEventType.KeyUp) {
+            heldSeek.reset()
+            return@onPreviewKeyEvent true
+        }
+        if (event.type == KeyEventType.KeyDown) {
+            val native = event.nativeKeyEvent
+            val step = heldSeek.stepMs(native.repeatCount, native.downTime, native.eventTime, durationMs)
+            if (step != null) seek(if (key == Key.DirectionLeft) -step else step)
+            return@onPreviewKeyEvent true
+        }
         true
     } else if (center && rootFocused) {
         if (event.type == KeyEventType.KeyUp) {

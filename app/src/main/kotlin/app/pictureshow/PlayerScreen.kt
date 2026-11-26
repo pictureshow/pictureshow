@@ -9,12 +9,14 @@ import android.content.Context
 import android.view.accessibility.CaptioningManager
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -24,6 +26,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -45,6 +48,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
@@ -70,6 +74,7 @@ import androidx.compose.ui.semantics.scrollBy
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.semantics.verticalScrollAxisRange
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -86,10 +91,20 @@ import app.pictureshow.core.ClientResult
 import app.pictureshow.core.MediaItem
 import app.pictureshow.core.SegmentMode
 import app.pictureshow.core.activeSegment
+import app.pictureshow.core.chapterAt
 import app.pictureshow.core.chooseTrickplay
 import app.pictureshow.core.creditsStartMs
+import app.pictureshow.core.displayRuntimeMillis
+import app.pictureshow.core.nextEpisodeWillAutoAdvance
+import app.pictureshow.core.playback.BACK_EXIT_HINT_MS
+import app.pictureshow.core.playback.BackPressGate
+import app.pictureshow.core.playback.BackPressPath
 import app.pictureshow.core.playback.MediaStreamType
+import app.pictureshow.core.playback.SeekSteps
+import app.pictureshow.core.playback.TvPlayerBackAction
+import app.pictureshow.core.playback.tvPlayerBackAction
 import app.pictureshow.core.trickplayTile
+import kotlinx.coroutines.delay
 import kotlinx.serialization.json.Json
 import org.koin.compose.koinInject
 
@@ -196,8 +211,12 @@ internal fun PlayerItemScreen(
     val pauseIntent by output.pauseIntent.collectAsState()
     val setupError by host::setupError
     var controls by remember { mutableStateOf(false) }
+    var autoHiddenAtMs by remember { mutableStateOf<Long?>(null) }
+    var backExitHint by remember { mutableStateOf(false) }
     var controlsFeedback by remember { mutableStateOf<String?>(null) }
     var focusSpeaksControlsHidden by remember { mutableStateOf(false) }
+    val heldSeek = remember { HeldSeekTracker() }
+    val backGate = remember { BackPressGate() }
     var controlsHeight by remember { mutableStateOf(240.dp) }
     val density = LocalDensity.current
     var controlsTop by remember { mutableStateOf<Int?>(null) }
@@ -362,13 +381,28 @@ internal fun PlayerItemScreen(
         interaction++
     }
 
-    fun hideControls() {
+    fun hideControls(fromBack: Boolean = false) {
         controls = false
+        autoHiddenAtMs = null
         lastAction.hidden(android.os.SystemClock.uptimeMillis())
-        if (accessibleControls) controlsFeedback = CONTROLS_HIDDEN_FEEDBACK
+        if (accessibleControls) {
+            controlsFeedback = CONTROLS_HIDDEN_FEEDBACK
+        } else if (fromBack) {
+            backExitHint = true
+        }
         val focusMoves = !rootFocused
         val focused = rootFocus.requestFocus()
         focusSpeaksControlsHidden = accessibleControls && focusMoves && focused
+    }
+
+    fun showRemoteControls() {
+        controls = true
+        autoHiddenAtMs = null
+        backExitHint = false
+        if (rootFocused) {
+            focusControls = true
+            preferLastAction = true
+        }
     }
 
     fun handleBack() {
@@ -396,12 +430,19 @@ internal fun PlayerItemScreen(
                 chooserRequest = null
             }
 
-            controls -> hideControls()
-
-            else -> finish(reason = "back")
+            else -> when (tvPlayerBackAction(controls, autoHiddenAtMs, android.os.SystemClock.uptimeMillis())) {
+                TvPlayerBackAction.HideControls -> hideControls(fromBack = true)
+                TvPlayerBackAction.ShowControls -> {
+                    showRemoteControls()
+                    interaction++
+                }
+                TvPlayerBackAction.Exit -> finish(reason = "back")
+            }
         }
     }
-    BackHandler { handleBack() }
+    BackHandler {
+        if (backGate.admit(BackPressPath.System, android.os.SystemClock.uptimeMillis())) handleBack()
+    }
     LaunchedEffect(Unit) { rootFocus.requestFocus() }
     PlaybackHostEffects(host, account, catalog, paused)
     LaunchedEffect(controls, focusControls, chaptersOpen, chooser, seekOpen, extraPanel, restoringSeekFocus) {
@@ -416,8 +457,16 @@ internal fun PlayerItemScreen(
     }
     LaunchedEffect(controls) {
         if (controls) {
+            autoHiddenAtMs = null
+            backExitHint = false
             controlsFeedback = null
             focusSpeaksControlsHidden = false
+        }
+    }
+    LaunchedEffect(backExitHint) {
+        if (backExitHint) {
+            delay(BACK_EXIT_HINT_MS)
+            backExitHint = false
         }
     }
     // A touch on the conversion notice reveals controls first, so Playback info has a real opener to return to.
@@ -539,15 +588,10 @@ internal fun PlayerItemScreen(
         interaction
     ) {
         controls = false
-        lastAction.hidden(android.os.SystemClock.uptimeMillis())
+        val now = android.os.SystemClock.uptimeMillis()
+        autoHiddenAtMs = now
+        lastAction.hidden(now)
         rootFocus.requestFocus()
-    }
-    fun showRemoteControls() {
-        controls = true
-        if (rootFocused) {
-            focusControls = true
-            preferLastAction = true
-        }
     }
     PlayerSeekHost((seekOpen || extraPanel != null) && error == null && !switching, player = {
         Box(
@@ -567,8 +611,12 @@ internal fun PlayerItemScreen(
                     seek = ::keySeek,
                     showControls = ::showRemoteControls,
                     interact = { interaction++ },
-                    back = ::handleBack,
+                    back = {
+                        if (backGate.admit(BackPressPath.Key, android.os.SystemClock.uptimeMillis())) handleBack()
+                    },
                     menu = { if (controls) hideControls() else showRemoteControls() },
+                    durationMs = if (host.isLive) 0L else duration,
+                    heldSeek = heldSeek,
                     skip = activeSegment(segments, position, localPreferences.segmentModes)
                         ?.takeIf { (localPreferences.segmentModes[it.type] ?: SegmentMode.Ask) == SegmentMode.Ask }
                         ?.let { segment ->
@@ -742,24 +790,67 @@ internal fun PlayerItemScreen(
                         }.semantics {
                             isTraversalGroup = true
                             testTagsAsResourceId = true
-                        }.background(Color(0xE610131C)).padding(horizontal = TV_PLAYER_SIDE_INSET, vertical = 36.dp),
+                        }.background(
+                            Brush.verticalGradient(
+                                listOf(
+                                    Color.Transparent,
+                                    Color(0xC80A0D14),
+                                    Color(0xF20A0D14)
+                                )
+                            )
+                        ).padding(start = TV_PLAYER_SIDE_INSET, end = TV_PLAYER_SIDE_INSET, top = 44.dp, bottom = 32.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     val sourceId = state.decision?.mediaSourceId
                     val info = chooseTrickplay(metadata, sourceId, (resources.displayMetrics.widthPixels / 6).coerceIn(160, 640))
-                    val tile = seekPreview?.let { target -> info?.let { trickplayTile(it, target) } }
-                    if (tile != null && tiles != null && sourceId != null) {
-                        TrickplayPreview(requireNotNull(tiles), sourceId, tile, requireNotNull(seekPreview))
-                    }
-                    Text(
-                        if (host.isLive) host.liveProgram?.name ?: item.name else item.name,
-                        style = MaterialTheme.typography.headlineSmall,
-                        modifier = if (restoringSeekFocus || openerReturnTag != null) {
-                            Modifier.clearAndSetSemantics { hideFromAccessibility() }
+                    val previewTarget = seekPreview
+                    if (previewTarget != null && !host.isLive) {
+                        val total = displayRuntimeMillis(duration)
+                        val previewFraction = if (total != null && total > 0L) {
+                            (previewTarget.toFloat() / total).coerceIn(0f, 1f)
                         } else {
-                            Modifier
+                            0.5f
                         }
-                    )
+                        val tile = info?.let { trickplayTile(it, previewTarget) }
+                        val chapterName = chapterAt(metadata.chapters, previewTarget)?.name?.trim()?.takeIf(String::isNotEmpty)
+                        TvSeekPreviewBubble(previewFraction, previewTarget, chapterName, tiles, sourceId, tile)
+                    }
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.Bottom
+                    ) {
+                        Text(
+                            if (host.isLive) host.liveProgram?.name ?: item.name else item.name,
+                            style = MaterialTheme.typography.headlineSmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f).then(
+                                if (restoringSeekFocus || openerReturnTag != null) {
+                                    Modifier.clearAndSetSemantics { hideFromAccessibility() }
+                                } else {
+                                    Modifier
+                                }
+                            )
+                        )
+                        if (!host.isLive && !ended) {
+                            val endsAt = SeekSteps.endsAtEpochMs(
+                                System.currentTimeMillis(),
+                                position,
+                                duration,
+                                speedState.speed.toDouble()
+                            )
+                            val clock = liveTime()
+                            if (endsAt != null) {
+                                Text(
+                                    "Ends at ${clock.clock(endsAt)}",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Color(0xFFD0D5E2),
+                                    modifier = Modifier.padding(start = 16.dp).testTag("player:ends-at").clearAndSetSemantics {}
+                                )
+                            }
+                        }
+                    }
                     if (host.isLive) {
                         val program = host.liveProgram
                         val time = liveTime()
@@ -792,6 +883,8 @@ internal fun PlayerItemScreen(
                         ended = ended,
                         arrowsSeek =
                         rootFocused && !restoringSeekFocus && (!host.isLive || (host.liveCanTimeShift && !host.liveBufferExpired)),
+                        seeking = seekPreview != null,
+                        chapters = metadata.chapters,
                         live = host.isLive,
                         liveCanTimeShift = host.liveCanTimeShift,
                         liveExpired = host.liveBufferExpired,
@@ -842,37 +935,56 @@ internal fun PlayerItemScreen(
                                 }
                             }
                         }
-                        PlayerActionButton(liveStyle = host.isLive, scale = playerButtonScale(), onClick = {
-                            chooserRequest = PlayerTrackChooserRequest(
-                                MediaStreamType.Audio,
-                                trackMenus,
-                                state.decision == null,
-                                trackMenus.menus != null && state.decision != null,
-                                state.audioIndex
-                            )
-                        }, modifier = remembersAction(audioFocus).then(readerOpenerOnly("player:audio"))) { Text("Audio") }
-                        PlayerActionButton(liveStyle = host.isLive, scale = playerButtonScale(), onClick = {
-                            chooserRequest = PlayerTrackChooserRequest(
-                                MediaStreamType.Subtitle,
-                                trackMenus,
-                                state.decision == null,
-                                trackMenus.menus != null && state.decision != null,
-                                state.subtitleIndex
-                            )
-                        }, modifier = remembersAction(subtitleFocus).then(readerOpenerOnly("player:subtitles"))) {
-                            Text("Subtitles")
+                        PlayerActionButton(
+                            liveStyle = host.isLive,
+                            scale = playerButtonScale(),
+                            icon = if (host.isLive) null else playerActionIcon("audio"),
+                            onClick = {
+                                chooserRequest = PlayerTrackChooserRequest(
+                                    MediaStreamType.Audio,
+                                    trackMenus,
+                                    state.decision == null,
+                                    trackMenus.menus != null && state.decision != null,
+                                    state.audioIndex
+                                )
+                            },
+                            modifier = remembersAction(audioFocus).then(readerOpenerOnly("player:audio"))
+                        ) { Text("Audio", maxLines = 1, softWrap = false) }
+                        PlayerActionButton(
+                            liveStyle = host.isLive,
+                            scale = playerButtonScale(),
+                            icon = if (host.isLive) null else playerActionIcon("cc"),
+                            onClick = {
+                                chooserRequest = PlayerTrackChooserRequest(
+                                    MediaStreamType.Subtitle,
+                                    trackMenus,
+                                    state.decision == null,
+                                    trackMenus.menus != null && state.decision != null,
+                                    state.subtitleIndex
+                                )
+                            },
+                            modifier = remembersAction(subtitleFocus).then(readerOpenerOnly("player:subtitles"))
+                        ) {
+                            Text("Subtitles", maxLines = 1, softWrap = false)
                         }
                         if (metadata.chapters.isNotEmpty()) {
-                            PlayerActionButton(liveStyle = host.isLive, scale = playerButtonScale(), onClick = {
-                                chaptersOpen = true
-                                seekPreview = null
-                            }, modifier = remembersAction(chaptersFocus).then(readerOpenerOnly("player:chapters"))) {
-                                Text("Chapters")
+                            PlayerActionButton(
+                                liveStyle = host.isLive,
+                                scale = playerButtonScale(),
+                                icon = if (host.isLive) null else playerActionIcon("chapters"),
+                                onClick = {
+                                    chaptersOpen = true
+                                    seekPreview = null
+                                },
+                                modifier = remembersAction(chaptersFocus).then(readerOpenerOnly("player:chapters"))
+                            ) {
+                                Text("Chapters", maxLines = 1, softWrap = false)
                             }
                         }
                         PlayerActionButton(
                             liveStyle = host.isLive,
                             scale = playerButtonScale(),
+                            icon = if (host.isLive) null else playerActionIcon("speed"),
                             onClick = {
                                 openExtraPanel("Playback speed", speedFocus)
                             },
@@ -881,27 +993,39 @@ internal fun PlayerItemScreen(
                                     openExtraPanel("Playback speed", speedFocus)
                                 }
                         ) {
-                            Text("Speed · ${app.pictureshow.core.playback.PlaybackSpeeds.label(speedState.speed)}")
+                            Text(
+                                "Speed · ${app.pictureshow.core.playback.PlaybackSpeeds.label(speedState.speed)}",
+                                maxLines = 1,
+                                softWrap = false
+                            )
                         }
                         PlayerActionButton(
                             liveStyle = host.isLive,
                             scale = playerButtonScale(),
+                            icon = if (host.isLive) null else playerActionIcon("info"),
                             onClick = {
                                 openExtraPanel("Playback info", infoFocus)
                             },
                             modifier = remembersAction(infoFocus).testTag("player:info").then(readerOpenerOnly("player:info"))
                                 .playerTouchClick { openExtraPanel("Playback info", infoFocus) }
                         ) {
-                            Text("Playback info")
-                        }
-                        PlayerActionButton(liveStyle = host.isLive, scale = playerButtonScale(), onClick = {
-                            host.sync?.show()
-                        }, modifier = remembersAction(syncFocus).testTag("player:syncplay")) {
-                            Text(androidx.compose.ui.res.stringResource(R.string.sync_title))
+                            Text("Playback info", maxLines = 1, softWrap = false)
                         }
                         PlayerActionButton(
                             liveStyle = host.isLive,
                             scale = playerButtonScale(),
+                            icon = if (host.isLive) null else playerActionIcon("syncplay"),
+                            onClick = {
+                                host.sync?.show()
+                            },
+                            modifier = remembersAction(syncFocus).testTag("player:syncplay")
+                        ) {
+                            Text(androidx.compose.ui.res.stringResource(R.string.sync_title), maxLines = 1, softWrap = false)
+                        }
+                        PlayerActionButton(
+                            liveStyle = host.isLive,
+                            scale = playerButtonScale(),
+                            icon = if (host.isLive) null else playerActionIcon("quality"),
                             onClick = {
                                 openExtraPanel("Quality", qualityFocus)
                                 interaction++
@@ -916,14 +1040,21 @@ internal fun PlayerItemScreen(
                                     }
                                 },
                             enabled = offline == null && !state.preparing && state.decision != null
-                        ) { Text("Quality · ${if (offline != null) "Download" else host.qualityLabel}") }
+                        ) {
+                            Text(
+                                "Quality · ${if (offline != null) "Download" else host.qualityLabel}",
+                                maxLines = 1,
+                                softWrap = false
+                            )
+                        }
                         PlayerActionButton(
                             liveStyle = host.isLive,
                             scale = playerButtonScale(),
+                            icon = if (host.isLive) null else playerActionIcon("stop"),
                             onClick = { finish(reason = "stop-button") },
                             modifier = remembersAction(stopFocus).then(readerOpenerOnly("player:stop"))
                         ) {
-                            Text("Stop")
+                            Text("Stop", maxLines = 1, softWrap = false)
                         }
                     }
                     val qualityNotice = if (offline !=
@@ -937,6 +1068,23 @@ internal fun PlayerItemScreen(
                         Text(it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("player:quality-notice"))
                     }
                     state.reportError?.let { Text("Could not save progress: $it") }
+                }
+            }
+            if (backExitHint && !controlsVisible && error == null && !switching && !accessibleControls) {
+                Box(
+                    Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(start = TV_PLAYER_SIDE_INSET, bottom = 36.dp)
+                        .background(Color(0xE6141926), RoundedCornerShape(999.dp))
+                        .border(1.dp, Color.White.copy(alpha = 0.22f), RoundedCornerShape(999.dp))
+                        .padding(horizontal = 20.dp, vertical = 10.dp)
+                        .testTag("player:back-hint")
+                ) {
+                    Text(
+                        "BACK again stops playback",
+                        color = Color(0xFFE8ECF4),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
                 }
             }
             if (error == null && !switching) {
@@ -973,7 +1121,16 @@ internal fun PlayerItemScreen(
                                     foreground &&
                                     !pauseIntent &&
                                     deferredNext == null &&
-                                    host.localPreferences.tuning.canAutomaticallyAdvance(ended)
+                                    host.localPreferences.tuning.canAutomaticallyAdvance(ended),
+                                showCountdown = nextEpisodeWillAutoAdvance(
+                                    host.localPreferences.tuning.nextEpisodeCountdownSeconds,
+                                    host.sync?.participating == true,
+                                    accessibleControls,
+                                    foreground,
+                                    pauseIntent,
+                                    deferredNext != null
+                                ),
+                                countdownWindowMs = trigger?.let { (duration - it).coerceAtLeast(10_000L) }
                             )
                         }
                     }

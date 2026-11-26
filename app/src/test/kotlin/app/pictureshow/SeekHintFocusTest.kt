@@ -84,11 +84,12 @@ class SeekHintFocusTest {
         val bitmap = Bitmap.createBitmap(1920, 1080, Bitmap.Config.ARGB_8888)
         compose.runOnIdle { compose.activity.window.decorView.draw(Canvas(bitmap)) }
         val left = ((bounds.right.value + 12) * density).toInt()
+        val right = ((bounds.right.value + 280) * density).toInt().coerceAtMost(1700)
         val top = (bounds.top.value * density).toInt()
         val bottom = (bounds.bottom.value * density).toInt()
         try {
             return (top until bottom).sumOf { y ->
-                (left until 1700).count { x ->
+                (left until right).count { x ->
                     val pixel = bitmap.getPixel(x, y)
                     Color.red(pixel) > 120 && Color.green(pixel) > 120 && Color.blue(pixel) > 120
                 }
@@ -119,7 +120,8 @@ class SeekHintFocusTest {
         compose.onNodeWithTag("player:surface").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.RequestFocus) { it() }
         assertTrue(hintPixels() > 20, "The hint must return when arrows can seek again")
         assertEquals(clock, compose.onNodeWithContentDescription("Playback position").getUnclippedBoundsInRoot())
-        assertTrue(compose.onAllNodesWithText("seek 10 seconds", substring = true, useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+        assertTrue(compose.onAllNodesWithText("seek", substring = true, useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+        assertTrue(compose.onAllNodesWithText("hold for faster", substring = true, useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
     }
 
     @Test fun talkBackPositionAndButtonsNeverClaimThatArrowsSeek() {

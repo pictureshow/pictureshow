@@ -3,12 +3,14 @@
  */
 package app.pictureshow
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -23,7 +25,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -34,8 +40,11 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.semantics.traversalIndex
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import app.pictureshow.core.Chapter
 import app.pictureshow.core.displayRuntimeMillis
 import app.pictureshow.core.playback.ObservedLiveWindow
 
@@ -49,6 +58,8 @@ internal fun PlayerTimeline(
     paused: Boolean = false,
     ended: Boolean = false,
     arrowsSeek: Boolean = false,
+    seeking: Boolean = false,
+    chapters: List<Chapter> = emptyList(),
     live: Boolean = false,
     liveCanTimeShift: Boolean = false,
     liveExpired: Boolean = false,
@@ -104,12 +115,51 @@ internal fun PlayerTimeline(
     val spokenTimelinePosition = playbackEndPosition(spokenPosition, durationMs)
     val total = displayRuntimeMillis(durationMs)
     val fraction = if (total != null) (timelinePosition.toFloat() / total).coerceIn(0f, 1f) else 0f
-    Column(modifier.fillMaxWidth().semantics { testTagsAsResourceId = true }, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Box(Modifier.fillMaxWidth().height(5.dp).background(Color.DarkGray).clearAndSetSemantics {}) {
-            Box(Modifier.fillMaxWidth(fraction).height(5.dp).background(Color(0xFFB8C4FF)))
+    val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+    Column(modifier.fillMaxWidth().semantics { testTagsAsResourceId = true }, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Canvas(Modifier.fillMaxWidth().height(20.dp).clearAndSetSemantics {}) {
+            val trackHeight = (if (seeking) 9.dp else 7.dp).toPx()
+            val top = (size.height - trackHeight) / 2f
+            val corner = CornerRadius(trackHeight / 2f, trackHeight / 2f)
+            drawRoundRect(
+                color = Color.White.copy(alpha = 0.24f),
+                topLeft = Offset(0f, top),
+                size = Size(size.width, trackHeight),
+                cornerRadius = corner
+            )
+            val fillWidth = (size.width * fraction).coerceIn(0f, size.width)
+            if (fillWidth > 0f) {
+                val fillLeft = if (rtl) size.width - fillWidth else 0f
+                drawRoundRect(
+                    color = Color(0xFFB8C4FF),
+                    topLeft = Offset(fillLeft, top),
+                    size = Size(fillWidth, trackHeight),
+                    cornerRadius = corner
+                )
+            }
+            if (total != null && total > 0L) {
+                val tickWidth = 2.dp.toPx()
+                for (chapter in chapters) {
+                    if (chapter.startMs in 1L until total) {
+                        val chapterFraction = chapter.startMs.toFloat() / total.toFloat()
+                        val x = if (rtl) size.width * (1f - chapterFraction) else size.width * chapterFraction
+                        drawRect(
+                            color = Color(0xB30A0D14),
+                            topLeft = Offset((x - tickWidth / 2f).coerceIn(0f, size.width - tickWidth), top),
+                            size = Size(tickWidth, trackHeight)
+                        )
+                    }
+                }
+                val thumbRadius = (if (seeking) 8.5.dp else 7.dp).toPx()
+                val maxThumbX = (size.width - thumbRadius).coerceAtLeast(thumbRadius)
+                val thumbX = (if (rtl) size.width - fillWidth else fillWidth).coerceIn(thumbRadius, maxThumbX)
+                val centerY = size.height / 2f
+                drawCircle(Color(0x990A0D14), radius = thumbRadius + 1.5.dp.toPx(), center = Offset(thumbX, centerY))
+                drawCircle(Color.White, radius = thumbRadius, center = Offset(thumbX, centerY))
+            }
         }
-        Row {
-            // The clock's compact bounds align with the controls below; a full-width 5 dp target is
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            // The clock's compact bounds align with the controls below; a full-width bar target is
             // skipped by TV TalkBack's directional distance scoring.
             Box(
                 Modifier.testTag("player:position").focusProperties { canFocus = accessibleControls }
@@ -134,7 +184,22 @@ internal fun PlayerTimeline(
                     }
             ) { Text(playerClock(timelinePosition, durationMs, paused), modifier = Modifier.clearAndSetSemantics {}) }
             // Keep the clock and row geometry stable while arrows navigate a focused control.
-            Text("  ·  ← / → seek 10 seconds", modifier = Modifier.alpha(if (arrowsSeek) 1f else 0f).clearAndSetSemantics {})
+            Text(
+                "  ·  ← / → seek · hold for faster",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFFB8C0D2),
+                modifier = Modifier.alpha(if (arrowsSeek) 1f else 0f).clearAndSetSemantics {}
+            )
+            Spacer(Modifier.weight(1f))
+            if (total != null && !ended) {
+                val remaining = (total - timelinePosition).coerceAtLeast(0L)
+                Text(
+                    "-${playerTime(remaining)}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color(0xFFD0D5E2),
+                    modifier = Modifier.clearAndSetSemantics {}
+                )
+            }
         }
     }
 }

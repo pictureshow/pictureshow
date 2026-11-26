@@ -3,17 +3,24 @@
  */
 package app.pictureshow
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -23,9 +30,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
@@ -39,6 +51,8 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.traversalIndex
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Button
 import androidx.tv.material3.MaterialTheme
@@ -52,6 +66,7 @@ import app.pictureshow.core.SegmentType
 import app.pictureshow.core.activeSegment
 import app.pictureshow.core.chapterImageUrl
 import app.pictureshow.core.imageUrl
+import app.pictureshow.core.nextEpisodeCountdownProgress
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.delay
 
@@ -194,6 +209,8 @@ internal fun NextEpisodeControl(
     // Time left in this episode when there are no credits to skip: the card shows it and waits for the end.
     remainingMs: Long? = null,
     autoPlay: Boolean = true,
+    showCountdown: Boolean = autoPlay,
+    countdownWindowMs: Long? = null,
     card: (@Composable (Long, () -> Unit, () -> Unit) -> Unit)? = null,
     /** PLAY-30: when the countdown would start the next episode by itself, ask first if the viewer has been away. */
     stillWatching: app.pictureshow.core.playback.StillWatching = app.pictureshow.core.playback.StillWatching.Off,
@@ -269,52 +286,146 @@ internal fun NextEpisodeControl(
                 onCancel()
             })
         } else {
+            val shape = RoundedCornerShape(16.dp)
+            val initialWindowMs = remember(next.id, eligible) { remainingMs?.coerceAtLeast(1_000L) }
+            val seconds = remainingMs?.let { ((it + 999) / 1_000).coerceAtLeast(0) } ?: remaining
+            val totalWindowMs = if (remainingMs != null) {
+                maxOf(countdownWindowMs ?: initialWindowMs ?: 10_000L, remainingMs, 1_000L)
+            } else {
+                countdownSeconds.coerceAtLeast(1) * 1_000L
+            }
+            val currentRemainingMs = remainingMs ?: (remaining * 1_000L)
+            val ringProgress = nextEpisodeCountdownProgress(currentRemainingMs, totalWindowMs)
             Column(
-                Modifier.width(380.dp).background(Color(0xF510131C)).padding(20.dp)
-                    .onFocusChanged { focused = it.hasFocus }.focusGroup(),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                Modifier
+                    .width(420.dp)
+                    .background(Color(0xF0121622), shape)
+                    .border(1.dp, Color.White.copy(alpha = 0.16f), shape)
+                    .padding(16.dp)
+                    .onFocusChanged { focused = it.hasFocus }
+                    .focusGroup(),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                val seconds = remainingMs?.let { ((it + 999) / 1_000).coerceAtLeast(0) } ?: remaining
-                Text(
-                    if (autoPlay) "Next episode · $seconds s left" else "Next episode",
-                    modifier = if (autoPlay) {
-                        Modifier.semantics { heading() }
-                    } else {
-                        Modifier.clearAndSetSemantics {
-                            heading()
-                            liveRegion = LiveRegionMode.Polite
-                            contentDescription = "Next episode, ${catalogAnnouncement(next)}"
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val thumbWidth = if (compact) 112.dp else 148.dp
+                    val thumbHeight = if (compact) 63.dp else 83.dp
+                    val thumbUrl = imageUrl(account.server, next, 320, wide = true)
+                    if (thumbUrl != null || showCountdown) {
+                        Box(
+                            Modifier
+                                .width(thumbWidth)
+                                .height(thumbHeight)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(Color(0xFF1D2333)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            thumbUrl?.let { url ->
+                                AsyncImage(
+                                    url,
+                                    contentDescription = null,
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Crop
+                                )
+                            }
+                            if (showCountdown) {
+                                Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.42f)))
+                                Box(
+                                    Modifier.size(46.dp).testTag("next:countdown-ring"),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Canvas(Modifier.fillMaxSize().clearAndSetSemantics {}) {
+                                        val stroke = 3.dp.toPx()
+                                        drawCircle(Color(0xCC0D111C))
+                                        drawArc(
+                                            color = Color.White.copy(alpha = 0.25f),
+                                            startAngle = 0f,
+                                            sweepAngle = 360f,
+                                            useCenter = false,
+                                            style = Stroke(width = stroke)
+                                        )
+                                        drawArc(
+                                            color = Color(0xFFB8C4FF),
+                                            startAngle = -90f,
+                                            sweepAngle = 360f * ringProgress,
+                                            useCenter = false,
+                                            style = Stroke(width = stroke, cap = StrokeCap.Round)
+                                        )
+                                    }
+                                    Text(
+                                        "${seconds}s",
+                                        color = Color.White,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.clearAndSetSemantics {}
+                                    )
+                                }
+                            }
                         }
-                    },
-                    color = Color.White,
-                    style = MaterialTheme.typography.titleMedium
-                )
-                imageUrl(account.server, next, 320, wide = true)?.takeUnless { compact }?.let { url ->
-                    AsyncImage(url, contentDescription = null, modifier = Modifier.width(240.dp).height(100.dp))
+                    }
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            if (showCountdown) "Next episode · $seconds s left" else "Next episode",
+                            modifier = if (showCountdown) {
+                                Modifier.semantics { heading() }
+                            } else {
+                                Modifier.clearAndSetSemantics {
+                                    heading()
+                                    liveRegion = LiveRegionMode.Polite
+                                    contentDescription = "Next episode, ${catalogAnnouncement(next)}"
+                                }
+                            },
+                            color = Color(0xFFD0D5E2),
+                            style = MaterialTheme.typography.labelLarge
+                        )
+                        if (next.parentIndexNumber != null && next.indexNumber != null) {
+                            Text(
+                                "S${next.parentIndexNumber} · E${next.indexNumber}",
+                                color = Color(0xFFB0B8CC),
+                                style = MaterialTheme.typography.labelSmall,
+                                modifier = Modifier.clearAndSetSemantics {}
+                            )
+                        }
+                        Text(
+                            next.name,
+                            color = Color.White,
+                            style = MaterialTheme.typography.titleMedium,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
-                Text(next.name, color = Color.White)
-                Button(
-                    scale = playerButtonScale(),
-                    onClick = {
-                        if (!played) {
-                            played = true
-                            play()
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Button(
+                        scale = playerButtonScale(),
+                        onClick = {
+                            if (!played) {
+                                played = true
+                                play()
+                            }
+                        },
+                        modifier = Modifier.testTag("next:play").semantics {
+                            contentDescription = "Play next episode, ${catalogAnnouncement(next)}"
                         }
-                    },
-                    modifier = Modifier.testTag("next:play").semantics {
-                        contentDescription = "Play next episode, ${catalogAnnouncement(next)}"
-                    }
-                ) { Text("Play now", modifier = Modifier.clearAndSetSemantics {}) }
-                Button(scale = playerButtonScale(), onClick = {
-                    val hadFocus = focused
-                    cancelled = true
-                    onCancel()
-                    // The caller may remove this whole card, so its SideEffect would not run.
-                    if (hadFocus) {
-                        focused = false
-                        restore()
-                    }
-                }, modifier = Modifier.testTag("next:cancel")) { Text("Cancel next episode") }
+                    ) { Text("Play now", modifier = Modifier.clearAndSetSemantics {}) }
+                    Button(
+                        scale = playerButtonScale(),
+                        onClick = {
+                            val hadFocus = focused
+                            cancelled = true
+                            onCancel()
+                            // The caller may remove this whole card, so its SideEffect would not run.
+                            if (hadFocus) {
+                                focused = false
+                                restore()
+                            }
+                        },
+                        modifier = Modifier.testTag("next:cancel")
+                    ) { Text("Cancel next episode") }
+                }
             }
         }
     }
