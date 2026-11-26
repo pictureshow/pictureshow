@@ -110,7 +110,9 @@ class ReferenceParityVectorsTest {
                         "playback-engine",
                         "playback-start",
                         // SeerrVectorsTest executes the Seerr request rules.
-                        "seerr"
+                        "seerr",
+                        // HomeHeroVectorsTest executes HOME-20..23.
+                        "home-hero"
                     )
             ) {
                 "Unhandled suite $suite in ${file.name}"

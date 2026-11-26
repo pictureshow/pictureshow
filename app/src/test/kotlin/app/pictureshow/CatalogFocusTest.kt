@@ -13,6 +13,7 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertContentDescriptionEquals
@@ -23,7 +24,6 @@ import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -326,11 +326,12 @@ class CatalogFocusTest {
             val focused = compose.onAllNodes(isFocused()).fetchSemanticsNodes()
             assertEquals(1, focused.size)
             assertTrue(focused.single().config[SemanticsProperties.TestTag].startsWith("home:resume:"))
-            val viewport = compose.onNodeWithTag("home").getUnclippedBoundsInRoot()
+            val viewport = compose.onRoot().getUnclippedBoundsInRoot()
             listOf(
                 compose.onNodeWithTag("home:search"),
-                compose.onNodeWithText("Pictureshow"),
-                compose.onNodeWithTag("home:account")
+                compose.onNodeWithTag("home:hero"),
+                compose.onNodeWithTag("home:account"),
+                compose.onNode(isFocused())
             ).forEach { node ->
                 // Unclipped layout bounds catch a sliver that assertIsDisplayed would accept.
                 val bounds = node.getUnclippedBoundsInRoot()
@@ -346,8 +347,8 @@ class CatalogFocusTest {
         key(Key.DirectionDown)
         settle()
         compose.onNodeWithTag("home:libraries:library").assertIsFocused().assertIsDisplayed()
-        // Lower rows must continue to scroll the header away.
-        assertTrue(compose.onAllNodesWithTag("home:search").fetchSemanticsNodes().all { it.boundsInRoot.height == 0f })
+        // The rail and hero stay in place while the shelves scroll under them (HOME-24, HOME-25).
+        compose.onNodeWithTag("home:search").assertIsDisplayed()
         key(Key.DirectionUp)
         settle()
         key(Key.DirectionUp)
@@ -550,7 +551,7 @@ class CatalogFocusTest {
         val stop = compose.onNodeWithContentDescription("End of Libraries").getUnclippedBoundsInRoot()
         assertEquals(card.right.value, stop.left.value, 1f)
         compose.onNodeWithContentDescription("Start of Libraries").assertExists()
-        assertTrue(stop.right >= shelfBounds(1).right, "Right from the stop has no candidate in the next row")
+        assertTrue(stop.right >= shelfBounds(0).right, "Right from the stop has no candidate in the next row")
         // Nothing to activate or to take input focus: OK on a stop can't open anything.
         val noClick = SemanticsMatcher.keyNotDefined(SemanticsActions.OnClick)
         val inert = noClick and SemanticsMatcher.keyNotDefined(SemanticsActions.RequestFocus)
@@ -559,7 +560,10 @@ class CatalogFocusTest {
         // The stops never take input focus: the card keeps it and the keys behave as they do without a reader.
         key(Key.DirectionRight)
         compose.onNodeWithTag("home:libraries:library").assertIsFocused()
+        // Left at a shelf's start opens the rail (HOME-24); Right comes back to the card.
         key(Key.DirectionLeft)
+        compose.onNodeWithTag("home:home").assertIsFocused()
+        key(Key.DirectionRight)
         compose.onNodeWithTag("home:libraries:library").assertIsFocused()
         key(Key.DirectionDown)
         compose.onNodeWithTag("home:latest:library:film-0").assertIsFocused()
@@ -614,12 +618,16 @@ class CatalogFocusTest {
     }
 
     @Test
-    fun settingsIsReachedInHeaderAndBackRestoresItsButton() {
+    fun settingsIsReachedInTheRailAndBackRestoresItsButton() {
         compose.setContent { Harness(state = home.copy(rows = home.rows.drop(2))) }
-        // Settings moved from beside Sign out to beside Search (usability report, leg 26).
+        // Settings moved from beside Sign out to beside Search (usability report, leg 26), then into the rail (HOME-24).
         key(Key.DirectionUp)
         compose.onNodeWithTag("home:search").assertIsFocused()
-        key(Key.DirectionRight)
+        repeat(12) {
+            if (compose.onNodeWithTag("home:settings").fetchSemanticsNode().config.getOrNull(SemanticsProperties.Focused) != true) {
+                key(Key.DirectionDown)
+            }
+        }
         compose.onNodeWithTag("home:settings").assertIsFocused()
         key(Key.DirectionCenter)
         compose.onNodeWithTag("settings:advanced:Network quality").assertIsFocused()

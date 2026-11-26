@@ -357,8 +357,8 @@ fun imageUrl(server: Server, item: MediaItem, width: Int, height: Int? = null, w
     ) {
         return null
     }
-    val image = chooseImage(item, wide) ?: return null
-    return URLBuilder("${server.url.trimEnd('/')}/Items/${image.id.encodeURLPathPart()}/Images/${image.type}").apply {
+    val image = cardImage(item, wide) ?: return null
+    return URLBuilder("${server.url.trimEnd('/')}/Items/${image.itemId.encodeURLPathPart()}/Images/${image.type}").apply {
         parameters.append("tag", image.tag)
         parameters.append("maxWidth", width.coerceAtLeast(1).toString())
         if (height != null) parameters.append("maxHeight", height.coerceAtLeast(1).toString())
@@ -366,9 +366,10 @@ fun imageUrl(server: Server, item: MediaItem, width: Int, height: Int? = null, w
     }.buildString()
 }
 
-private data class ItemImage(val id: String, val type: String, val tag: String)
+private typealias ItemImage = ImageRef
 
-private fun chooseImage(item: MediaItem, wide: Boolean): ItemImage? {
+/** The image a card shows (before the container rule in [imageUrl]); also picks the BlurHash its placeholder draws. */
+fun cardImage(item: MediaItem, wide: Boolean): ImageRef? {
     fun own(type: String) = item.imageTags[type]?.takeIf(String::isNotBlank)?.let { ItemImage(item.id, type, it) }
     fun backdrop(): ItemImage? {
         val ownTag = item.backdropImageTags.firstOrNull()?.takeIf(String::isNotBlank)

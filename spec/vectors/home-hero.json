@@ -1,0 +1,449 @@
+{
+  "schemaVersion": 1,
+  "suite": "home-hero",
+  "description": "HOME-20..23: which image a TV hero shows (backdrop, logo), the facts line under its title, its summary, and BlurHash placeholders. Items are Jellyfin wire items (PascalCase). endsAtEpochMillis = now + (runtime - resume position) in ms, only for playable, present titles; each platform formats it as a local clock time. BlurHash pixels are #RRGGBB, row-major; a platform may decode at any size, these fix the arithmetic.",
+  "cases": [
+    {
+      "id": "home-hero-art-movie-own-backdrop-and-logo",
+      "operation": "hero-art",
+      "input": {
+        "item": {
+          "Id": "m1",
+          "Name": "A Movie",
+          "Type": "Movie",
+          "ProductionYear": 2014,
+          "OfficialRating": "PG",
+          "CommunityRating": 7.5,
+          "RunTimeTicks": 57000000000,
+          "ImageTags": {
+            "Primary": "p1",
+            "Logo": "l1",
+            "Thumb": "t1"
+          },
+          "BackdropImageTags": [
+            "b1",
+            "b2"
+          ],
+          "UserData": {
+            "PlaybackPositionTicks": 18000000000
+          }
+        }
+      },
+      "expected": {
+        "backdrop": {
+          "itemId": "m1",
+          "type": "Backdrop",
+          "tag": "b1"
+        },
+        "logo": {
+          "itemId": "m1",
+          "type": "Logo",
+          "tag": "l1"
+        }
+      }
+    },
+    {
+      "id": "home-hero-art-episode-uses-series-backdrop-and-logo",
+      "operation": "hero-art",
+      "input": {
+        "item": {
+          "Id": "e1",
+          "Name": "Pilot",
+          "Type": "Episode",
+          "ParentIndexNumber": 1,
+          "IndexNumber": 1,
+          "PremiereDate": "2012-09-28T00:00:00.0000000Z",
+          "RunTimeTicks": 14400000000,
+          "OfficialRating": "TV-Y7",
+          "CommunityRating": 6.4,
+          "SeriesId": "s1",
+          "ImageTags": {
+            "Primary": "ep"
+          },
+          "BackdropImageTags": [],
+          "ParentBackdropItemId": "s1",
+          "ParentBackdropImageTags": [
+            "sb"
+          ],
+          "ParentLogoItemId": "s1",
+          "ParentLogoImageTag": "sl",
+          "ParentThumbItemId": "s1",
+          "ParentThumbImageTag": "st"
+        }
+      },
+      "expected": {
+        "backdrop": {
+          "itemId": "s1",
+          "type": "Backdrop",
+          "tag": "sb"
+        },
+        "logo": {
+          "itemId": "s1",
+          "type": "Logo",
+          "tag": "sl"
+        }
+      }
+    },
+    {
+      "id": "home-hero-art-thumb-when-no-backdrop",
+      "operation": "hero-art",
+      "input": {
+        "item": {
+          "Id": "v1",
+          "Type": "Video",
+          "ImageTags": {
+            "Primary": "p",
+            "Thumb": "t"
+          }
+        }
+      },
+      "expected": {
+        "backdrop": {
+          "itemId": "v1",
+          "type": "Thumb",
+          "tag": "t"
+        },
+        "logo": null
+      }
+    },
+    {
+      "id": "home-hero-art-series-thumb-when-episode-has-no-backdrop",
+      "operation": "hero-art",
+      "input": {
+        "item": {
+          "Id": "e2",
+          "Type": "Episode",
+          "ImageTags": {
+            "Primary": "still"
+          },
+          "ParentThumbItemId": "s1",
+          "ParentThumbImageTag": "st"
+        }
+      },
+      "expected": {
+        "backdrop": {
+          "itemId": "s1",
+          "type": "Thumb",
+          "tag": "st"
+        },
+        "logo": null
+      }
+    },
+    {
+      "id": "home-hero-art-episode-still-last",
+      "operation": "hero-art",
+      "input": {
+        "item": {
+          "Id": "e3",
+          "Type": "Episode",
+          "ImageTags": {
+            "Primary": "still"
+          }
+        }
+      },
+      "expected": {
+        "backdrop": {
+          "itemId": "e3",
+          "type": "Primary",
+          "tag": "still"
+        },
+        "logo": null
+      }
+    },
+    {
+      "id": "home-hero-art-poster-is-never-a-backdrop",
+      "operation": "hero-art",
+      "input": {
+        "item": {
+          "Id": "m2",
+          "Type": "Movie",
+          "ImageTags": {
+            "Primary": "p"
+          },
+          "BackdropImageTags": [
+            ""
+          ]
+        }
+      },
+      "expected": {
+        "backdrop": null,
+        "logo": null
+      }
+    },
+    {
+      "id": "home-hero-facts-movie-ends-from-resume-point",
+      "operation": "hero-facts",
+      "input": {
+        "item": {
+          "Id": "m1",
+          "Name": "A Movie",
+          "Type": "Movie",
+          "ProductionYear": 2014,
+          "OfficialRating": "PG",
+          "CommunityRating": 7.5,
+          "RunTimeTicks": 57000000000,
+          "ImageTags": {
+            "Primary": "p1",
+            "Logo": "l1",
+            "Thumb": "t1"
+          },
+          "BackdropImageTags": [
+            "b1",
+            "b2"
+          ],
+          "UserData": {
+            "PlaybackPositionTicks": 18000000000
+          }
+        },
+        "nowEpochMillis": 1700000000000
+      },
+      "expected": {
+        "episodeCode": null,
+        "year": 2014,
+        "runtime": "1h 35m",
+        "officialRating": "PG",
+        "communityRating": 7.5,
+        "endsAtEpochMillis": 1700003900000
+      }
+    },
+    {
+      "id": "home-hero-facts-episode-code-and-premiere-year",
+      "operation": "hero-facts",
+      "input": {
+        "item": {
+          "Id": "e1",
+          "Name": "Pilot",
+          "Type": "Episode",
+          "ParentIndexNumber": 1,
+          "IndexNumber": 1,
+          "PremiereDate": "2012-09-28T00:00:00.0000000Z",
+          "RunTimeTicks": 14400000000,
+          "OfficialRating": "TV-Y7",
+          "CommunityRating": 6.4,
+          "SeriesId": "s1",
+          "ImageTags": {
+            "Primary": "ep"
+          },
+          "BackdropImageTags": [],
+          "ParentBackdropItemId": "s1",
+          "ParentBackdropImageTags": [
+            "sb"
+          ],
+          "ParentLogoItemId": "s1",
+          "ParentLogoImageTag": "sl",
+          "ParentThumbItemId": "s1",
+          "ParentThumbImageTag": "st"
+        },
+        "nowEpochMillis": 1700000000000
+      },
+      "expected": {
+        "episodeCode": "S1 E1",
+        "year": 2012,
+        "runtime": "24m",
+        "officialRating": "TV-Y7",
+        "communityRating": 6.4,
+        "endsAtEpochMillis": 1700001440000
+      }
+    },
+    {
+      "id": "home-hero-facts-special-episode",
+      "operation": "hero-facts",
+      "input": {
+        "item": {
+          "Id": "e4",
+          "Type": "Episode",
+          "ParentIndexNumber": 0,
+          "IndexNumber": 2
+        },
+        "nowEpochMillis": 1700000000000
+      },
+      "expected": {
+        "episodeCode": "Special E2",
+        "year": null,
+        "runtime": null,
+        "officialRating": null,
+        "communityRating": null,
+        "endsAtEpochMillis": null
+      }
+    },
+    {
+      "id": "home-hero-facts-series-has-no-end-time",
+      "operation": "hero-facts",
+      "input": {
+        "item": {
+          "Id": "s1",
+          "Type": "Series",
+          "ProductionYear": 2012,
+          "RunTimeTicks": 13800000000,
+          "CommunityRating": 0,
+          "OfficialRating": ""
+        },
+        "nowEpochMillis": 1700000000000
+      },
+      "expected": {
+        "episodeCode": null,
+        "year": 2012,
+        "runtime": "23m",
+        "officialRating": null,
+        "communityRating": null,
+        "endsAtEpochMillis": null
+      }
+    },
+    {
+      "id": "home-hero-facts-missing-episode-has-no-end-time",
+      "operation": "hero-facts",
+      "input": {
+        "item": {
+          "Id": "e5",
+          "Type": "Episode",
+          "LocationType": "Virtual",
+          "ParentIndexNumber": 2,
+          "IndexNumber": 3,
+          "RunTimeTicks": 14400000000
+        },
+        "nowEpochMillis": 1700000000000
+      },
+      "expected": {
+        "episodeCode": "S2 E3",
+        "year": null,
+        "runtime": "24m",
+        "officialRating": null,
+        "communityRating": null,
+        "endsAtEpochMillis": null
+      }
+    },
+    {
+      "id": "home-hero-facts-implausible-runtime-omitted",
+      "operation": "hero-facts",
+      "input": {
+        "item": {
+          "Id": "m3",
+          "Type": "Movie",
+          "RunTimeTicks": 999999999999999
+        },
+        "nowEpochMillis": 1700000000000
+      },
+      "expected": {
+        "episodeCode": null,
+        "year": null,
+        "runtime": null,
+        "officialRating": null,
+        "communityRating": null,
+        "endsAtEpochMillis": null
+      }
+    },
+    {
+      "id": "home-hero-summary-collapses-whitespace",
+      "operation": "hero-summary",
+      "input": {
+        "item": {
+          "Id": "x",
+          "Overview": "  Two worlds.\n\nOne   love. "
+        }
+      },
+      "expected": "Two worlds. One love."
+    },
+    {
+      "id": "home-hero-summary-blank-is-none",
+      "operation": "hero-summary",
+      "input": {
+        "item": {
+          "Id": "x",
+          "Overview": " \n "
+        }
+      },
+      "expected": null
+    },
+    {
+      "id": "home-hero-blurhash-canonical",
+      "operation": "blurhash",
+      "input": {
+        "hash": "LEHV6nWB2yk8pyo0adR*.7kCMdnj",
+        "width": 4,
+        "height": 3
+      },
+      "expected": {
+        "components": [
+          4,
+          3
+        ],
+        "averageColor": "#979695",
+        "pixels": [
+          "#87A4B1",
+          "#A1ADB1",
+          "#B5B4AB",
+          "#A0ACAE",
+          "#7C9AA9",
+          "#94949A",
+          "#A49186",
+          "#92989B",
+          "#7C909A",
+          "#908684",
+          "#A38268",
+          "#948C86"
+        ]
+      }
+    },
+    {
+      "id": "home-hero-blurhash-jellyfin-backdrop",
+      "operation": "blurhash",
+      "input": {
+        "hash": "WZ7iZE$,SJKGM{c8q8n,jbbrWBW-E]NFt7%3s;WBToR%bFoMn,t7",
+        "width": 4,
+        "height": 3
+      },
+      "expected": {
+        "components": [
+          6,
+          4
+        ],
+        "averageColor": "#41BE40",
+        "pixels": [
+          "#00FB00",
+          "#00DF00",
+          "#00E100",
+          "#00FF00",
+          "#12C70E",
+          "#A6C6A6",
+          "#55BA55",
+          "#26CA25",
+          "#00C600",
+          "#79BD79",
+          "#4CB64C",
+          "#30CA2E"
+        ]
+      }
+    },
+    {
+      "id": "home-hero-blurhash-wrong-length-is-none",
+      "operation": "blurhash",
+      "input": {
+        "hash": "LEHV6nWB2yk8pyo0adR*.7kCMdn",
+        "width": 4,
+        "height": 3
+      },
+      "expected": {
+        "components": null,
+        "averageColor": null,
+        "pixels": null
+      }
+    },
+    {
+      "id": "home-hero-blurhash-bad-character-is-none",
+      "operation": "blurhash",
+      "input": {
+        "hash": "LEHV6nWB2yk8pyo0adR*.7kCMd\"j",
+        "width": 4,
+        "height": 3
+      },
+      "expected": {
+        "components": [
+          4,
+          3
+        ],
+        "averageColor": "#979695",
+        "pixels": null
+      }
+    }
+  ]
+}

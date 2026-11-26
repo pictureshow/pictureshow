@@ -48,7 +48,9 @@ class CorpusVectorsTest {
                     // SubtitleTimingVectorsTest executes PLAY-11's timing rules.
                     "subtitle-timing",
                     // SeerrVectorsTest executes the Seerr request rules.
-                    "seerr"
+                    "seerr",
+                    // HomeHeroVectorsTest executes HOME-20..23.
+                    "home-hero"
                 ),
             "control-vectors" to
                 setOf(

@@ -43,10 +43,16 @@ data class AccountSnapshot(
  */
 fun serverLabel(server: Server, all: List<Server>): String {
     val name = server.name.trim()
-    if (name.isEmpty()) return server.url
+    // A server left on its container's hostname is named like "3f9a1c0be472"; that id means nothing to a viewer.
+    if (name.isEmpty() || isMachineName(name)) return server.url
     val repeats = all.distinctBy { it.id to it.url }.count { it.name.trim().equals(name, ignoreCase = true) } > 1
     return if (repeats) "$name · ${server.url}" else name
 }
+
+private val MACHINE_NAME = Regex("[0-9a-f]{12}|[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+
+/** A container id or GUID standing in for a server name. */
+internal fun isMachineName(name: String): Boolean = MACHINE_NAME.matches(name.lowercase())
 
 fun AccountSnapshot.serverLabel(server: Server): String = serverLabel(server, rememberedServers)
 

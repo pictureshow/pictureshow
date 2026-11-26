@@ -58,7 +58,8 @@ class LiveMainIntegrationTest {
             assertEquals(1, live)
             assertEquals(0, custom)
         }
-        compose.onNodeWithTag("home:live-tv").performKeyInput { pressKey(Key.DirectionRight) }
+        // HOME-24: the rail lists Customize home below Live TV.
+        compose.onNodeWithTag("home:live-tv").performKeyInput { pressKey(Key.DirectionDown) }
         compose.onNodeWithTag("home:customize").assertIsFocused().performKeyInput { pressKey(Key.DirectionCenter) }
         compose.runOnIdle {
             assertEquals(1, live)
