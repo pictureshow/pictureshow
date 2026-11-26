@@ -5,6 +5,8 @@ package app.pictureshow
 
 import android.app.Application
 import androidx.activity.ComponentActivity
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.input.key.Key
@@ -15,6 +17,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
@@ -60,7 +63,13 @@ class CatalogDetailArrivalBoundsTest {
         val state = mutableStateOf(CatalogDetailState(account, item, loading = true, playbackPending = true))
         compose.setContent {
             CompositionLocalProvider(LocalLifecycleOwner provides owner) {
-                PictureshowTheme { CatalogDetail(state.value, {}, {}, {}, {}, {}, onPendingAction = { true }) }
+                PictureshowTheme {
+                    androidx.compose.foundation.layout.Box(
+                        androidx.compose.ui.Modifier.width(460.dp).fillMaxHeight()
+                    ) {
+                        CatalogDetail(state.value, {}, {}, {}, {}, {}, onPendingAction = { true })
+                    }
+                }
             }
         }
         fun hero() = compose.onNodeWithTag("detail:hero", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot

@@ -66,8 +66,9 @@ class CatalogDetailBusyFocusTest {
                 )
             }
         }
-        // CAT-05: Favorite is next to the primary.
+        // CAT-05/08: on a playback return the reserved Play from start sits beside Play, then Favorite.
         compose.onNodeWithTag("detail:play-pending").performKeyInput { pressKey(Key.DirectionRight) }
+        compose.onNodeWithTag("detail:from-start-pending").assertIsFocused().performKeyInput { pressKey(Key.DirectionRight) }
         compose.onNodeWithTag("detail:favorite-pending").assertIsFocused()
         compose.onNodeWithTag("detail:played-pending").performSemanticsAction(SemanticsActions.OnClick) { it() }
         compose.onRoot().performKeyInput { keyDown(Key.DirectionCenter) }

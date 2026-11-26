@@ -74,7 +74,9 @@ class CompletionPresentationTest {
         }
         compose.onNodeWithTag("detail:play").assertIsFocused()
         compose.onNodeWithTag("detail:play").performKeyInput { pressKey(Key.DirectionRight) }
-        // CAT-05: Favorite follows the primary; Mark watched sits after it.
+        // CAT-05/08: after a playback return the reserved Play from start stays beside Play for the life of the page,
+        // then Favorite; Mark watched sits after it.
+        compose.onNodeWithTag("detail:from-start").assertIsFocused().performKeyInput { pressKey(Key.DirectionRight) }
         compose.onNodeWithTag("detail:favorite").assertIsFocused().performKeyInput { pressKey(Key.DirectionRight) }
         compose.onNodeWithTag("detail:played").assertIsFocused()
         compose.onNodeWithText("Mark unwatched").assertIsDisplayed()
