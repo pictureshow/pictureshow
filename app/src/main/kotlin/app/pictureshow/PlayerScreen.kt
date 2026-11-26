@@ -1073,8 +1073,8 @@ internal fun PlayerItemScreen(
             if (backExitHint && !controlsVisible && error == null && !switching && !accessibleControls) {
                 Box(
                     Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(bottom = 36.dp)
+                        .align(Alignment.BottomStart)
+                        .padding(start = TV_PLAYER_SIDE_INSET, bottom = 36.dp)
                         .background(Color(0xE6141926), RoundedCornerShape(999.dp))
                         .border(1.dp, Color.White.copy(alpha = 0.22f), RoundedCornerShape(999.dp))
                         .padding(horizontal = 20.dp, vertical = 10.dp)

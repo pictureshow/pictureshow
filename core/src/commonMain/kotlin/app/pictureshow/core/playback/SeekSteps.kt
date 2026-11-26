@@ -33,12 +33,7 @@ object SeekSteps {
     }
 
     /** PLAY-03: initial presses always run; held repeats throttle to one step per [minIntervalMs]. */
-    fun allowRepeat(
-        repeatCount: Int,
-        lastStepAtMs: Long?,
-        eventTimeMs: Long,
-        minIntervalMs: Long = HELD_REPEAT_INTERVAL_MS
-    ): Boolean {
+    fun allowRepeat(repeatCount: Int, lastStepAtMs: Long?, eventTimeMs: Long, minIntervalMs: Long = HELD_REPEAT_INTERVAL_MS): Boolean {
         if (repeatCount <= 0 || lastStepAtMs == null) return true
         val elapsed = eventTimeMs - lastStepAtMs
         return elapsed < 0L || elapsed >= minIntervalMs
