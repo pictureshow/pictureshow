@@ -159,6 +159,15 @@ const pendingPortSuites = new Set([
     // PLAY-11 subtitle timing wording and steps (core SubtitleTiming): web's player-subtitles.ts port of the runner owed.
     "subtitle-timing",
 ]);
+// PLAY player chrome (Android leg 188 Part B): web port owed.
+const pendingPortOperations = new Set([
+    "held-seek-step",
+    "held-seek-repeat",
+    "next-episode-countdown-progress",
+    "next-episode-will-auto-advance",
+    "tv-player-back",
+    "tv-player-back-gate",
+]);
 // Desktop slice 1 added these shared application policies. Their web adapters/UI
 // are still owed; list exact case IDs rather than accepting unknown operations.
 // These remain visible todos, never execution passes.
@@ -458,6 +467,13 @@ for (const file of files) {
     const runnable = suite.cases;
     describe("shared " + file, () => {
         for (const c of runnable) {
+            if (
+                suite.suite === "application" &&
+                pendingPortOperations.has(c.operation)
+            ) {
+                it.todo(c.id);
+                continue;
+            }
             if (
                 suite.suite === "application" &&
                 pendingApplicationCases.has(c.id)
