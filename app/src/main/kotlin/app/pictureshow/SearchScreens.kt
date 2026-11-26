@@ -64,6 +64,7 @@ import androidx.compose.ui.platform.InterceptPlatformTextInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -342,7 +343,14 @@ fun SearchScreen(
                             decorationBox = { inner ->
                                 Box {
                                     if (fieldValue.text.isEmpty()) {
-                                        Text("Movies, shows, episodes and people", color = CatalogMuted, fontSize = 18.sp, maxLines = 1)
+                                        // A hint for the eye only: the field's text stays what was typed, and its label speaks for it.
+                                        Text(
+                                            "Movies, shows, episodes and people",
+                                            Modifier.clearAndSetSemantics {},
+                                            color = CatalogMuted,
+                                            fontSize = 18.sp,
+                                            maxLines = 1
+                                        )
                                     }
                                     inner()
                                 }
