@@ -29,9 +29,12 @@ class SearchPresentationTest {
             "the americans"
         )
         assertEquals(listOf("Shows", "Movies"), result.map { it.title })
-        assertEquals(listOf("Movies", "Shows"), searchRows(mapOf(
-            SearchKind.SHOWS to ClientResult.Success(ItemPage(listOf(MediaItem("s", "The Americans", "Series")))),
-            SearchKind.MOVIES to ClientResult.Success(ItemPage(listOf(MediaItem("m", "The Americanization of Emily", "Movie"))))
-        )).map { it.title })
+        val unordered = searchRows(
+            mapOf(
+                SearchKind.SHOWS to ClientResult.Success(ItemPage(listOf(MediaItem("s", "The Americans", "Series")))),
+                SearchKind.MOVIES to ClientResult.Success(ItemPage(listOf(MediaItem("m", "The Americanization of Emily", "Movie"))))
+            )
+        )
+        assertEquals(listOf("Movies", "Shows"), unordered.map { it.title })
     }
 }

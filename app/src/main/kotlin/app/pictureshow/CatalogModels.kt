@@ -514,6 +514,7 @@ class CatalogGridViewModel(val account: Account, parent: MediaItem, private val 
     private var ended = false
     private var generation = 0
     private var railJob: Job? = null
+    private var railGeneration = -1
     private val refresher = CatalogCardRefresher(
         viewModelScope,
         account,
@@ -530,6 +531,8 @@ class CatalogGridViewModel(val account: Account, parent: MediaItem, private val 
                 mutableState.update {
                     it.copy(sortBy = preferences.sortBy, descending = preferences.descending, list = preferences.list)
                 }
+                // A page the grid asked for before the saved sort arrived would have read the names in another order.
+                railGeneration = -1
             }
             load()
             loadRail()
@@ -621,11 +624,15 @@ class CatalogGridViewModel(val account: Account, parent: MediaItem, private val 
         filters = from.filters
     )
 
-    /** BROWSE-05: one light read of every title's sort name under the grid's own scope, filters and sort. */
+    /**
+     * BROWSE-05: one light read of every title's sort name under the grid's own scope, filters and sort, once per sort and
+     * filter: from init, a restart, or the first page that lands, whichever comes first.
+     */
     private fun loadRail() {
-        railJob?.cancel()
         val before = state.value
-        if (before.sortBy != "SortName") return
+        if (before.sortBy != "SortName" || railGeneration == generation) return
+        railJob?.cancel()
+        railGeneration = generation
         val epoch = generation
         railJob = viewModelScope.launch {
             val result = session.call(account) { sortNames(account, query(before, 0, 0)) }
@@ -696,6 +703,7 @@ class CatalogGridViewModel(val account: Account, parent: MediaItem, private val 
                         )
                     }
                     if (revision != session.changes.value.revision) refresher.refresh()
+                    loadRail()
                 }
             }
         }

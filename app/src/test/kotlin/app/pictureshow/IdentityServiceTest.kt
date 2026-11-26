@@ -30,6 +30,34 @@ class IdentityServiceTest {
             throw IOException("fake disk failure")
     }
 
+    /** BROWSE-05 on a TV: without this forward the app's service answered the rail's read with nothing, so no rail showed. */
+    @Test
+    fun actualAppServiceReadsTheLetterRailsSortNamesFromTheServer() = runTest {
+        val asked = mutableListOf<String>()
+        val engine = MockEngine(
+            io.ktor.client.engine.mock.MockEngineConfig().apply {
+                dispatcher = kotlinx.coroutines.test.StandardTestDispatcher(testScheduler)
+                addHandler { request ->
+                    asked += "${request.url.encodedPath}?fields=${request.url.parameters["fields"]}"
+                    respond(
+                        "{\"Items\":[{\"Id\":\"film\",\"Name\":\"2046\",\"SortName\":\"0000002046\"}],\"TotalRecordCount\":1}",
+                        headers = io.ktor.http.headersOf(io.ktor.http.HttpHeaders.ContentType, "application/json")
+                    )
+                }
+            }
+        )
+        HttpClient(engine).use { http ->
+            val service = PersistentIdentityService(http, DeviceIdentityStore(brokenPreferences), "Test TV")
+            val account =
+                Account(Server("s", "Test", "https://media.example.test", "12.0.0"), User("u", "Sam"), "fake", deviceId = "viewer-device")
+            val page = assertIs<ClientResult.Success<app.pictureshow.core.ItemPage>>(
+                service.sortNames(account, app.pictureshow.core.BrowseQuery("lib", sortBy = "SortName"))
+            ).value
+            assertEquals(listOf("0000002046"), page.items.map { it.sortName })
+            assertEquals(listOf("/Items?fields=SortName"), asked)
+        }
+    }
+
     @Test
     fun deviceIdentityFailureIsAnActionableResultBeforeAnyNetworkRequest() = runTest {
         HttpClient(MockEngine { error("No network request should be made without a device ID") }).use { http ->

@@ -9,8 +9,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusGroup
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.BringIntoViewSpec
 import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.gestures.ScrollableState
@@ -1376,7 +1376,7 @@ fun CatalogGrid(
                 color = CatalogMuted,
                 style = MaterialTheme.typography.labelLarge,
                 modifier = Modifier.align(Alignment.TopEnd).padding(top = ContextStripTopPadding + 8.dp, end = 48.dp)
-                    .clearAndSetSemantics { }.testTag("grid:position")
+                    .testTag("grid:position").semantics { hideFromAccessibility() }
             )
         }
         if (railShown) {
@@ -1550,7 +1550,15 @@ private fun LetterRail(
                                         else -> false
                                     }
                                 }
-                                .clickable { onJump(letter) }
+                                // Focusable in every input mode: clickable alone is focusable only outside touch mode.
+                                .semantics {
+                                    role = Role.Button
+                                    onClick {
+                                        onJump(letter)
+                                        true
+                                    }
+                                }
+                                .focusable()
                         } else {
                             Modifier
                         }
@@ -1715,7 +1723,7 @@ internal fun focusedCardScrollDistance(
  * A shelf's section title sits [above] the card's top and ends [gap] above it. After [distance], the title is whole in the list
  * or wholly out of it, never cut by the top edge into half a word. It comes into view with the card when both fit; when they
  * don't, it goes wholly under the edge, unless the card's own scaled edge would follow it, which only a card taller than
- * the screen can do.
+ * the screen can do: then the title comes into view whole above the card.
  */
 internal fun sectionTitleScrollDistance(
     distance: Float,
@@ -1729,7 +1737,10 @@ internal fun sectionTitleScrollDistance(
     val top = offset - distance
     if (top >= above || top <= gap) return distance
     if (above + size + size * FOCUS_SCALE_OVERHANG + margin <= containerSize) return offset - above
-    return offset - maxOf(gap, size * FOCUS_SCALE_OVERHANG)
+    val overhang = size * FOCUS_SCALE_OVERHANG
+    // An overhang deeper than the gap would leave part of the title above it: bring the title whole instead, as a card
+    // this tall passes the list's end either way.
+    return if (overhang <= gap) offset - gap else offset - maxOf(above, overhang)
 }
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
