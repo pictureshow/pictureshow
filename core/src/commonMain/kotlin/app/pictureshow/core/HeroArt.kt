@@ -95,6 +95,25 @@ fun heroFacts(item: MediaItem, nowEpochMillis: Long): HeroFacts {
 
 /**
  * HOME-22: what a hero says under its facts. An episode's own overview, else its series' line is not fetched, so
- * nothing; long text is cut by the screen (three lines on TV), not here. Blank and whitespace-only overviews say nothing.
+ * nothing; long text is cut by the screen (two lines on TV Home), not here. Links are left out ([summaryWithoutLinks]).
+ * Blank and whitespace-only overviews, and overviews that are only links, say nothing.
  */
-fun heroSummary(item: MediaItem): String? = item.overview?.replace(Regex("\\s+"), " ")?.trim()?.takeIf(String::isNotEmpty)
+fun heroSummary(item: MediaItem): String? = item.overview?.let(::summaryWithoutLinks)
+
+private val SUMMARY_LINK = Regex("(?i)\\b(?:https?://|www\\.)\\S+")
+private val SENTENCE_END = Regex("(?<=[.!?])\\s+")
+private val WHITESPACE = Regex("\\s+")
+
+/**
+ * HOME-22 / CAT-05: an overview as a summary a viewer reads. Video descriptions (a YouTube library's) are often walls of
+ * links ("Merch - https://…", "visit https://…"); a link can't be followed on a TV and a sentence built around one says
+ * nothing without it, so each sentence (or line) holding a bare http(s):// or www. link is dropped whole, and the rest
+ * is joined with whitespace collapsed. Null when nothing is left.
+ */
+fun summaryWithoutLinks(overview: String): String? = overview.lineSequence()
+    .flatMap { line -> line.split(SENTENCE_END).asSequence() }
+    .filterNot { SUMMARY_LINK.containsMatchIn(it) }
+    .joinToString(" ")
+    .replace(WHITESPACE, " ")
+    .trim()
+    .takeIf(String::isNotEmpty)

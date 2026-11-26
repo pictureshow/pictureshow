@@ -399,16 +399,21 @@ class CatalogHomeViewModel(private val account: Account, private val session: Ca
                 it.copy(loading = it.rows.isEmpty(), error = null, unreachable = false, refreshing = pulled || it.refreshing)
             }
             coroutineScope {
-                val preferences = session.homePreferences.read(account)
-                val configuration = (session.service as? app.pictureshow.core.UserConfigurationService)?.configuration(account)
-                val config = (configuration as? ClientResult.Success)?.value?.fields
+                // Every independent read starts at once: on a TV reaching the server over HTTPS each round trip is a
+                // visible part of cold start, so only the latest-per-library reads wait (for the library list).
+                val configuration = async {
+                    (session.service as? app.pictureshow.core.UserConfigurationService)?.configuration(account)
+                }
                 val resume = async { session.call(account) { resume(account) } }
                 val next = async { session.call(account) { nextUp(account) } }
-                val views = session.call(account) { views(account) }
+                val viewsRead = async { session.call(account) { views(account) } }
+                val preferences = session.homePreferences.read(account)
+                val views = viewsRead.await()
                 val libraries = (views as? ClientResult.Success)?.value?.items.orEmpty()
                 val latest = libraries.filter { it.collectionType in listOf("movies", "tvshows") }.associate { library ->
                     library.id to async { session.call(account) { latest(account, library.id) } }
                 }.mapValues { it.value.await() }
+                val config = (configuration.await() as? ClientResult.Success)?.value?.fields
                 val resumed = resume.await()
                 val upcoming = next.await()
                 val pinFailures = mutableListOf<ClientResult.Failure>()

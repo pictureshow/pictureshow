@@ -57,15 +57,35 @@ import app.pictureshow.core.heroSummary
 import app.pictureshow.core.imageRefUrl
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
-import coil3.request.allowHardware
 import kotlinx.coroutines.delay
 
-/** HOME-23: a BlurHash drawn small and scaled up; null for a malformed hash, so the caller keeps its tint. */
+/**
+ * HOME-23: a BlurHash drawn small and scaled up; null for a malformed hash, so the caller keeps its tint.
+ * Decoded once per hash and shared: a shelf recomposes its tiles as it scrolls, and a fresh bitmap per tile per pass was
+ * main-thread decoding plus a new texture upload each time.
+ */
 @Composable
 internal fun rememberBlurHash(hash: String?, width: Int = 32, height: Int = 18): ImageBitmap? = remember(hash, width, height) {
-    hash?.let { BlurHash.decode(it, width, height) }?.let { pixels ->
-        Bitmap.createBitmap(pixels, width, height, Bitmap.Config.ARGB_8888).asImageBitmap()
+    hash?.let { blurHashBitmap(it, width, height) }
+}
+
+private const val BLURHASH_CACHE_ENTRIES = 256
+
+/** A 32x18 placeholder is about 2 KB, so the whole cache stays near half a megabyte. */
+private val blurHashBitmaps = android.util.LruCache<String, ImageBitmap>(BLURHASH_CACHE_ENTRIES)
+
+private val malformedBlurHashes = android.util.LruCache<String, Boolean>(BLURHASH_CACHE_ENTRIES)
+
+internal fun blurHashBitmap(hash: String, width: Int, height: Int): ImageBitmap? {
+    val key = "$width:$height:$hash"
+    blurHashBitmaps.get(key)?.let { return it }
+    if (malformedBlurHashes.get(key) != null) return null
+    val pixels = BlurHash.decode(hash, width, height)
+    if (pixels == null) {
+        malformedBlurHashes.put(key, true)
+        return null
     }
+    return Bitmap.createBitmap(pixels, width, height, Bitmap.Config.ARGB_8888).asImageBitmap().also { blurHashBitmaps.put(key, it) }
 }
 
 /**
@@ -164,14 +184,15 @@ private fun BoxScope.HeroScrims(background: Color) {
 }
 
 /**
- * Hero art changes with every focus move, so it is decoded to ordinary bitmaps rather than hardware buffers: a hardware
- * bitmap is a graphics buffer allocated and freed per image, and that churn crashed the TV emulator's renderer while
- * focus crossed a shelf (OBSERVED leg 188).
+ * Hero art loads as hardware bitmaps, Coil's default. Leg 188 tried ordinary bitmaps to stop a TV emulator renderer
+ * crash and they did not stop it; on a device they cost twice: the pixels on the heap plus the texture the renderer
+ * uploads and caches for every software bitmap it draws. On the rc42 projector (2 GB) Home grew from 147 to 347 MB PSS,
+ * 90 MB of it graphics memory, while focus travelled (leg 190), and the low-memory killer took the app in the background.
  */
 @Composable
 internal fun heroImageRequest(url: String): ImageRequest {
     val context = LocalContext.current
-    return remember(url) { ImageRequest.Builder(context).data(url).allowHardware(false).build() }
+    return remember(url) { ImageRequest.Builder(context).data(url).build() }
 }
 
 /** HOME-21: "S1 E1 · 2012 · 24m · TV-Y7 · ★ 6.4", without the end time, which [endsAtLabel] adds in its own style. */
