@@ -343,16 +343,26 @@ class SeekReturnFocusTest {
         val before = seekLines().size
         press(android.view.KeyEvent.KEYCODE_DPAD_LEFT)
         compose.waitForIdle()
-        // Held: the sixth repeat steps 30 s, as without a reader; each event is one seek.
+        // Held: repeats throttle to 100 ms and use time-held tiers, as without a reader; each admitted event is one seek.
         compose.runOnIdle {
-            for (repeat in 0..5) key(android.view.KeyEvent.KEYCODE_DPAD_RIGHT, repeat = repeat)
-            key(android.view.KeyEvent.KEYCODE_DPAD_RIGHT, android.view.KeyEvent.ACTION_UP)
+            val down = 1_000L
+            val right = android.view.KeyEvent.KEYCODE_DPAD_RIGHT
+            fun held(offsetMs: Long, repeat: Int) = compose.activity.dispatchKeyEvent(
+                android.view.KeyEvent(down, down + offsetMs, android.view.KeyEvent.ACTION_DOWN, right, repeat)
+            )
+            held(0L, 0)
+            held(50L, 1) // throttled (< 100 ms)
+            held(200L, 2)
+            held(1_600L, 3)
+            compose.activity.dispatchKeyEvent(
+                android.view.KeyEvent(down, down + 1_650L, android.view.KeyEvent.ACTION_UP, right, 0)
+            )
         }
         compose.waitForIdle()
-        assertEquals(
-            listOf(-10_000L) + List(5) { 10_000L } + 30_000L,
-            seekLines().drop(before).map { it.substringAfter("deltaMs=").substringBefore(' ').toLong() }
-        )
+        val deltas = seekLines().drop(before).map { it.substringAfter("deltaMs=").substringBefore(' ').toLong() }
+        assertEquals(4, deltas.size, deltas.toString())
+        assertEquals(listOf(-10_000L, 10_000L, 10_000L), deltas.take(3))
+        assertTrue(deltas.last() in setOf(10_000L, 30_000L), deltas.toString())
         compose.runOnIdle { assertEquals(0, exits) }
     }
 

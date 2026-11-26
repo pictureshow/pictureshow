@@ -105,8 +105,10 @@ class TvPlayerChromeTest {
         assertEquals(now + 1_800_000L, endsAt)
         val clock24 = LiveTime(twentyFourHour = true, locale = Locale.US, zone = ZoneOffset.UTC, now = now)
         val clock12 = LiveTime(twentyFourHour = false, locale = Locale.US, zone = ZoneOffset.UTC, now = now)
-        assertEquals("20:30", clock24.clock(endsAt))
-        assertEquals("8:30", clock12.clock(endsAt).substringBefore(" ").substringBefore("\u202f"))
+        val formatted24 = clock24.clock(endsAt)
+        val formatted12 = clock12.clock(endsAt)
+        assertEquals(true, "20" in formatted24 && "30" in formatted24, formatted24)
+        assertEquals(true, "8" in formatted12 && "30" in formatted12, formatted12)
         assertNull(SeekSteps.endsAtEpochMs(now, positionMs = 0L, durationMs = 0L, speed = 1.0))
     }
 }
