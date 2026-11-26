@@ -212,9 +212,24 @@ internal class PlaybackHostState(
         qualityGuard = BandwidthQualityGuard()
         if (changed) controller?.routeChanged()
     }
-    fun bandwidthSample(estimate: Long, bytes: Long, nowMs: Long, bufferedPositionMs: Long? = null, positionMs: Long = 0, speed: Float = 1f) {
+    fun bandwidthSample(
+        estimate: Long,
+        bytes: Long,
+        nowMs: Long,
+        bufferedPositionMs: Long? = null,
+        positionMs: Long = 0,
+        speed: Float = 1f
+    ) {
         if (!localPreferences.tuning.autoAdjustQuality || qualityOverrideMbps != null || state.preparing || atEnd) return
-        val lower = qualityGuard.reduction(effectiveSettings.maxStreamingBitrate, estimate, bytes, nowMs, bufferedPositionMs, positionMs, speed) ?: return
+        val lower = qualityGuard.reduction(
+            effectiveSettings.maxStreamingBitrate,
+            estimate,
+            bytes,
+            nowMs,
+            bufferedPositionMs,
+            positionMs,
+            speed
+        ) ?: return
         val cap = localPreferences.tuning.bitrate(localPreferences.bitrateMbps, network, lower)
         val streamBitrate = app.pictureshow.core.playback.PlaybackInformation.streamBitrate(state.decision)
         if (!app.pictureshow.core.playback.PlaybackNetworkPolicy.reroutes(cap, lower, streamBitrate)) {

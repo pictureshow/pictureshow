@@ -52,7 +52,9 @@ class PlaybackReviewVectorsTest {
                 put("reroute", reroute)
                 put(
                     "notice",
-                    PlaybackQualityPresentation.reductionNotice(null, cap, ceiling, stream)?.takeIf { reroute }?.let(::JsonPrimitive) ?: JsonNull
+                    PlaybackQualityPresentation.reductionNotice(null, cap, ceiling, stream)
+                        ?.takeIf { reroute }
+                        ?.let(::JsonPrimitive) ?: JsonNull
                 )
             }
             assertEquals(case.getValue("expected"), actual, case.getValue("id").jsonPrimitive.content)

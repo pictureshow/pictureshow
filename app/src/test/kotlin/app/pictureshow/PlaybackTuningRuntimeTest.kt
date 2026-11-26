@@ -68,7 +68,9 @@ class PlaybackTuningRuntimeTest {
         for (step in 0L..6L) assertNull(filling.reduction(20_000_000, 4_000_000, 262_144, step * 1_000, 3_000 + step * 1_500, step * 1_000))
         // Leg 194 emulator: slow single windows while 13 s sat buffered ahead (decoder-bound playback, bursty loading).
         val healthy = BandwidthQualityGuard()
-        for (step in 0L..6L) assertNull(healthy.reduction(20_000_000, 4_000_000, 262_144, step * 1_000, 20_000 + step * 500, 7_000 + step * 700))
+        for (step in 0L..6L) {
+            assertNull(healthy.reduction(20_000_000, 4_000_000, 262_144, step * 1_000, 20_000 + step * 500, 7_000 + step * 700))
+        }
         val falling = BandwidthQualityGuard()
         assertNull(falling.reduction(20_000_000, 4_000_000, 262_144, 0, 14_000, 10_000)) // baseline only
         assertNull(falling.reduction(20_000_000, 4_000_000, 262_144, 1_000, 14_500, 11_000))
