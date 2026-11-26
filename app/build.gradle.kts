@@ -25,8 +25,8 @@ android {
         applicationId = "app.pictureshow"
         minSdk = 23
         targetSdk = 36
-        versionCode = 44
-        versionName = "0.3.0-rc42"
+        versionCode = 45
+        versionName = "0.3.0-rc43"
         buildConfigField("boolean", "FIRE_TV", fireTv.toString())
         manifestPlaceholders["assistantSearchAction"] =
             if (fireTv) "android.intent.action.SEARCH" else "com.google.android.gms.actions.SEARCH_ACTION"
