@@ -490,8 +490,21 @@ data class CatalogGridState(
     val refreshError: String? = null,
     val filters: app.pictureshow.core.LibraryFilters = app.pictureshow.core.LibraryFilters(),
     val list: Boolean = false,
-    val preferenceStatus: String? = null
+    val preferenceStatus: String? = null,
+    /** BROWSE-05: every title's id and server sort name in the grid's order, read for the letter rail under Name sort. */
+    val railIds: List<String> = emptyList(),
+    val railNames: List<String> = emptyList(),
+    /** A title a letter jump loaded through and wants focused once. */
+    val jumpTarget: String? = null
 )
+
+/** BROWSE-05: the rail shows under Name sort while the titles fall under at least two entries. */
+internal val CatalogGridState.railLetters: List<String>
+    get() = if (sortBy == "SortName" && railIds.size == railNames.size) {
+        app.pictureshow.core.letterJump(railNames, "").available.takeIf { it.size >= 2 }.orEmpty()
+    } else {
+        emptyList()
+    }
 
 class CatalogGridViewModel(val account: Account, parent: MediaItem, private val session: CatalogSession) : ViewModel() {
     private val mutableState = MutableStateFlow(CatalogGridState(account, parent))
@@ -500,6 +513,7 @@ class CatalogGridViewModel(val account: Account, parent: MediaItem, private val 
     private var offset = 0
     private var ended = false
     private var generation = 0
+    private var railJob: Job? = null
     private val refresher = CatalogCardRefresher(
         viewModelScope,
         account,
@@ -518,6 +532,7 @@ class CatalogGridViewModel(val account: Account, parent: MediaItem, private val 
                 }
             }
             load()
+            loadRail()
         }
         viewModelScope.launch {
             var revision = session.changes.value.revision
@@ -580,32 +595,86 @@ class CatalogGridViewModel(val account: Account, parent: MediaItem, private val 
                 filters = filters,
                 loading = false,
                 error = null,
-                refreshError = null
+                refreshError = null,
+                railIds = emptyList(),
+                railNames = emptyList(),
+                jumpTarget = null
             )
         }
         load()
+        loadRail()
     }
 
-    private fun load() {
+    private fun query(from: CatalogGridState, startIndex: Int, limit: Int) = BrowseQuery(
+        parentId = from.parent.id,
+        includeItemTypes = when (from.parent.collectionType) {
+            "movies" -> "Movie"
+            "tvshows" -> "Series"
+            "boxsets" -> "BoxSet"
+            else -> null
+        },
+        recursive = from.parent.collectionType in listOf("movies", "tvshows", "boxsets"),
+        sortBy = from.sortBy,
+        descending = from.descending,
+        startIndex = startIndex,
+        limit = limit,
+        filters = from.filters
+    )
+
+    /** BROWSE-05: one light read of every title's sort name under the grid's own scope, filters and sort. */
+    private fun loadRail() {
+        railJob?.cancel()
+        val before = state.value
+        if (before.sortBy != "SortName") return
+        val epoch = generation
+        railJob = viewModelScope.launch {
+            val result = session.call(account) { sortNames(account, query(before, 0, 0)) }
+            if (epoch != generation || result !is ClientResult.Success) return@launch
+            val titles = result.value.items
+            mutableState.update { current ->
+                current.copy(railIds = titles.map(MediaItem::id), railNames = titles.map { it.sortName ?: it.name })
+            }
+        }
+    }
+
+    /**
+     * BROWSE-05: the list stays whole. Pages load through the first title filed under [letter] (in the grid's order, either
+     * direction), then that title is the jump target. A sort or filter change during the loads drops the jump.
+     */
+    fun jump(letter: String) {
+        val current = state.value
+        val index = app.pictureshow.core.letterJump(current.railNames, letter).index
+        val target = current.railIds.getOrNull(index) ?: return
+        if (current.items.any { it.id == target }) {
+            mutableState.update { it.copy(jumpTarget = target) }
+            return
+        }
+        val epoch = generation
+        viewModelScope.launch {
+            job?.join()
+            var guard = 0
+            while (epoch == generation && state.value.items.none { it.id == target } && !ended && guard++ < JUMP_PAGE_CAP) {
+                val missing = index - state.value.items.size + 1
+                loadPage(limit = (missing + GRID_PAGE).coerceIn(GRID_PAGE, 200))
+                job?.join()
+                if (state.value.error != null) return@launch
+            }
+            if (epoch == generation && state.value.items.any { it.id == target }) {
+                mutableState.update { it.copy(jumpTarget = target) }
+            }
+        }
+    }
+
+    fun jumpDone() = mutableState.update { it.copy(jumpTarget = null) }
+
+    private fun load() = loadPage(GRID_PAGE)
+
+    private fun loadPage(limit: Int) {
         if (job?.isActive == true || ended) return
         val before = state.value
         val epoch = generation
         val revision = session.changes.value.revision
-        val query = BrowseQuery(
-            parentId = before.parent.id,
-            includeItemTypes = when (before.parent.collectionType) {
-                "movies" -> "Movie"
-                "tvshows" -> "Series"
-                "boxsets" -> "BoxSet"
-                else -> null
-            },
-            recursive = before.parent.collectionType in listOf("movies", "tvshows", "boxsets"),
-            sortBy = before.sortBy,
-            descending = before.descending,
-            startIndex = offset,
-            limit = 60,
-            filters = before.filters
-        )
+        val query = query(before, offset, limit)
         mutableState.update { it.copy(loading = true, error = null) }
         job = viewModelScope.launch {
             val result = session.call(account) { items(account, query) }
@@ -632,6 +701,12 @@ class CatalogGridViewModel(val account: Account, parent: MediaItem, private val 
         }
     }
 }
+
+/** A library grid page; a letter jump asks for up to 200 at once. */
+private const val GRID_PAGE = 60
+
+/** Most page reads one letter jump makes before it gives up (12,000 titles at 200 a page). */
+private const val JUMP_PAGE_CAP = 60
 
 data class CatalogDetailState(
     val account: Account,

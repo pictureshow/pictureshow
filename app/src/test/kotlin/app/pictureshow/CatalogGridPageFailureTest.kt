@@ -122,14 +122,14 @@ class CatalogGridPageFailureTest {
     /** Down to the last row, column kept, as a viewer gets there; the visit near the end is what asks for the page. */
     private fun walkToLastRow() {
         var guard = 0
-        while (focusedTag().substringAfter("film-").toInt() < 25) {
+        while (focusedTag().substringAfter("film-").toInt() < 24) {
             press(Key.DirectionDown)
             assertTrue(guard++ < 20, "Never reached the last row")
         }
     }
 
     private fun assertOnCardInColumnAfterRetry(from: String) {
-        val columns = 5
+        val columns = 6
         val tag = focusedTag()
         assertTrue(tag.startsWith("grid:film-"), "Focus on $tag")
         val index = tag.substringAfter("film-").toInt()

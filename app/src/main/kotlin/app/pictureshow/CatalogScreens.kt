@@ -9,6 +9,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.gestures.BringIntoViewSpec
 import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
@@ -116,9 +117,11 @@ import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.semantics.toggleableState
 import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.state.ToggleableState
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -135,18 +138,21 @@ import app.pictureshow.core.Account
 import app.pictureshow.core.GRID_HOLD_CAP_MILLIS
 import app.pictureshow.core.GridSorts
 import app.pictureshow.core.GridVerticalMove
+import app.pictureshow.core.JUMP_LETTERS
 import app.pictureshow.core.MediaItem
 import app.pictureshow.core.UNBOUNDED_TITLE_FONT_SCALE
 import app.pictureshow.core.blurHashFor
 import app.pictureshow.core.cardImage
 import app.pictureshow.core.episodeLabel
 import app.pictureshow.core.gridHoldRelease
+import app.pictureshow.core.gridPositionLabel
 import app.pictureshow.core.gridStripDetail
 import app.pictureshow.core.gridVerticalMove
 import app.pictureshow.core.imageUrl
 import app.pictureshow.core.isEmptyContainer
 import app.pictureshow.core.isMissing
 import app.pictureshow.core.isWatched
+import app.pictureshow.core.jumpLetter
 import app.pictureshow.core.progress
 import app.pictureshow.core.runtimeLabel
 import app.pictureshow.core.sortDirectionLabel
@@ -974,7 +980,10 @@ fun CatalogGrid(
     grid: LazyGridState = rememberLazyGridState(),
     onFilters: (() -> Unit)? = null,
     onDisplayList: ((Boolean) -> Unit)? = null,
-    onClearFilters: (() -> Unit)? = null
+    onClearFilters: (() -> Unit)? = null,
+    /** BROWSE-05: a letter on the rail; null leaves the rail out. */
+    onJump: ((String) -> Unit)? = null,
+    onJumpDone: () -> Unit = {}
 ) {
     var selectedId by rememberSaveable { mutableStateOf("") }
     var restored by remember { mutableStateOf(false) }
@@ -1002,6 +1011,18 @@ fun CatalogGrid(
     val loadingMore by rememberUpdatedState(state.loading)
     val pageFailed by rememberUpdatedState(state.error != null && state.items.isNotEmpty())
     val scrolled by remember { derivedStateOf { grid.firstVisibleItemIndex > 0 } }
+    val railLetters = if (onJump != null) state.railLetters else emptyList()
+    val railShown = railLetters.isNotEmpty()
+    val letterRequests = remember { JUMP_LETTERS.associateWith { FocusRequester() } }
+    val letterById = remember(state.railIds, state.railNames) { state.railIds.zip(state.railNames.map(::jumpLetter)).toMap() }
+    val currentLetter = items.getOrNull(focusedIndex)?.id?.let(letterById::get)
+
+    // Right from the last column goes to the rail, onto the letter of the card it came from.
+    fun focusRail(): Boolean {
+        val letter = currentLetter?.takeIf { it in railLetters } ?: railLetters.firstOrNull() ?: return false
+        dropWaitingMoves()
+        return letterRequests.getValue(letter).requestFocus()
+    }
 
     // There is never a second job to replace: a key cancels the last one first, and a hold only starts with none running.
     fun startMove(down: Boolean, block: suspend () -> Unit) {
@@ -1155,18 +1176,19 @@ fun CatalogGrid(
     Box(modifier = Modifier.fillMaxSize().background(CatalogBackground).testTag("grid").accessibilityGroup()) {
         CompositionLocalProvider(LocalBringIntoViewSpec provides gridBringIntoView) {
             LazyVerticalGrid(
-                columns = if (state.list) GridCells.Fixed(1) else GridCells.Adaptive(144.dp),
+                // Six posters across a 1080p TV (Round 3, leg 194); the rail takes its own column.
+                columns = if (state.list) GridCells.Fixed(1) else GridCells.Adaptive(GridPosterMinWidth),
                 state = grid,
                 modifier = reveal.fillMaxSize().focusRestorer().testTag("grid:items").semantics { traversalIndex = 0f },
                 // The grid reaches the screen's edges, so only the screen clips a focused card's 1.1x scale.
                 contentPadding = PaddingValues(
                     start = 56.dp,
-                    end = 56.dp,
+                    end = if (railShown) 56.dp + LetterRailWidth else 56.dp,
                     top = if (pinStrip) ContextStripHeight + 8.dp else 32.dp,
                     bottom = 32.dp
                 ),
-                horizontalArrangement = Arrangement.spacedBy(20.dp),
-                verticalArrangement = Arrangement.spacedBy(24.dp)
+                horizontalArrangement = Arrangement.spacedBy(if (state.list) 20.dp else 16.dp),
+                verticalArrangement = Arrangement.spacedBy(if (state.list) 24.dp else 20.dp)
             ) {
                 // The header scrolls with the cards: fixed above them it left 325 dp of a 540 dp screen, less than a
                 // focused card with a three-line title needs at the largest system font.
@@ -1296,6 +1318,9 @@ fun CatalogGrid(
                                 it.key == Key.DirectionDown || it.key == Key.DirectionUp ->
                                     moveVertically(index, it.key == Key.DirectionDown)
 
+                                it.key == Key.DirectionRight && railShown && lastInRow(index, grid.layoutInfo.maxSpan, items.size) ->
+                                    focusRail()
+
                                 else -> {
                                     dropWaitingMoves()
                                     false
@@ -1343,8 +1368,38 @@ fun CatalogGrid(
         if (stripTitle != null && (pinStrip || scrolled)) {
             ContextStrip(stripTitle, gridStripDetail(state.sortBy, state.descending).takeIf { showSort }, Modifier.testTag("grid:strip"))
         }
+        // Where the focused card is in the whole library, "12 / 330" (Round 3, leg 194).
+        gridPositionLabel(focusedIndex, state.total)?.let { position ->
+            Text(
+                position,
+                color = CatalogMuted,
+                style = MaterialTheme.typography.labelLarge,
+                modifier = Modifier.align(Alignment.TopEnd).padding(top = ContextStripTopPadding + 8.dp, end = 48.dp)
+                    .clearAndSetSemantics { }.testTag("grid:position")
+            )
+        }
+        if (railShown) {
+            LetterRail(
+                railLetters,
+                currentLetter,
+                letterRequests,
+                onJump = { letter -> onJump?.invoke(letter) },
+                onLeave = { focusCard(focusedIndex.coerceIn(0, (items.size - 1).coerceAtLeast(0)), FocusDirection.Left) },
+                modifier = Modifier.align(Alignment.CenterEnd).padding(top = ContextStripHeight, end = 12.dp)
+            )
+        }
     }
     if (sorting) CatalogSortPicker(state, onSort) { sorting = false }
+    // A letter jump has loaded through its title: it takes focus once, wherever the grid was.
+    LaunchedEffect(state.jumpTarget) {
+        val target = state.jumpTarget ?: return@LaunchedEffect
+        val index = items.indexOfFirst { it.id == target }
+        if (index >= 0) {
+            dropWaitingMoves()
+            focusCard(index, FocusDirection.Down)
+        }
+        onJumpDone()
+    }
     // Keyed on the state rather than the chips' clicks, so a reader's click and anything else that changes the sort count.
     LaunchedEffect(state.sortBy, state.descending, state.filters, state.list) {
         dropWaitingMoves()
@@ -1426,6 +1481,104 @@ private val ContextStripTopPadding = 20.dp
  * there's no room for both. Marked as not for a screen reader, since the viewer hears where they are from the card, but TV
  * TalkBack still stops on it when nothing is above it. So a fixed head doesn't collapse under a reader (fixedHeadCollapses).
  */
+/** The card at [index] has nothing to its right: the last column, or the last card. */
+internal fun lastInRow(index: Int, span: Int, count: Int): Boolean = index % span.coerceAtLeast(1) == span - 1 || index == count - 1
+
+/** A grid poster's least width: six across a 960 dp (1080p) TV with the letter rail beside them. */
+private val GridPosterMinWidth = 118.dp
+
+/** The letter rail's column at the grid's right edge. */
+internal val LetterRailWidth = 32.dp
+
+private val LetterRailEntryHeight = 16.dp
+
+/**
+ * BROWSE-05 on TV: # and A–Z down the right edge. Letters with titles take focus; the rest are drawn dim and are skipped.
+ * Up and Down move between letters and hold at the ends, OK jumps, Left goes back to the card the viewer came from.
+ */
+@Composable
+private fun LetterRail(
+    letters: List<String>,
+    current: String?,
+    requests: Map<String, FocusRequester>,
+    onJump: (String) -> Unit,
+    onLeave: () -> Boolean,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier.width(LetterRailWidth).testTag("grid:rail").semantics { traversalIndex = 2f },
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        JUMP_LETTERS.forEach { letter ->
+            val enabled = letter in letters
+            var focused by remember { mutableStateOf(false) }
+            val position = letters.indexOf(letter)
+            Box(
+                Modifier.size(LetterRailWidth, LetterRailEntryHeight)
+                    .then(
+                        if (enabled) {
+                            Modifier.focusRequester(requests.getValue(letter))
+                                .onFocusChanged { focused = it.isFocused }
+                                .onPreviewKeyEvent {
+                                    val click = it.key == Key.DirectionCenter || it.key == Key.Enter || it.key == Key.NumPadEnter
+                                    when {
+                                        click -> {
+                                            if (it.type == KeyEventType.KeyUp) onJump(letter)
+                                            true
+                                        }
+
+                                        it.type != KeyEventType.KeyDown -> false
+
+                                        it.key == Key.DirectionUp -> {
+                                            letters.getOrNull(position - 1)?.let { above -> requests.getValue(above).requestFocus() }
+                                            true
+                                        }
+
+                                        it.key == Key.DirectionDown -> {
+                                            letters.getOrNull(position + 1)?.let { below -> requests.getValue(below).requestFocus() }
+                                            true
+                                        }
+
+                                        it.key == Key.DirectionLeft -> {
+                                            onLeave()
+                                            true
+                                        }
+
+                                        it.key == Key.DirectionRight -> true
+
+                                        else -> false
+                                    }
+                                }
+                                .clickable { onJump(letter) }
+                        } else {
+                            Modifier
+                        }
+                    )
+                    .background(if (focused) Color.White else Color.Transparent, RoundedCornerShape(50))
+                    .semantics {
+                        contentDescription = if (letter == "#") "Jump to titles starting with a number or symbol" else "Jump to $letter"
+                        if (!enabled) disabled()
+                    }
+                    .testTag("grid:rail:$letter"),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    letter,
+                    fontSize = 11.sp,
+                    lineHeight = 12.sp,
+                    fontWeight = if (letter == current) FontWeight.Bold else FontWeight.Normal,
+                    color = when {
+                        focused -> CatalogBackground
+                        !enabled -> CatalogMuted.copy(alpha = .35f)
+                        letter == current -> Color(0xFFB8C4FF)
+                        else -> CatalogMuted
+                    }
+                )
+            }
+        }
+    }
+}
+
 @Composable
 internal fun ContextStrip(title: String, detail: String?, modifier: Modifier = Modifier) {
     Row(

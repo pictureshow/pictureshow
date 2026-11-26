@@ -226,6 +226,311 @@
         "libraries": []
       },
       "expected": null
+    },
+    {
+      "id": "search-presentation.group-order-fixed-when-nothing-matches",
+      "operation": "search-group-order",
+      "input": {
+        "query": "zzq",
+        "groups": [
+          {
+            "type": "Person",
+            "names": [
+              "Ada Lovelace"
+            ]
+          },
+          {
+            "type": "Episode",
+            "names": [
+              "Pilot"
+            ]
+          },
+          {
+            "type": "Series",
+            "names": [
+              "Lost"
+            ]
+          },
+          {
+            "type": "Movie",
+            "names": [
+              "Heat"
+            ]
+          }
+        ]
+      },
+      "expected": [
+        "Movie",
+        "Series",
+        "Episode",
+        "Person"
+      ]
+    },
+    {
+      "id": "search-presentation.group-order-arrival-order-never-decides",
+      "operation": "search-group-order",
+      "input": {
+        "query": "heat",
+        "groups": [
+          {
+            "type": "Series",
+            "names": [
+              "Heat Wave"
+            ]
+          },
+          {
+            "type": "Movie",
+            "names": [
+              "Heat"
+            ]
+          }
+        ]
+      },
+      "expected": [
+        "Movie",
+        "Series"
+      ]
+    },
+    {
+      "id": "search-presentation.group-order-exact-title-leads",
+      "operation": "search-group-order",
+      "input": {
+        "query": "the americans",
+        "groups": [
+          {
+            "type": "Movie",
+            "names": [
+              "The Americanization of Emily"
+            ]
+          },
+          {
+            "type": "Series",
+            "names": [
+              "The Americans"
+            ]
+          }
+        ]
+      },
+      "expected": [
+        "Series",
+        "Movie"
+      ]
+    },
+    {
+      "id": "search-presentation.group-order-prefix-beats-contains",
+      "operation": "search-group-order",
+      "input": {
+        "query": "teenage",
+        "groups": [
+          {
+            "type": "Movie",
+            "names": [
+              "Ninja Teenage Story"
+            ]
+          },
+          {
+            "type": "Series",
+            "names": [
+              "Teenage Mutant Ninja Turtles (2012)"
+            ]
+          }
+        ]
+      },
+      "expected": [
+        "Series",
+        "Movie"
+      ]
+    },
+    {
+      "id": "search-presentation.group-order-person-exact-name-leads",
+      "operation": "search-group-order",
+      "input": {
+        "query": "tom hanks",
+        "groups": [
+          {
+            "type": "Movie",
+            "names": [
+              "Tom and Jerry"
+            ]
+          },
+          {
+            "type": "Person",
+            "names": [
+              "Tom Hanks"
+            ]
+          }
+        ]
+      },
+      "expected": [
+        "Person",
+        "Movie"
+      ]
+    },
+    {
+      "id": "search-presentation.group-order-tie-keeps-fixed-order",
+      "operation": "search-group-order",
+      "input": {
+        "query": "book of life",
+        "groups": [
+          {
+            "type": "Episode",
+            "names": [
+              "The Book of Life"
+            ]
+          },
+          {
+            "type": "Movie",
+            "names": [
+              "The Book of Life"
+            ]
+          }
+        ]
+      },
+      "expected": [
+        "Movie",
+        "Episode"
+      ]
+    },
+    {
+      "id": "search-presentation.group-order-leading-article-dropped-either-side",
+      "operation": "search-group-order",
+      "input": {
+        "query": "the heat",
+        "groups": [
+          {
+            "type": "Series",
+            "names": [
+              "Heat"
+            ]
+          },
+          {
+            "type": "Movie",
+            "names": [
+              "Heat Lightning"
+            ]
+          }
+        ]
+      },
+      "expected": [
+        "Series",
+        "Movie"
+      ]
+    },
+    {
+      "id": "search-presentation.group-order-case-and-punctuation-ignored",
+      "operation": "search-group-order",
+      "input": {
+        "query": "spider man",
+        "groups": [
+          {
+            "type": "Movie",
+            "names": [
+              "Spider-Man: No Way Home"
+            ]
+          },
+          {
+            "type": "Series",
+            "names": [
+              "SPIDER-MAN"
+            ]
+          }
+        ]
+      },
+      "expected": [
+        "Series",
+        "Movie"
+      ]
+    },
+    {
+      "id": "search-presentation.group-order-article-alone-is-a-prefix",
+      "operation": "search-group-order",
+      "input": {
+        "query": "the",
+        "groups": [
+          {
+            "type": "Series",
+            "names": [
+              "The Wire"
+            ]
+          },
+          {
+            "type": "Movie",
+            "names": [
+              "Into the Woods"
+            ]
+          }
+        ]
+      },
+      "expected": [
+        "Series",
+        "Movie"
+      ]
+    },
+    {
+      "id": "search-presentation.group-order-music-artist-exact-leads",
+      "operation": "search-group-order",
+      "input": {
+        "query": "adele",
+        "groups": [
+          {
+            "type": "Movie",
+            "names": [
+              "Adele: One Night Only Live"
+            ]
+          },
+          {
+            "type": "MusicArtist",
+            "names": [
+              "Adele"
+            ]
+          },
+          {
+            "type": "Audio",
+            "names": [
+              "Adele Song"
+            ]
+          }
+        ]
+      },
+      "expected": [
+        "MusicArtist",
+        "Movie",
+        "Audio"
+      ]
+    },
+    {
+      "id": "search-presentation.group-order-unknown-type-goes-last",
+      "operation": "search-group-order",
+      "input": {
+        "query": "heat",
+        "groups": [
+          {
+            "type": "Trailer",
+            "names": [
+              "Heat"
+            ]
+          },
+          {
+            "type": "Movie",
+            "names": [
+              "Heat"
+            ]
+          }
+        ]
+      },
+      "expected": [
+        "Movie",
+        "Trailer"
+      ]
+    },
+    {
+      "id": "search-presentation.group-order-empty",
+      "operation": "search-group-order",
+      "input": {
+        "query": "heat",
+        "groups": []
+      },
+      "expected": []
     }
   ]
 }

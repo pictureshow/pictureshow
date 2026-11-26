@@ -63,6 +63,10 @@ const val GRID_HOLD_CAP_MILLIS = 1_500L
 /** The sorts a library grid offers, by the server's name for each, in the order the chips show them. */
 val GridSorts = listOf("SortName" to "Name", "DateCreated" to "Date added", "PremiereDate" to "Release date")
 
+/** BROWSE-07: where the focused card sits in the whole library, "12 / 330"; nothing before a card has had focus. */
+fun gridPositionLabel(focusedIndex: Int, total: Int): String? =
+    if (focusedIndex < 0 || total <= 0) null else "${(focusedIndex + 1).coerceAtMost(total)} / $total"
+
 /** The chips' own words for the sort in force. An unknown sort reads as the first. */
 fun gridStripDetail(sortBy: String, descending: Boolean): String {
     val title = GridSorts.firstOrNull { it.first == sortBy }?.second ?: GridSorts.first().second

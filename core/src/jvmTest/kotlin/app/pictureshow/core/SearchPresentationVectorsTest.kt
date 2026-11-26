@@ -27,6 +27,17 @@ class SearchPresentationVectorsTest {
             val actual = when (case.getValue("operation").jsonPrimitive.content) {
                 "search-duplicate-ids" -> JsonArray(searchDuplicateIds(items("items")).sorted().map { JsonPrimitive(it) })
                 "search-library-name" -> searchLibraryName(items("ancestors"), items("libraries"))?.let { JsonPrimitive(it) } ?: JsonNull
+                "search-group-order" -> JsonArray(
+                    searchGroupOrder(
+                        input.getValue("query").jsonPrimitive.content,
+                        input.getValue("groups").jsonArray.map { group ->
+                            SearchGroup(
+                                group.jsonObject.getValue("type").jsonPrimitive.content,
+                                group.jsonObject.getValue("names").jsonArray.map { it.jsonPrimitive.content }
+                            )
+                        }
+                    ).map { JsonPrimitive(it) }
+                )
                 else -> error("Unknown search operation")
             }
             assertEquals(case.getValue("expected"), actual, case.getValue("id").jsonPrimitive.content)

@@ -27,11 +27,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-/** Order is independent of completion order; failed and empty types never occupy a row. */
-fun assembleSearch(results: Map<SearchKind, ClientResult<ItemPage>>): List<HomeRow> = SearchKind.entries.mapNotNull { kind ->
-    val items = (results[kind] as? ClientResult.Success)?.value?.items.orEmpty().take(24)
-    items.takeIf { it.isNotEmpty() }?.let { HomeRow(kind.name, kind.title, it, wide = kind == SearchKind.EPISODES) }
-}
+/** Order is independent of completion order (CAT-14b); failed and empty types never occupy a row. */
+fun assembleSearch(results: Map<SearchKind, ClientResult<ItemPage>>, query: String = ""): List<HomeRow> =
+    app.pictureshow.core.searchRows(results, query)
 
 data class SearchState(
     val query: String = "",
@@ -154,7 +152,7 @@ class SearchViewModel(private val account: Account, private val session: Catalog
                 querySomeFailed = results.values.any { it is ClientResult.Failure }
                 mutableState.update {
                     it.copy(
-                        rows = assembleSearch(results).map { row ->
+                        rows = assembleSearch(results, term).map { row ->
                             row.copy(items = row.items.withUserData(session.changes.value.usersAfter(revision)))
                         },
                         loading = false,

@@ -42,6 +42,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -251,11 +252,11 @@ fun SearchScreen(
     Column(
         Modifier.fillMaxSize().background(
             Color(0xFF10131C)
-        ).padding(horizontal = 48.dp, vertical = 24.dp).testTag("search").accessibilityGroup().onPreviewKeyEvent {
+        ).padding(start = 48.dp, end = 48.dp, top = 20.dp).testTag("search").accessibilityGroup().onPreviewKeyEvent {
             if (it.type == KeyEventType.KeyDown && it.key != Key.Back && it.key != Key.Escape) interacted = true
             false
         },
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         var resultsFocused by remember { mutableStateOf(false) }
         // A long title at the largest sizes is taller than the space under the field: it goes while results hold focus.
@@ -283,85 +284,96 @@ fun SearchScreen(
         val head: @Composable () -> Unit = {
             Column(
                 Modifier.collapsedOffScreen(headCollapsed).onFocusChanged { headFocused = it.hasFocus },
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text(
-                    "Search",
-                    style = MaterialTheme.typography.headlineLarge,
-                    modifier = Modifier.fillMaxWidth().catalogFocusTarget(!handoff).semantics {
-                        heading()
-                        traversalIndex =
-                            -2f
-                    }
-                )
-                InterceptPlatformTextInput(interceptor = { request, next -> next.startInputMethod(searchInputRequest(request)) }) {
-                    BasicTextField(
-                        value = fieldValue,
-                        onValueChange = {
-                            val changed = it.text != fieldValue.text
-                            fieldValue = it
-                            if (changed) {
-                                focusResults = false
-                                selected = ""
-                                selections = emptyMap()
-                                onQuery(it.text)
-                            }
-                        },
-                        readOnly = !editing,
-                        singleLine = true,
-                        textStyle = TextStyle(color = Color.White, fontSize = 20.sp),
-                        cursorBrush = SolidColor(Color(0xFFB8C4FF)),
-                        keyboardOptions = KeyboardOptions(
-                            autoCorrectEnabled = false,
-                            imeAction = ImeAction.Search
-                        ),
-                        keyboardActions = KeyboardActions(
-                            onSearch = {
-                                onSubmit()
-                                focusResults = true
-                                down()
-                            },
-                            onDone = {
-                                onSubmit()
-                                focusResults = true
-                                down()
-                            }
-                        ),
-                        modifier = arrivalTarget(Modifier.fillMaxWidth(), returningToField)
-                            .focusRequester(field).testTag("search:field")
-                            .semantics {
-                                contentDescription = "Search your video library"
-                                traversalIndex = -1f
-                            }
-                            .editWithKeyboard {
-                                field.requestFocus()
-                                editing = true
-                                keyboard?.show()
-                            }
-                            .onFocusChanged {
-                                // Attachment reports false before the first focus request. Preserve entry-time editing.
-                                if (fieldFocused && !it.isFocused) editing = false
-                                if (!it.isFocused) navigation.clear()
-                                fieldFocused = it.isFocused
-                                if (it.isFocused) headControl = field
-                            }
-                            .onPreviewKeyEvent {
-                                when {
-                                    it.key in listOf(Key.DirectionCenter, Key.Enter, Key.NumPadEnter) -> {
-                                        if (it.type == KeyEventType.KeyUp) {
-                                            editing = true
-                                            keyboard?.show()
-                                        }
-                                        true
-                                    }
-
-                                    navigation.handle(it) { down() } -> true
-
-                                    else -> false
-                                }
-                            }
-                            .border(if (fieldFocused) 3.dp else 1.dp, Color(0xFFB8C4FF)).padding(16.dp)
+                // One line for the heading and the field, so the first shelf sits above a TV keyboard (Round 3, leg 194).
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                    Text(
+                        "Search",
+                        style = MaterialTheme.typography.headlineSmall,
+                        modifier = Modifier.catalogFocusTarget(!handoff).semantics {
+                            heading()
+                            traversalIndex =
+                                -2f
+                        }
                     )
+                    InterceptPlatformTextInput(interceptor = { request, next -> next.startInputMethod(searchInputRequest(request)) }) {
+                        BasicTextField(
+                            value = fieldValue,
+                            onValueChange = {
+                                val changed = it.text != fieldValue.text
+                                fieldValue = it
+                                if (changed) {
+                                    focusResults = false
+                                    selected = ""
+                                    selections = emptyMap()
+                                    onQuery(it.text)
+                                }
+                            },
+                            readOnly = !editing,
+                            singleLine = true,
+                            textStyle = TextStyle(color = Color.White, fontSize = 18.sp),
+                            cursorBrush = SolidColor(Color(0xFFB8C4FF)),
+                            keyboardOptions = KeyboardOptions(
+                                autoCorrectEnabled = false,
+                                imeAction = ImeAction.Search
+                            ),
+                            keyboardActions = KeyboardActions(
+                                onSearch = {
+                                    onSubmit()
+                                    focusResults = true
+                                    down()
+                                },
+                                onDone = {
+                                    onSubmit()
+                                    focusResults = true
+                                    down()
+                                }
+                            ),
+                            decorationBox = { inner ->
+                                Box {
+                                    if (fieldValue.text.isEmpty()) {
+                                        Text("Movies, shows, episodes and people", color = CatalogMuted, fontSize = 18.sp, maxLines = 1)
+                                    }
+                                    inner()
+                                }
+                            },
+                            modifier = arrivalTarget(Modifier.weight(1f), returningToField)
+                                .focusRequester(field).testTag("search:field")
+                                .semantics {
+                                    contentDescription = "Search your video library"
+                                    traversalIndex = -1f
+                                }
+                                .editWithKeyboard {
+                                    field.requestFocus()
+                                    editing = true
+                                    keyboard?.show()
+                                }
+                                .onFocusChanged {
+                                    // Attachment reports false before the first focus request. Preserve entry-time editing.
+                                    if (fieldFocused && !it.isFocused) editing = false
+                                    if (!it.isFocused) navigation.clear()
+                                    fieldFocused = it.isFocused
+                                    if (it.isFocused) headControl = field
+                                }
+                                .onPreviewKeyEvent {
+                                    when {
+                                        it.key in listOf(Key.DirectionCenter, Key.Enter, Key.NumPadEnter) -> {
+                                            if (it.type == KeyEventType.KeyUp) {
+                                                editing = true
+                                                keyboard?.show()
+                                            }
+                                            true
+                                        }
+
+                                        navigation.handle(it) { down() } -> true
+
+                                        else -> false
+                                    }
+                                }
+                                .border(if (fieldFocused) 3.dp else 1.dp, Color(0xFFB8C4FF)).padding(horizontal = 16.dp, vertical = 12.dp)
+                        )
+                    }
                 }
                 state.storageError?.let { Text(it, modifier = Modifier.catalogFocusTarget(!handoff)) }
                 if (normalizeSearch(state.query).isEmpty()) {
@@ -509,7 +521,7 @@ fun SearchScreen(
                 },
                 // Room for the last row's focus scale, which this list would otherwise clip.
                 contentPadding = PaddingValues(bottom = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(24.dp)
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 if (headInList) item(key = "search:head") { head() }
                 rows.forEachIndexed { rowIndex, row ->
@@ -517,11 +529,11 @@ fun SearchScreen(
                         val section = remember { ShelfSection() }
                         Column(
                             modifier = Modifier.accessibilityGroup().onGloballyPositioned { section.row = it },
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             Text(
                                 row.title,
-                                style = MaterialTheme.typography.headlineSmall,
+                                style = MaterialTheme.typography.titleMedium,
                                 modifier = Modifier.fillMaxWidth()
                                     .onSizeChanged { section.titleHeight = it.height }
                                     .catalogFocusTarget(!handoff)
@@ -533,8 +545,9 @@ fun SearchScreen(
                                     LazyRow(
                                         modifier = rowSemantics,
                                         state = rowStates.getValue(row.key),
-                                        contentPadding = PaddingValues(16.dp),
-                                        horizontalArrangement = Arrangement.spacedBy(18.dp)
+                                        // Room for a focused card's 1.1x scale: 5% of a 168 dp poster is 8.4 dp.
+                                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(16.dp)
                                     ) {
                                         itemsIndexed(row.items, key = { _, item -> item.id }) { itemIndex, item ->
                                             val target = "${row.key}:${item.id}"
@@ -543,6 +556,7 @@ fun SearchScreen(
                                                     item,
                                                     account,
                                                     row.wide,
+                                                    width = if (row.wide) SearchWideCardWidth else SearchPosterWidth,
                                                     onClick = {
                                                         editing = false
                                                         keyboard?.hide()
@@ -710,6 +724,10 @@ fun PersonScreen(state: PersonState, onOpen: (MediaItem) -> Unit, onNearEnd: (In
         }
     }
 }
+
+/** Posters small enough that the first shelf clears a TV keyboard's top (Round 3, leg 194). */
+private val SearchPosterWidth = 112.dp
+private val SearchWideCardWidth = 200.dp
 
 /** Where the focused result card sits in its shelf, read when the list scrolls to it. */
 private class FocusedResult {
