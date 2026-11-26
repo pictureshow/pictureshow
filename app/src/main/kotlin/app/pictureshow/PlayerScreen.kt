@@ -595,7 +595,7 @@ internal fun PlayerItemScreen(
     }
     PlayerSeekHost((seekOpen || extraPanel != null) && error == null && !switching, player = {
         Box(
-            Modifier.fillMaxSize().background(Color.Black)
+            Modifier.fillMaxSize().background(Color.Black).testTag("player:frame")
                 .onGloballyPositioned { playerTop = it.positionInRoot().y.toInt() }
                 .playerTouchClick {
                     if (chooser == null && extraPanel == null && !chaptersOpen && !seekOpen && error == null && !switching) {

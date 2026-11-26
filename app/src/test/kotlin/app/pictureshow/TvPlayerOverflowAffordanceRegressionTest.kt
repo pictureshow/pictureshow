@@ -170,7 +170,7 @@ class TvPlayerOverflowAffordanceRegressionTest {
 
     /** Find the actual primary independently of which of its two labels the product chose. */
     private fun primary() = compose.onNode(
-        hasAnyAncestor(hasTestTag("player:surface")) and hasClickAction() and (hasText("Play") or hasText("Pause"))
+        hasAnyAncestor(hasTestTag("player:frame")) and hasClickAction() and (hasText("Play") or hasText("Pause"))
     )
     private fun transportSent() = sent.filter { it in setOf("Pause", "Unpause", "Stop") }
     private fun launch(c: Profile) {
@@ -401,7 +401,7 @@ class TvPlayerOverflowAffordanceRegressionTest {
         )
     }
     private fun action(label: String) = compose.onNode(
-        hasAnyAncestor(hasTestTag("player:surface")) and hasClickAction() and hasText(label)
+        hasAnyAncestor(hasTestTag("player:frame")) and hasClickAction() and hasText(label)
     )
     private fun nativeBounds(node: SemanticsNodeInteraction): Rect {
         val child = node.fetchSemanticsNode().layoutInfo.coordinates
@@ -497,7 +497,7 @@ class TvPlayerOverflowAffordanceRegressionTest {
 
     private fun wholeFocusedLabel(c: Profile, label: String) {
         wholeFocusedTarget(c, action(label))
-        val text = compose.onNode(hasAnyAncestor(hasTestTag("player:surface")) and hasText(label), useUnmergedTree = true)
+        val text = compose.onNode(hasAnyAncestor(hasTestTag("player:frame")) and hasText(label), useUnmergedTree = true)
         val layouts = mutableListOf<TextLayoutResult>()
         text.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
         assertEquals(1, layouts.size)
@@ -578,7 +578,7 @@ class TvPlayerOverflowAffordanceRegressionTest {
             val button = action(name)
             val config = button.fetchSemanticsNode().config
             val target = targetLayoutBounds(button)
-            val textNode = compose.onNode(hasAnyAncestor(hasTestTag("player:surface")) and hasText(name), useUnmergedTree = true)
+            val textNode = compose.onNode(hasAnyAncestor(hasTestTag("player:frame")) and hasText(name), useUnmergedTree = true)
             val ink = nativeBounds(textNode)
             !config.contains(SemanticsProperties.Disabled) &&
                 config.getOrNull(SemanticsProperties.Focused) != true &&
@@ -606,7 +606,7 @@ class TvPlayerOverflowAffordanceRegressionTest {
         val hit = button.fetchSemanticsNode().touchBoundsInRoot
         assertTrue(hit.width >= c.metric("minimumTargetDp") * density - 1f && hit.height >= c.metric("minimumTargetDp") * density - 1f)
         assertTrue(hit.left >= -1f && hit.top >= -1f && hit.right <= window.width + 1f && hit.bottom <= window.height + 1f)
-        val text = compose.onNode(hasAnyAncestor(hasTestTag("player:surface")) and hasText(label), useUnmergedTree = true)
+        val text = compose.onNode(hasAnyAncestor(hasTestTag("player:frame")) and hasText(label), useUnmergedTree = true)
         val referenceBox = nativeBounds(text)
         assertTrue(
             referenceBox.left >= viewport.left && referenceBox.right <= viewport.right,
@@ -754,7 +754,7 @@ class TvPlayerOverflowAffordanceRegressionTest {
         val actions = org.json.JSONArray()
         for (name in labels(c)) {
             val button = action(name)
-            val text = compose.onNode(hasAnyAncestor(hasTestTag("player:surface")) and hasText(name), useUnmergedTree = true)
+            val text = compose.onNode(hasAnyAncestor(hasTestTag("player:frame")) and hasText(name), useUnmergedTree = true)
             actions.put(
                 org.json.JSONObject().put("label", name)
                     .put("focused", button.fetchSemanticsNode().config.getOrNull(SemanticsProperties.Focused) == true)
