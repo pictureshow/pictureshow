@@ -4,6 +4,7 @@
 package app.pictureshow
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.ReportDrawnWhen
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -280,6 +281,9 @@ fun CatalogHome(
         if (heroItem != null) delay(HOME_HERO_SETTLE_MILLIS)
         heroItem = candidate
     }
+    // The first focused card is the moment Home is usable: report it as fully drawn, so cold start to a usable Home shows
+    // in logcat ("Fully drawn") and in startup metrics on any build type.
+    ReportDrawnWhen { heroCandidate != null }
     val heroShown = heroItem?.let { shown -> rows.firstNotNullOfOrNull { row -> row.items.firstOrNull { it.id == shown.id } } ?: shown }
         ?: restoreItem
         ?: rows.firstOrNull()?.items?.firstOrNull()
