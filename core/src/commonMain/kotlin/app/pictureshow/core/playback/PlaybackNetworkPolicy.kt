@@ -22,14 +22,25 @@ object PlaybackNetworkPolicy {
             sampleBytes >= 131_072 &&
             elapsedSinceAdjustmentMs >= 30_000
 
+    /** Media3's own threshold for resuming after a stall: with at least this much buffered ahead, nothing is about to stop. */
+    const val LOW_BUFFER_MS = 5_000L
+
     /**
      * PLAY-26: the player is getting at least [speed] seconds of media per wall-clock second, so the connection keeps up
-     * whatever a throughput sample says. A sample window where the buffered end moved forward that fast (start-up fill,
-     * a full buffer topping up, a decoder that is the slow part) never counts toward a reduction. A buffered end that
-     * moved backwards (a seek, a replaced source) or a non-positive window is no evidence of a slow connection either.
+     * whatever a throughput sample says. A buffered end that moved backwards (a seek, a replaced source) or a
+     * non-positive window is no evidence of a slow connection either.
      */
     fun keepsUp(bufferedGainMs: Long, elapsedMs: Long, speed: Float = 1f): Boolean =
         elapsedMs <= 0 || bufferedGainMs < 0 || bufferedGainMs >= elapsedMs * speed.coerceAtLeast(0.1f)
+
+    /**
+     * PLAY-26: a throughput sample counts toward a reduction only while the player is really short of data: less than
+     * [LOW_BUFFER_MS] buffered ahead and the buffered end not keeping up since the previous sample. One active-read
+     * window is noisy (a busy CPU slows reads); the start-up fill, a healthy buffer, or a decoder slower than the network
+     * never lower a stream the connection is carrying.
+     */
+    fun fallingBehind(bufferedAheadMs: Long, bufferedGainMs: Long, elapsedMs: Long, speed: Float = 1f): Boolean =
+        bufferedAheadMs < LOW_BUFFER_MS && !keepsUp(bufferedGainMs, elapsedMs, speed)
 
     /**
      * PLAY-26: an automatic [cap] replaces the playing stream only when the cap is below the stream's bitrate and the

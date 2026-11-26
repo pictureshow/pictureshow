@@ -234,39 +234,54 @@
       "expected": false
     },
     {
-      "id": "playback-settings.quality.load-pace-startup-fill",
-      "operation": "quality-load-pace",
+      "id": "playback-settings.quality.falling-behind-startup-fill",
+      "operation": "quality-falling-behind",
       "input": {
+        "bufferedAheadMs": 2500,
         "bufferedGainMs": 1500,
         "elapsedMs": 1000,
         "speed": 1.0
       },
-      "expected": true
+      "expected": false
     },
     {
-      "id": "playback-settings.quality.load-pace-exactly-real-time",
-      "operation": "quality-load-pace",
+      "id": "playback-settings.quality.falling-behind-exactly-real-time",
+      "operation": "quality-falling-behind",
       "input": {
+        "bufferedAheadMs": 2500,
         "bufferedGainMs": 1000,
         "elapsedMs": 1000,
         "speed": 1.0
       },
-      "expected": true
+      "expected": false
     },
     {
-      "id": "playback-settings.quality.load-pace-falling-behind",
-      "operation": "quality-load-pace",
+      "id": "playback-settings.quality.falling-behind-short-and-slow",
+      "operation": "quality-falling-behind",
       "input": {
+        "bufferedAheadMs": 4999,
         "bufferedGainMs": 999,
         "elapsedMs": 1000,
         "speed": 1.0
       },
-      "expected": false
+      "expected": true
     },
     {
-      "id": "playback-settings.quality.load-pace-stalled",
-      "operation": "quality-load-pace",
+      "id": "playback-settings.quality.falling-behind-stalled",
+      "operation": "quality-falling-behind",
       "input": {
+        "bufferedAheadMs": 1000,
+        "bufferedGainMs": 0,
+        "elapsedMs": 1000,
+        "speed": 1.0
+      },
+      "expected": true
+    },
+    {
+      "id": "playback-settings.quality.falling-behind-healthy-buffer",
+      "operation": "quality-falling-behind",
+      "input": {
+        "bufferedAheadMs": 5000,
         "bufferedGainMs": 0,
         "elapsedMs": 1000,
         "speed": 1.0
@@ -274,34 +289,48 @@
       "expected": false
     },
     {
-      "id": "playback-settings.quality.load-pace-double-speed-behind",
-      "operation": "quality-load-pace",
+      "id": "playback-settings.quality.falling-behind-decoder-bound-13s-ahead",
+      "operation": "quality-falling-behind",
       "input": {
+        "bufferedAheadMs": 13491,
+        "bufferedGainMs": 500,
+        "elapsedMs": 1000,
+        "speed": 1.0
+      },
+      "expected": false
+    },
+    {
+      "id": "playback-settings.quality.falling-behind-double-speed-behind",
+      "operation": "quality-falling-behind",
+      "input": {
+        "bufferedAheadMs": 3000,
         "bufferedGainMs": 1500,
         "elapsedMs": 1000,
         "speed": 2.0
       },
-      "expected": false
+      "expected": true
     },
     {
-      "id": "playback-settings.quality.load-pace-seek-backwards",
-      "operation": "quality-load-pace",
+      "id": "playback-settings.quality.falling-behind-seek-backwards",
+      "operation": "quality-falling-behind",
       "input": {
+        "bufferedAheadMs": 1000,
         "bufferedGainMs": -30000,
         "elapsedMs": 1000,
         "speed": 1.0
       },
-      "expected": true
+      "expected": false
     },
     {
-      "id": "playback-settings.quality.load-pace-no-window",
-      "operation": "quality-load-pace",
+      "id": "playback-settings.quality.falling-behind-no-window",
+      "operation": "quality-falling-behind",
       "input": {
+        "bufferedAheadMs": 1000,
         "bufferedGainMs": 0,
         "elapsedMs": 0,
         "speed": 1.0
       },
-      "expected": true
+      "expected": false
     },
     {
       "id": "playback-settings.resume.clamp-zero",

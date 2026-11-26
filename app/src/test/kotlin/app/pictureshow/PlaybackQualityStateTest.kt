@@ -91,23 +91,28 @@ class PlaybackQualityStateTest {
                 )
             )
             // Start-up fill: 1.5 s of media buffered per wall second. A low reading never lowers the stream.
-            for (step in 0L..5L) host.bandwidthSample(6_000_000, 262_144, 1_000 + step * 1_000, 6_000 + step * 1_500)
+            for (step in 0L..5L) host.bandwidthSample(4_000_000, 262_144, 1_000 + step * 1_000, 3_000 + step * 1_500, step * 1_000)
             assertNull(host.estimatedBandwidth)
             assertNull(host.adaptiveQualityNotice)
             assertEquals(200_000_000, host.effectiveSettings.maxStreamingBitrate)
 
-            // Falling behind, but 8 Mbps carries a 5.7 Mbps file with the 20% margin: ladder rounding alone doesn't restart it.
+            // Low readings while 13 s sit buffered ahead: nothing is about to stop, so nothing restarts.
             host.resetAutomaticQuality()
-            for (step in 0L..5L) host.bandwidthSample(8_000_000, 262_144, 10_000 + step * 1_000, 20_000 + step * 200)
+            for (step in 0L..5L) host.bandwidthSample(4_000_000, 262_144, 10_000 + step * 1_000, 20_000 + step * 500, 7_000 + step * 700)
+            assertNull(host.estimatedBandwidth)
+
+            // Short of data, but 8 Mbps carries a 5.7 Mbps file with the 20% margin: ladder rounding alone doesn't restart it.
+            host.resetAutomaticQuality()
+            for (step in 0L..5L) host.bandwidthSample(8_000_000, 262_144, 20_000 + step * 1_000, 30_000 + step * 200, 27_000 + step * 900)
             assertNull(host.estimatedBandwidth)
             assertNull(host.adaptiveQualityNotice)
 
-            // Falling behind at 6 Mbps really can't carry it: baseline, then two behind samples lower it.
+            // Short of data at 4 Mbps really can't carry it: baseline, then two behind samples lower it.
             host.resetAutomaticQuality()
-            host.bandwidthSample(6_000_000, 262_144, 20_000, 30_000)
-            host.bandwidthSample(6_000_000, 262_144, 21_000, 30_200)
+            host.bandwidthSample(4_000_000, 262_144, 40_000, 50_000, 47_000)
+            host.bandwidthSample(4_000_000, 262_144, 41_000, 50_300, 47_900)
             assertNull(host.estimatedBandwidth)
-            host.bandwidthSample(6_000_000, 262_144, 22_000, 30_400)
+            host.bandwidthSample(4_000_000, 262_144, 42_000, 50_600, 48_800)
             assertEquals(4_000_000, host.effectiveSettings.maxStreamingBitrate)
             assertEquals("Lowered to 4 Mbps because the connection slowed. Choose Quality → Auto to try again.", host.adaptiveQualityNotice)
         } finally {

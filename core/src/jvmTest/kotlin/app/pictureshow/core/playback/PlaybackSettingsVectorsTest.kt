@@ -94,8 +94,9 @@ class PlaybackSettingsVectorsTest {
                     input.getValue("localEndpoint").jsonPrimitive.boolean
                 ).name
             )
-            "quality-load-pace" -> JsonPrimitive(
-                PlaybackNetworkPolicy.keepsUp(
+            "quality-falling-behind" -> JsonPrimitive(
+                PlaybackNetworkPolicy.fallingBehind(
+                    input.getValue("bufferedAheadMs").jsonPrimitive.long,
                     input.getValue("bufferedGainMs").jsonPrimitive.long,
                     input.getValue("elapsedMs").jsonPrimitive.long,
                     input.getValue("speed").jsonPrimitive.float
