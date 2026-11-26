@@ -41,7 +41,7 @@ evidence="$work/evidence"
 mkdir "$evidence"
 echo "Packaging work and evidence: $work"
 
-# Signed builds reuse prebuilt inputs only from a push run of this repository at this exact commit. Pull request
+# Signed builds reuse prebuilt inputs only from a push or manual run of this repository at this exact commit. Pull request
 # runs, forks included, never upload them, and anything else is rebuilt here from pinned sources.
 if [[ "$channel" != unsigned && ( -n "${PICTURESHOW_MAC_NATIVE_BUILD:-}" || -n "${PICTURESHOW_MAC_RUNTIME:-}" ) ]]; then
   inputs_run=${PICTURESHOW_MAC_INPUTS_RUN:?Set PICTURESHOW_MAC_INPUTS_RUN to the Desktop app run that built the reused inputs, or unset PICTURESHOW_MAC_NATIVE_BUILD and PICTURESHOW_MAC_RUNTIME to build them here.}
@@ -51,9 +51,10 @@ if [[ "$channel" != unsigned && ( -n "${PICTURESHOW_MAC_NATIVE_BUILD:-}" || -n "
     --jq '[.event, .head_repository.full_name, .head_sha, .path, .conclusion] | join(" ")') || {
     echo "Could not read run $inputs_run from GitHub." >&2; exit 2;
   }
-  expected="push pictureshow/pictureshow $(git rev-parse HEAD) .github/workflows/desktop-app.yml success"
-  [[ "$run_facts" == "$expected" ]] || {
-    printf 'Run %s does not qualify for signing.\n  found:    %s\n  expected: %s\n' "$inputs_run" "$run_facts" "$expected" >&2; exit 2;
+  # A manual dispatch is as trusted as a push: only maintainers of this repository can start one.
+  expected="pictureshow/pictureshow $(git rev-parse HEAD) .github/workflows/desktop-app.yml success"
+  [[ "$run_facts" == "push $expected" || "$run_facts" == "workflow_dispatch $expected" ]] || {
+    printf 'Run %s does not qualify for signing.\n  found:    %s\n  expected: push|workflow_dispatch %s\n' "$inputs_run" "$run_facts" "$expected" >&2; exit 2;
   }
   printf 'Reused inputs from Desktop app run %s (%s)\n' "$inputs_run" "$run_facts" > "$evidence/input-provenance.txt"
 fi
