@@ -94,6 +94,9 @@ class PlaybackSettingsVectorsTest {
                     input.getValue("localEndpoint").jsonPrimitive.boolean
                 ).name
             )
+            "quality-shortage-sustained" -> JsonPrimitive(
+                PlaybackNetworkPolicy.shortageSustained(input.getValue("shortageMs").jsonPrimitive.long)
+            )
             "quality-falling-behind" -> JsonPrimitive(
                 PlaybackNetworkPolicy.fallingBehind(
                     input.getValue("bufferedAheadMs").jsonPrimitive.long,

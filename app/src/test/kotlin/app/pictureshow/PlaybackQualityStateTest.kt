@@ -101,18 +101,18 @@ class PlaybackQualityStateTest {
             for (step in 0L..5L) host.bandwidthSample(4_000_000, 262_144, 10_000 + step * 1_000, 20_000 + step * 500, 7_000 + step * 700)
             assertNull(host.estimatedBandwidth)
 
-            // Short of data, but 8 Mbps carries a 5.7 Mbps file with the 20% margin: ladder rounding alone doesn't restart it.
+            // Short of data for 12 s, but 8 Mbps carries a 5.7 Mbps file with the 20% margin: ladder rounding alone doesn't restart it.
             host.resetAutomaticQuality()
-            for (step in 0L..5L) host.bandwidthSample(8_000_000, 262_144, 20_000 + step * 1_000, 30_000 + step * 200, 27_000 + step * 900)
+            for (step in 0L..12L) host.bandwidthSample(8_000_000, 262_144, 20_000 + step * 1_000, 30_000 + step * 200, 27_000 + step * 900)
             assertNull(host.estimatedBandwidth)
             assertNull(host.adaptiveQualityNotice)
 
-            // Short of data at 4 Mbps really can't carry it: baseline, then two behind samples lower it.
+            // Short of data at 4 Mbps really can't carry it: under 10 s short of data rides out; the 10th second lowers it.
             host.resetAutomaticQuality()
-            host.bandwidthSample(4_000_000, 262_144, 40_000, 50_000, 47_000)
-            host.bandwidthSample(4_000_000, 262_144, 41_000, 50_300, 47_900)
+            for (step in 0L..9L) host.bandwidthSample(4_000_000, 262_144, 40_000 + step * 1_000, 50_000 + step * 300, 47_000 + step * 900)
             assertNull(host.estimatedBandwidth)
-            host.bandwidthSample(4_000_000, 262_144, 42_000, 50_600, 48_800)
+            assertNull(host.adaptiveQualityNotice)
+            host.bandwidthSample(4_000_000, 262_144, 50_000, 53_000, 56_000)
             assertEquals(4_000_000, host.effectiveSettings.maxStreamingBitrate)
             assertEquals("Lowered to 4 Mbps because the connection slowed. Choose Quality → Auto to try again.", host.adaptiveQualityNotice)
         } finally {

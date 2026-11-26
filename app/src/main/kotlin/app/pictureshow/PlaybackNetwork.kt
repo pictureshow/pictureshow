@@ -36,12 +36,14 @@ internal fun classifyPlaybackNetwork(metered: Boolean, localEndpoint: Boolean): 
 /**
  * Reduce at most once per 30 seconds, and require two substantial samples taken while the player was short of data
  * (PLAY-26 `fallingBehind`: under 5 s buffered ahead and the buffered end gaining less media time than wall time since
- * the previous sample). Never auto-raise within a viewing. The first sample of a viewing only sets the baseline.
+ * the previous sample), with the shortage unbroken for 10 s (`shortageSustained`). Never auto-raise within a viewing.
+ * The first sample of a viewing only sets the baseline.
  */
 internal class BandwidthQualityGuard {
     private var samples = 0
     private var lastChangeMs: Long? = null
     private var previous: Pair<Long, Long>? = null
+    private var shortSince: Long? = null
 
     /** [bufferedPositionMs] is null when no player reports one; the sample rule then stands alone. */
     fun reduction(
@@ -69,9 +71,14 @@ internal class BandwidthQualityGuard {
         val proposedCap = app.pictureshow.core.playback.PlaybackTuning.automaticCap(currentCap, estimatedBitrate)
         if (!behind || bytes < 131_072 || estimatedBitrate <= 0 || estimatedBitrate >= currentCap || proposedCap >= currentCap) {
             samples = 0
+            shortSince = null
             return null
         }
         samples++
+        if (baseline != null) {
+            val since = shortSince ?: baseline.first.also { shortSince = it }
+            if (!PlaybackNetworkPolicy.shortageSustained(nowMs - since)) return null
+        }
         if (!PlaybackNetworkPolicy.shouldReduce(
                 currentCap,
                 proposedCap,
@@ -85,6 +92,7 @@ internal class BandwidthQualityGuard {
             return null
         }
         samples = 0
+        shortSince = null
         lastChangeMs = nowMs
         return estimatedBitrate
     }

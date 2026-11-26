@@ -333,6 +333,30 @@
       "expected": false
     },
     {
+      "id": "playback-settings.quality.shortage-startup-stall",
+      "operation": "quality-shortage-sustained",
+      "input": {
+        "shortageMs": 2343
+      },
+      "expected": false
+    },
+    {
+      "id": "playback-settings.quality.shortage-just-under",
+      "operation": "quality-shortage-sustained",
+      "input": {
+        "shortageMs": 9999
+      },
+      "expected": false
+    },
+    {
+      "id": "playback-settings.quality.shortage-ten-seconds",
+      "operation": "quality-shortage-sustained",
+      "input": {
+        "shortageMs": 10000
+      },
+      "expected": true
+    },
+    {
       "id": "playback-settings.resume.clamp-zero",
       "operation": "resume-position",
       "input": {

@@ -63,28 +63,33 @@ class PlaybackTuningRuntimeTest {
     }
 
     @Test fun bandwidthGuardCountsOnlySamplesTakenWhileThePlayerIsShortOfData() {
-        // reduction(cap, estimate, bytes, nowMs, bufferedPositionMs, positionMs, speed)
+        // slow(nowMs, bufferedPositionMs, positionMs, speed): a 4 Mbps reading against a 20 Mbps cap.
+        fun BandwidthQualityGuard.slow(now: Long, buffered: Long, position: Long, speed: Float = 1f) =
+            reduction(20_000_000, 4_000_000, 262_144, now, buffered, position, speed)
         val filling = BandwidthQualityGuard()
-        for (step in 0L..6L) assertNull(filling.reduction(20_000_000, 4_000_000, 262_144, step * 1_000, 3_000 + step * 1_500, step * 1_000))
+        for (step in 0L..6L) assertNull(filling.slow(step * 1_000, 3_000 + step * 1_500, step * 1_000))
         // Leg 194 emulator: slow single windows while 13 s sat buffered ahead (decoder-bound playback, bursty loading).
         val healthy = BandwidthQualityGuard()
         for (step in 0L..6L) {
-            assertNull(healthy.reduction(20_000_000, 4_000_000, 262_144, step * 1_000, 20_000 + step * 500, 7_000 + step * 700))
+            assertNull(healthy.slow(step * 1_000, 20_000 + step * 500, 7_000 + step * 700))
         }
+        // Short of data on every sample (4 s ahead and shrinking): lowered once the shortage has lasted 10 s, not before.
         val falling = BandwidthQualityGuard()
-        assertNull(falling.reduction(20_000_000, 4_000_000, 262_144, 0, 14_000, 10_000)) // baseline only
-        assertNull(falling.reduction(20_000_000, 4_000_000, 262_144, 1_000, 14_500, 11_000))
-        assertEquals(4_000_000L, falling.reduction(20_000_000, 4_000_000, 262_144, 2_000, 15_000, 12_000))
+        for (step in 0L..9L) assertNull(falling.slow(step * 1_000, 14_000 + step * 900, 10_000 + step * 1_000))
+        assertEquals(4_000_000L, falling.slow(10_000, 23_000, 20_000))
         val doubleSpeed = BandwidthQualityGuard()
-        assertNull(doubleSpeed.reduction(20_000_000, 4_000_000, 262_144, 0, 14_000, 10_000, speed = 2f))
-        assertNull(doubleSpeed.reduction(20_000_000, 4_000_000, 262_144, 1_000, 15_500, 12_000, speed = 2f))
-        assertEquals(4_000_000L, doubleSpeed.reduction(20_000_000, 4_000_000, 262_144, 2_000, 17_000, 14_000, speed = 2f))
+        for (step in 0L..9L) {
+            assertNull(doubleSpeed.slow(step * 1_000, 14_500 + step * 1_900, 10_000 + step * 2_000, 2f))
+        }
+        assertEquals(4_000_000L, doubleSpeed.slow(10_000, 33_500, 30_000, 2f))
+        // A short start-up stall that recovers restarts the shortage clock: 7 s behind, caught up, then 10 s more.
         val interrupted = BandwidthQualityGuard()
-        assertNull(interrupted.reduction(20_000_000, 4_000_000, 262_144, 0, 14_000, 10_000))
-        assertNull(interrupted.reduction(20_000_000, 4_000_000, 262_144, 1_000, 14_200, 11_000))
-        assertNull(interrupted.reduction(20_000_000, 4_000_000, 262_144, 2_000, 16_500, 12_000)) // caught up: the count restarts
-        assertNull(interrupted.reduction(20_000_000, 4_000_000, 262_144, 3_000, 16_700, 13_000))
-        assertEquals(4_000_000L, interrupted.reduction(20_000_000, 4_000_000, 262_144, 4_000, 16_900, 14_000))
+        for (step in 0L..6L) assertNull(interrupted.slow(step * 1_000, 14_000 + step * 900, 10_000 + step * 1_000))
+        assertNull(interrupted.slow(7_000, 22_000, 17_000)) // caught up
+        for (step in 8L..16L) {
+            assertNull(interrupted.slow(step * 1_000, 22_000 + (step - 7) * 900, 10_000 + step * 1_000))
+        }
+        assertEquals(4_000_000L, interrupted.slow(17_000, 31_000, 27_000))
     }
 
     @Test fun keepScenesDoesNotOfferEarlyContinuationAtCreditsBeforeATailScene() {

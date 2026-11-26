@@ -42,6 +42,15 @@ object PlaybackNetworkPolicy {
     fun fallingBehind(bufferedAheadMs: Long, bufferedGainMs: Long, elapsedMs: Long, speed: Float = 1f): Boolean =
         bufferedAheadMs < LOW_BUFFER_MS && !keepsUp(bufferedGainMs, elapsedMs, speed)
 
+    /** A quality restart re-prepares the stream (9.5 s on a slow device in leg 194), so a shorter shortage costs less to sit out. */
+    const val SUSTAINED_SHORTAGE_MS = 10_000L
+
+    /**
+     * PLAY-26: the player has been short of data ([fallingBehind] on every sample) for [shortageMs] without a break. A
+     * start-up stall of a few seconds rides out on its own; only a shortage of [SUSTAINED_SHORTAGE_MS] or more lowers quality.
+     */
+    fun shortageSustained(shortageMs: Long): Boolean = shortageMs >= SUSTAINED_SHORTAGE_MS
+
     /**
      * PLAY-26: an automatic [cap] replaces the playing stream only when the cap is below the stream's bitrate and the
      * measured rate's 80% budget can't carry that bitrate either. Ladder rounding alone (8 Mbps measured, 5.7 Mbps file,
