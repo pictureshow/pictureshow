@@ -12,6 +12,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.encodeToJsonElement
+import kotlinx.serialization.json.float
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
@@ -92,6 +93,17 @@ class PlaybackSettingsVectorsTest {
                     input.getValue("metered").jsonPrimitive.boolean,
                     input.getValue("localEndpoint").jsonPrimitive.boolean
                 ).name
+            )
+            "quality-shortage-sustained" -> JsonPrimitive(
+                PlaybackNetworkPolicy.shortageSustained(input.getValue("shortageMs").jsonPrimitive.long)
+            )
+            "quality-falling-behind" -> JsonPrimitive(
+                PlaybackNetworkPolicy.fallingBehind(
+                    input.getValue("bufferedAheadMs").jsonPrimitive.long,
+                    input.getValue("bufferedGainMs").jsonPrimitive.long,
+                    input.getValue("elapsedMs").jsonPrimitive.long,
+                    input.getValue("speed").jsonPrimitive.float
+                )
             )
             "quality-reduction" -> JsonPrimitive(
                 PlaybackNetworkPolicy.shouldReduce(

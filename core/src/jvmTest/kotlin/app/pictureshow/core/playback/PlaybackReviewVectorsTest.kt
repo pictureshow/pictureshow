@@ -48,8 +48,14 @@ class PlaybackReviewVectorsTest {
             val stream = i["streamBitrate"]?.jsonPrimitive?.intOrNull
             val actual = buildJsonObject {
                 put("cap", cap)
-                put("reroute", cap < ceiling && PlaybackQualityPresentation.affectsStream(cap, stream))
-                put("notice", PlaybackQualityPresentation.reductionNotice(null, cap, ceiling, stream)?.let(::JsonPrimitive) ?: JsonNull)
+                val reroute = cap < ceiling && PlaybackNetworkPolicy.reroutes(cap, i.getValue("estimate").jsonPrimitive.long, stream)
+                put("reroute", reroute)
+                put(
+                    "notice",
+                    PlaybackQualityPresentation.reductionNotice(null, cap, ceiling, stream)
+                        ?.takeIf { reroute }
+                        ?.let(::JsonPrimitive) ?: JsonNull
+                )
             }
             assertEquals(case.getValue("expected"), actual, case.getValue("id").jsonPrimitive.content)
         }

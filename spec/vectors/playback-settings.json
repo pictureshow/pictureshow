@@ -234,6 +234,129 @@
       "expected": false
     },
     {
+      "id": "playback-settings.quality.falling-behind-startup-fill",
+      "operation": "quality-falling-behind",
+      "input": {
+        "bufferedAheadMs": 2500,
+        "bufferedGainMs": 1500,
+        "elapsedMs": 1000,
+        "speed": 1.0
+      },
+      "expected": false
+    },
+    {
+      "id": "playback-settings.quality.falling-behind-exactly-real-time",
+      "operation": "quality-falling-behind",
+      "input": {
+        "bufferedAheadMs": 2500,
+        "bufferedGainMs": 1000,
+        "elapsedMs": 1000,
+        "speed": 1.0
+      },
+      "expected": false
+    },
+    {
+      "id": "playback-settings.quality.falling-behind-short-and-slow",
+      "operation": "quality-falling-behind",
+      "input": {
+        "bufferedAheadMs": 4999,
+        "bufferedGainMs": 999,
+        "elapsedMs": 1000,
+        "speed": 1.0
+      },
+      "expected": true
+    },
+    {
+      "id": "playback-settings.quality.falling-behind-stalled",
+      "operation": "quality-falling-behind",
+      "input": {
+        "bufferedAheadMs": 1000,
+        "bufferedGainMs": 0,
+        "elapsedMs": 1000,
+        "speed": 1.0
+      },
+      "expected": true
+    },
+    {
+      "id": "playback-settings.quality.falling-behind-healthy-buffer",
+      "operation": "quality-falling-behind",
+      "input": {
+        "bufferedAheadMs": 5000,
+        "bufferedGainMs": 0,
+        "elapsedMs": 1000,
+        "speed": 1.0
+      },
+      "expected": false
+    },
+    {
+      "id": "playback-settings.quality.falling-behind-decoder-bound-13s-ahead",
+      "operation": "quality-falling-behind",
+      "input": {
+        "bufferedAheadMs": 13491,
+        "bufferedGainMs": 500,
+        "elapsedMs": 1000,
+        "speed": 1.0
+      },
+      "expected": false
+    },
+    {
+      "id": "playback-settings.quality.falling-behind-double-speed-behind",
+      "operation": "quality-falling-behind",
+      "input": {
+        "bufferedAheadMs": 3000,
+        "bufferedGainMs": 1500,
+        "elapsedMs": 1000,
+        "speed": 2.0
+      },
+      "expected": true
+    },
+    {
+      "id": "playback-settings.quality.falling-behind-seek-backwards",
+      "operation": "quality-falling-behind",
+      "input": {
+        "bufferedAheadMs": 1000,
+        "bufferedGainMs": -30000,
+        "elapsedMs": 1000,
+        "speed": 1.0
+      },
+      "expected": false
+    },
+    {
+      "id": "playback-settings.quality.falling-behind-no-window",
+      "operation": "quality-falling-behind",
+      "input": {
+        "bufferedAheadMs": 1000,
+        "bufferedGainMs": 0,
+        "elapsedMs": 0,
+        "speed": 1.0
+      },
+      "expected": false
+    },
+    {
+      "id": "playback-settings.quality.shortage-startup-stall",
+      "operation": "quality-shortage-sustained",
+      "input": {
+        "shortageMs": 2343
+      },
+      "expected": false
+    },
+    {
+      "id": "playback-settings.quality.shortage-just-under",
+      "operation": "quality-shortage-sustained",
+      "input": {
+        "shortageMs": 9999
+      },
+      "expected": false
+    },
+    {
+      "id": "playback-settings.quality.shortage-ten-seconds",
+      "operation": "quality-shortage-sustained",
+      "input": {
+        "shortageMs": 10000
+      },
+      "expected": true
+    },
+    {
       "id": "playback-settings.resume.clamp-zero",
       "operation": "resume-position",
       "input": {

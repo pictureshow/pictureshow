@@ -62,6 +62,36 @@ class PlaybackTuningRuntimeTest {
         assertNull(guard.reduction(2_000_000, 40_000_000, 262_144, 71_000))
     }
 
+    @Test fun bandwidthGuardCountsOnlySamplesTakenWhileThePlayerIsShortOfData() {
+        // slow(nowMs, bufferedPositionMs, positionMs, speed): a 4 Mbps reading against a 20 Mbps cap.
+        fun BandwidthQualityGuard.slow(now: Long, buffered: Long, position: Long, speed: Float = 1f) =
+            reduction(20_000_000, 4_000_000, 262_144, now, buffered, position, speed)
+        val filling = BandwidthQualityGuard()
+        for (step in 0L..6L) assertNull(filling.slow(step * 1_000, 3_000 + step * 1_500, step * 1_000))
+        // Leg 194 emulator: slow single windows while 13 s sat buffered ahead (decoder-bound playback, bursty loading).
+        val healthy = BandwidthQualityGuard()
+        for (step in 0L..6L) {
+            assertNull(healthy.slow(step * 1_000, 20_000 + step * 500, 7_000 + step * 700))
+        }
+        // Short of data on every sample (4 s ahead and shrinking): lowered once the shortage has lasted 10 s, not before.
+        val falling = BandwidthQualityGuard()
+        for (step in 0L..9L) assertNull(falling.slow(step * 1_000, 14_000 + step * 900, 10_000 + step * 1_000))
+        assertEquals(4_000_000L, falling.slow(10_000, 23_000, 20_000))
+        val doubleSpeed = BandwidthQualityGuard()
+        for (step in 0L..9L) {
+            assertNull(doubleSpeed.slow(step * 1_000, 14_500 + step * 1_900, 10_000 + step * 2_000, 2f))
+        }
+        assertEquals(4_000_000L, doubleSpeed.slow(10_000, 33_500, 30_000, 2f))
+        // A short start-up stall that recovers restarts the shortage clock: 7 s behind, caught up, then 10 s more.
+        val interrupted = BandwidthQualityGuard()
+        for (step in 0L..6L) assertNull(interrupted.slow(step * 1_000, 14_000 + step * 900, 10_000 + step * 1_000))
+        assertNull(interrupted.slow(7_000, 22_000, 17_000)) // caught up
+        for (step in 8L..16L) {
+            assertNull(interrupted.slow(step * 1_000, 22_000 + (step - 7) * 900, 10_000 + step * 1_000))
+        }
+        assertEquals(4_000_000L, interrupted.slow(17_000, 31_000, 27_000))
+    }
+
     @Test fun keepScenesDoesNotOfferEarlyContinuationAtCreditsBeforeATailScene() {
         val outro = MediaSegment("credits", SegmentType.Outro, 80_000L * 10_000, 100_000L * 10_000)
         assertEquals(80_000L, playbackNextTriggerMs(150_000, listOf(outro), true))

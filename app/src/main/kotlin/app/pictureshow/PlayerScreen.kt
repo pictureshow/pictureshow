@@ -760,9 +760,24 @@ internal fun PlayerItemScreen(
             if (ended && (nextLookup == null || nextLookup?.result is ClientResult.Failure) && !exitRequested && !switching) {
                 PlaybackStatus("Finding next episode…", Modifier.align(Alignment.Center))
             }
-            if (state.preparing && !state.bufferingSlow && setupError == null && !switching) {
-                PlaybackStatus("Preparing playback…", Modifier.align(Alignment.Center))
+            val preparingShown = state.preparing && !state.bufferingSlow && setupError == null && !switching
+            // Waiting for data after the picture started (a seek, a slow stretch) shows a spinner, never a silent freeze.
+            val rebuffering = playback.buffering && !state.preparing && !state.bufferingSlow && error == null && !switching && !ended
+            // A start that stalls gets a spinner after 2 s; a normal start never draws one, because the animation took
+            // 1-1.5 s off a CPU-rendered device's start-up (leg 194). A wait for data mid-play gets one after 500 ms.
+            val preparingSpinner = rememberAfterDelay(preparingShown, PLAYER_PREPARING_INDICATOR_DELAY_MS)
+            val rebufferSpinner = rememberAfterDelay(rebuffering, PLAYER_WAIT_INDICATOR_DELAY_MS)
+            if (preparingShown) {
+                Column(
+                    Modifier.align(Alignment.Center),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    if (preparingSpinner) PlayerWaitIndicator()
+                    PlaybackStatus("Preparing playback…")
+                }
             }
+            if (rebufferSpinner) PlayerWaitIndicator(Modifier.align(Alignment.Center))
             if (state.bufferingSlow && error == null && !switching) {
                 Text(
                     "Still waiting for playback. You can go back and try again.",
@@ -1450,3 +1465,32 @@ private const val CONTROLS_HIDDEN_FEEDBACK = "Controls hidden"
 
 /** Both directions always remain available: the surface's "scroll" is a 10 s seek or a reveal, never a position. */
 private val ReaderArrowRange = ScrollAxisRange(value = { 1f }, maxValue = { 2f })
+
+/** A short wait (one segment, a quick seek) passes without a flash of spinner. */
+internal const val PLAYER_WAIT_INDICATOR_DELAY_MS = 500L
+
+/** Longer than a normal start, so the spinner's animation never competes with the decoder starting up. */
+internal const val PLAYER_PREPARING_INDICATOR_DELAY_MS = 2_000L
+
+/** True once [active] has held for [delayMs] without a break; false again as soon as it stops. */
+@Composable
+private fun rememberAfterDelay(active: Boolean, delayMs: Long): Boolean {
+    var shown by remember { mutableStateOf(false) }
+    LaunchedEffect(active) {
+        shown = false
+        if (active) {
+            delay(delayMs)
+            shown = true
+        }
+    }
+    return active && shown
+}
+
+@Composable
+internal fun PlayerWaitIndicator(modifier: Modifier = Modifier) {
+    androidx.compose.material3.CircularProgressIndicator(
+        modifier = modifier.size(48.dp).semantics { contentDescription = "Loading" },
+        color = Color.White,
+        strokeWidth = 4.dp
+    )
+}

@@ -68,6 +68,59 @@ class PlaybackQualityStateTest {
         }
     }
 
+    /**
+     * Leg 194: a 5.7 Mbps HEVC film direct-playing on the LAN was lowered to 4 Mbps two seconds into every start on the
+     * emulator, then restarted as a transcode (about 4 s of black). The samples came from start-up reads while the
+     * buffer was still filling; the connection was carrying the file.
+     */
+    @Test fun homeDirectPlayIsNotLoweredWhileTheBufferGrowsOrTheConnectionCarriesTheFile() {
+        val host = createHost()
+        try {
+            host.network = PlaybackNetwork.Home
+            host.stateSource = androidx.compose.runtime.mutableStateOf(
+                PlaybackState(
+                    preparing = false,
+                    decision = app.pictureshow.core.playback.PlayDecision(
+                        "item",
+                        app.pictureshow.core.playback.MediaSourceInfo(bitrate = 5_728_998),
+                        app.pictureshow.core.playback.PlayMethod.DirectPlay,
+                        "https://example.test/film",
+                        emptyMap(),
+                        null
+                    )
+                )
+            )
+            // Start-up fill: 1.5 s of media buffered per wall second. A low reading never lowers the stream.
+            for (step in 0L..5L) host.bandwidthSample(4_000_000, 262_144, 1_000 + step * 1_000, 3_000 + step * 1_500, step * 1_000)
+            assertNull(host.estimatedBandwidth)
+            assertNull(host.adaptiveQualityNotice)
+            assertEquals(200_000_000, host.effectiveSettings.maxStreamingBitrate)
+
+            // Low readings while 13 s sit buffered ahead: nothing is about to stop, so nothing restarts.
+            host.resetAutomaticQuality()
+            for (step in 0L..5L) host.bandwidthSample(4_000_000, 262_144, 10_000 + step * 1_000, 20_000 + step * 500, 7_000 + step * 700)
+            assertNull(host.estimatedBandwidth)
+
+            // Short of data for 12 s, but 8 Mbps carries a 5.7 Mbps file with the 20% margin: ladder rounding alone doesn't restart it.
+            host.resetAutomaticQuality()
+            for (step in 0L..12L) host.bandwidthSample(8_000_000, 262_144, 20_000 + step * 1_000, 30_000 + step * 200, 27_000 + step * 900)
+            assertNull(host.estimatedBandwidth)
+            assertNull(host.adaptiveQualityNotice)
+
+            // Short of data at 4 Mbps really can't carry it: under 10 s short of data rides out; the 10th second lowers it.
+            host.resetAutomaticQuality()
+            for (step in 0L..9L) host.bandwidthSample(4_000_000, 262_144, 40_000 + step * 1_000, 50_000 + step * 300, 47_000 + step * 900)
+            assertNull(host.estimatedBandwidth)
+            assertNull(host.adaptiveQualityNotice)
+            host.bandwidthSample(4_000_000, 262_144, 50_000, 53_000, 56_000)
+            assertEquals(4_000_000, host.effectiveSettings.maxStreamingBitrate)
+            assertEquals("Lowered to 4 Mbps because the connection slowed. Choose Quality → Auto to try again.", host.adaptiveQualityNotice)
+        } finally {
+            host.reportScope.cancel()
+            host.output.release()
+        }
+    }
+
     @Test fun lowBitrateAndUnknownStreamsDoNotTriggerAnAdaptiveChange() {
         val host = createHost()
         try {

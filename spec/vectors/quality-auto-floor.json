@@ -120,6 +120,32 @@
       }
     },
     {
+      "id": "quality-auto-floor.carried-despite-ladder-rounding",
+      "input": {
+        "estimate": 8000000,
+        "streamBitrate": 5728998,
+        "ceiling": 200000000
+      },
+      "expected": {
+        "cap": 4000000,
+        "reroute": false,
+        "notice": null
+      }
+    },
+    {
+      "id": "quality-auto-floor.budget-below-stream",
+      "input": {
+        "estimate": 7000000,
+        "streamBitrate": 5728998,
+        "ceiling": 200000000
+      },
+      "expected": {
+        "cap": 4000000,
+        "reroute": true,
+        "notice": "Lowered to 4 Mbps because the connection slowed. Choose Quality \u2192 Auto to try again."
+      }
+    },
+    {
       "id": "quality-auto-floor.url-ceiling-cannot-inflate-clock",
       "operation": "stream-bitrate",
       "input": {
