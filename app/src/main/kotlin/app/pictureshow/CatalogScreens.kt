@@ -134,7 +134,6 @@ import androidx.tv.material3.LocalTextStyle
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import app.pictureshow.core.Account
-import app.pictureshow.core.summaryWithoutLinks
 import app.pictureshow.core.GRID_HOLD_CAP_MILLIS
 import app.pictureshow.core.GridSorts
 import app.pictureshow.core.GridVerticalMove
@@ -153,6 +152,7 @@ import app.pictureshow.core.isWatched
 import app.pictureshow.core.progress
 import app.pictureshow.core.runtimeLabel
 import app.pictureshow.core.sortDirectionLabel
+import app.pictureshow.core.summaryWithoutLinks
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -172,6 +172,7 @@ internal const val HOME_ACTIONS_TAG = "home:actions"
 
 /** HOME-20: how long focus rests on a card before the hero changes to it. */
 internal const val HOME_HERO_SETTLE_MILLIS = 140L
+
 // HOME-22/25: tall enough for the logo, facts and a two-line summary, and short enough that a poster shelf (the tallest
 // card, with a two-line title when focused) still fits under it with its heading whole. At 228 dp the list was 312 dp
 // tall, the poster card plus its lead needed about 353, and the heading went under the hero (rc42, leg 190).
@@ -572,7 +573,11 @@ fun CatalogHome(
                             heroShown,
                             account,
                             Modifier.fillMaxWidth(.56f),
-                            summaryLines = if (largeType) 0 else if (subtitle != null) 1 else 2,
+                            summaryLines = when {
+                                largeType -> 0
+                                subtitle != null -> 1
+                                else -> 2
+                            },
                             logoHeight = if (largeType) 36.dp else HOME_HERO_LOGO_HEIGHT,
                             subtitle = subtitle,
                             compact = largeType
