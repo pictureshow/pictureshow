@@ -167,7 +167,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
 internal val CatalogBackground = Color(0xFF10131C)
-private val CatalogMuted = Color(0xFFB9C1D6)
+internal val CatalogMuted = Color(0xFFB9C1D6)
 internal val SelectedSeasonOutline = Color(0xFFB8C4FF)
 private val HEADER_ROWS = setOf("account", "search", "settings", "live-tv", "requests", "customize", "profile")
 
@@ -1020,7 +1020,8 @@ fun CatalogGrid(
     // Right from the last column goes to the rail, onto the letter of the card it came from.
     fun focusRail(): Boolean {
         val letter = currentLetter?.takeIf { it in railLetters } ?: railLetters.firstOrNull() ?: return false
-        dropWaitingMoves()
+        moving?.cancel()
+        heldDownFrom = -1
         return letterRequests.getValue(letter).requestFocus()
     }
 
