@@ -4,7 +4,7 @@
 package app.pictureshow
 
 import android.graphics.Bitmap
-import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
@@ -19,7 +19,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -54,6 +56,9 @@ import app.pictureshow.core.heroLogo
 import app.pictureshow.core.heroSummary
 import app.pictureshow.core.imageRefUrl
 import coil3.compose.AsyncImage
+import coil3.request.ImageRequest
+import coil3.request.allowHardware
+import kotlinx.coroutines.delay
 
 /** HOME-23: a BlurHash drawn small and scaled up; null for a malformed hash, so the caller keeps its tint. */
 @Composable
@@ -88,33 +93,60 @@ internal fun placeholderTint(seed: String): Brush {
 /**
  * HOME-20: the full-bleed art behind the focused title. It crossfades when the title changes, draws the BlurHash first,
  * and fades into [background] on its left and bottom so text and shelves in front of it stay readable.
+ * Every fade is paint alpha on the images themselves, never a layer alpha: a layer alpha below 1 renders the whole
+ * screen-sized box offscreen, and allocating those per focus move crashed the TV emulator's renderer (OBSERVED leg 188).
  */
 @Composable
 internal fun HeroBackdrop(item: MediaItem?, account: Account, background: Color, modifier: Modifier = Modifier) {
     val ref = item?.let(::heroBackdrop)
-    val hashes = item?.imageBlurHashes
+    val target = ref?.let { BackdropArt(it, blurHashFor(item, it)) }
     // Keyed on the image, not the item: a fresher copy of the same title must not fade its own picture out and in.
-    Crossfade(targetState = ref, animationSpec = tween(450), label = "hero-backdrop", modifier = modifier) { shownRef ->
-        Box(Modifier.fillMaxSize().clearAndSetSemantics {}) {
-            if (shownRef != null) {
-                val blur = rememberBlurHash(remember(shownRef) { hashes?.get(shownRef.type)?.get(shownRef.tag) })
-                if (blur != null) {
-                    Image(blur, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize().alpha(.7f))
-                }
-                var loaded by remember(shownRef) { mutableStateOf(false) }
-                val shown by animateFloatAsState(if (loaded) 1f else 0f, tween(300), label = "backdrop-load")
-                AsyncImage(
-                    model = imageRefUrl(account.server, shownRef, 1280, quality = 85),
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    alignment = Alignment.TopCenter,
-                    onSuccess = { loaded = true },
-                    modifier = Modifier.fillMaxSize().alpha(shown)
-                )
-            }
-            HeroScrims(background)
+    var current by remember { mutableStateOf(target) }
+    var previous by remember { mutableStateOf<BackdropArt?>(null) }
+    val progress = remember { Animatable(1f) }
+    LaunchedEffect(target?.ref) {
+        if (target?.ref != current?.ref) {
+            // While focus travels the picture waits for it to rest, so a shelf crossed at key-repeat speed loads no
+            // backdrops it would only throw away (each swap of a full-screen image crashed the TV emulator's renderer at
+            // three moves a second, OBSERVED leg 188). The first picture comes at once.
+            if (current != null) delay(BACKDROP_SETTLE_MILLIS)
+            previous = current
+            current = target
+            progress.snapTo(0f)
+            progress.animateTo(1f, tween(450))
+            previous = null
         }
     }
+    Box(modifier.clearAndSetSemantics {}) {
+        // One keyed loop, so the outgoing picture keeps its loaded state when it moves from current to previous.
+        listOfNotNull(previous, current).forEach { art ->
+            key(art.ref) { BackdropImage(art, account, if (art === current) progress.value else 1f - progress.value) }
+        }
+        HeroScrims(background)
+    }
+}
+
+internal const val BACKDROP_SETTLE_MILLIS = 300L
+
+private data class BackdropArt(val ref: ImageRef, val blurHash: String?)
+
+@Composable
+private fun BackdropImage(art: BackdropArt, account: Account, alpha: Float) {
+    val blur = rememberBlurHash(art.blurHash)
+    var loaded by remember { mutableStateOf(false) }
+    val shown by animateFloatAsState(if (loaded) 1f else 0f, tween(300), label = "backdrop-load")
+    if (blur != null) {
+        Image(blur, contentDescription = null, contentScale = ContentScale.Crop, alpha = .7f * alpha, modifier = Modifier.fillMaxSize())
+    }
+    AsyncImage(
+        model = heroImageRequest(imageRefUrl(account.server, art.ref, 1280, quality = 85)),
+        contentDescription = null,
+        contentScale = ContentScale.Crop,
+        alignment = Alignment.TopCenter,
+        alpha = shown * alpha,
+        onSuccess = { loaded = true },
+        modifier = Modifier.fillMaxSize()
+    )
 }
 
 @Composable
@@ -129,6 +161,17 @@ private fun BoxScope.HeroScrims(background: Color) {
             Brush.verticalGradient(.45f to Color.Transparent, .82f to background.copy(alpha = .8f), 1f to background)
         )
     )
+}
+
+/**
+ * Hero art changes with every focus move, so it is decoded to ordinary bitmaps rather than hardware buffers: a hardware
+ * bitmap is a graphics buffer allocated and freed per image, and that churn crashed the TV emulator's renderer while
+ * focus crossed a shelf (OBSERVED leg 188).
+ */
+@Composable
+internal fun heroImageRequest(url: String): ImageRequest {
+    val context = LocalContext.current
+    return remember(url) { ImageRequest.Builder(context).data(url).allowHardware(false).build() }
 }
 
 /** HOME-21: "S1 E1 · 2012 · 24m · TV-Y7 · ★ 6.4", without the end time, which [endsAtLabel] adds in its own style. */
@@ -218,7 +261,7 @@ internal fun HeroLogoOrTitle(
         )
         if (logo != null) {
             AsyncImage(
-                model = imageRefUrl(account.server, logo, 800),
+                model = heroImageRequest(imageRefUrl(account.server, logo, 800)),
                 contentDescription = null,
                 contentScale = ContentScale.Fit,
                 alignment = Alignment.BottomStart,

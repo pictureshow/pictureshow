@@ -2523,7 +2523,9 @@ fun CatalogDetail(
                                         Box(contentAlignment = Alignment.BottomStart) {
                                             if (logo != null) {
                                                 AsyncImage(
-                                                    model = app.pictureshow.core.imageRefUrl(state.account.server, logo, 800),
+                                                    model = heroImageRequest(
+                                                        app.pictureshow.core.imageRefUrl(state.account.server, logo, 800)
+                                                    ),
                                                     contentDescription = null,
                                                     contentScale = ContentScale.Fit,
                                                     alignment = Alignment.BottomStart,
@@ -4213,7 +4215,9 @@ internal fun CatalogArtwork(
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 alignment = alignment,
-                modifier = Modifier.fillMaxSize().alpha(shown),
+                // Paint alpha, not a layer: no offscreen buffer per arriving tile.
+                alpha = shown,
+                modifier = Modifier.fillMaxSize(),
                 onSuccess = { loaded = true },
                 onError = { loaded = false }
             )
